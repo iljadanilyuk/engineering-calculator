@@ -124,11 +124,13 @@ bun run dev:website
 
 ## GitHub
 
-The intended GitHub repository name is `engineering-calculator`.
+Repository: `https://github.com/iljadanilyuk/engineering-calculator`
 
-Current local status: no remote is configured and the project has not been pushed.
+Current local status:
 
-Add `origin` only after the exact `engineering-calculator` repository URL is known. Do not push to the original Vibe template remote.
+- `origin` is configured as `https://github.com/iljadanilyuk/engineering-calculator.git`.
+- `main` tracks `origin/main`.
+- The original Vibe template remote is not configured.
 
 ## Template Attribution
 
