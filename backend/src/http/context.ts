@@ -2,6 +2,7 @@ import type { UserDto } from '@poznyak-engineering-calculator/contracts'
 
 import type { AppEnv } from '../env'
 import type { AuthService } from '../auth/service'
+import type { EngineeringDataService } from '../engineering/service'
 import type { StorageService } from '../storage/service'
 
 export type AuthenticatedUserContext = UserDto & {
@@ -10,6 +11,7 @@ export type AuthenticatedUserContext = UserDto & {
 
 export type AppHonoVariables = {
   authService: AuthService
+  engineeringDataService: EngineeringDataService
   env: AppEnv
   storageService: StorageService | null
 }

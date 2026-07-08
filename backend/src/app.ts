@@ -6,6 +6,8 @@ import type { DbClient } from './db'
 import type { AppEnv } from './env'
 import { createAuthRoutes } from './auth/routes'
 import { AuthService } from './auth/service'
+import { createEngineeringRoutes } from './engineering/routes'
+import { EngineeringDataService } from './engineering/service'
 import type { AppHonoEnv } from './http/context'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createStorageServiceFromEnv } from './storage/service'
@@ -17,6 +19,7 @@ type CreateAppOptions = {
 
 export function createApp({ env, prisma }: CreateAppOptions) {
   const authService = new AuthService(prisma, env)
+  const engineeringDataService = new EngineeringDataService(prisma)
   const storageService = createStorageServiceFromEnv(env)
   const app = new OpenAPIHono<AppHonoEnv>({
     defaultHook: validationErrorHook,
@@ -31,13 +34,14 @@ export function createApp({ env, prisma }: CreateAppOptions) {
         return env.CORS_ORIGINS.includes(origin) ? origin : null
       },
       allowHeaders: ['Content-Type', 'Authorization', 'X-Client-Platform'],
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
       credentials: true,
       maxAge: 600,
     }),
   )
   app.use('*', async (c, next) => {
     c.set('authService', authService)
+    c.set('engineeringDataService', engineeringDataService)
     c.set('env', env)
     c.set('storageService', storageService)
     await next()
@@ -57,6 +61,7 @@ export function createApp({ env, prisma }: CreateAppOptions) {
   })
 
   app.route('/api/auth', createAuthRoutes())
+  app.route('/api', createEngineeringRoutes())
 
   app.doc('/openapi.json', {
     openapi: '3.0.0',

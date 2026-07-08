@@ -67,7 +67,7 @@ export const calculationDomainInputSchema = calculationRequestSchema.extend({
   exchangeRate: exchangeRateInputSchema,
 })
 
-const calculationServiceSnapshotSchema = engineeringServiceSchema.pick({
+export const calculationServiceSnapshotSchema = engineeringServiceSchema.pick({
   id: true,
   title: true,
   description: true,

@@ -7,6 +7,14 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ServicePricingType {
+  fixed
+  per_sqm
+  formula
+
+  @@map("service_pricing_type")
+}
+
 model User {
   id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
   email        String        @unique
@@ -17,6 +25,100 @@ model User {
   sessions     AuthSession[]
 
   @@map("users")
+}
+
+model Service {
+  id            String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  title         String
+  description   String?
+  pricingType   ServicePricingType @map("pricing_type")
+  priceUsdCents BigInt             @map("price_usd_cents") @db.BigInt
+  pricingRule   Json?              @map("pricing_rule")
+  formulaVersion String?           @map("formula_version")
+  isActive      Boolean            @default(true) @map("is_active")
+  isPublic      Boolean            @default(true) @map("is_public")
+  sortOrder     Int                @default(0) @map("sort_order")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  @@index([isActive, isPublic, sortOrder], map: "services_visibility_sort_idx")
+  @@map("services")
+}
+
+model Calculation {
+  id                     String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  publicToken            String     @unique @map("public_token")
+  clientName             String     @map("client_name")
+  clientPhone            String     @map("client_phone")
+  objectName             String?    @map("object_name")
+  areaSqm                String     @map("area_sqm")
+  areaSqmHundredths      BigInt     @map("area_sqm_hundredths") @db.BigInt
+  selectedServiceIds     Json       @map("selected_service_ids")
+  serviceSnapshots       Json       @map("service_snapshots")
+  skippedServices        Json       @map("skipped_services")
+  exchangeRate           Json       @map("exchange_rate")
+  usdToBynRateScaled     Int        @map("usd_to_byn_rate_scaled")
+  usdToBynRateScale      Int        @default(10000) @map("usd_to_byn_rate_scale")
+  calculationVersion     String     @map("calculation_version")
+  calculationSnapshot    Json       @map("calculation_snapshot")
+  totalUsdCents          BigInt     @map("total_usd_cents") @db.BigInt
+  totalBynCents          BigInt     @map("total_byn_cents") @db.BigInt
+  totalBynRoundedRubles  BigInt     @map("total_byn_rounded_rubles") @db.BigInt
+  status                 String     @default("new")
+  statusUpdatedAt        DateTime   @default(now()) @map("status_updated_at")
+  notes                  String?
+  referrer               String?
+  utm                    Json?
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+  proposals              Proposal[]
+
+  @@index([createdAt], map: "calculations_created_at_idx")
+  @@index([status, createdAt], map: "calculations_status_created_at_idx")
+  @@index([clientPhone], map: "calculations_client_phone_idx")
+  @@map("calculations")
+}
+
+model Proposal {
+  id                  String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  calculationId       String      @db.Uuid @map("calculation_id")
+  publicToken         String      @unique @map("public_token")
+  offerNumber         String      @map("offer_number")
+  templateVersion     String      @map("template_version")
+  pdfUrl              String?     @map("pdf_url")
+  storageKey          String?     @map("storage_key")
+  checksumSha256      String?     @map("checksum_sha256")
+  htmlSnapshot        String?     @map("html_snapshot")
+  calculationSnapshot Json        @map("calculation_snapshot")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  calculation         Calculation @relation(fields: [calculationId], references: [id], onDelete: Restrict, map: "proposals_calculation_id_fkey")
+
+  @@index([calculationId], map: "proposals_calculation_id_idx")
+  @@map("proposals")
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
+model ProjectExample {
+  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  title         String
+  description   String?
+  fileUrl       String   @map("file_url")
+  coverImageUrl String?  @map("cover_image_url")
+  isPublic      Boolean  @default(true) @map("is_public")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([isPublic, sortOrder], map: "project_examples_public_sort_idx")
+  @@map("project_examples")
 }
 
 model AuthSession {

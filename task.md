@@ -520,7 +520,7 @@ Verification:
 
 ### PZK-003 - Backend Data Model And Services API
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -535,6 +535,28 @@ Acceptance criteria:
 - Public/client-submitted totals are never trusted; backend recalculates before saving and generating PDF.
 - Money math uses cents/decimal, not JS floating point totals as the source of truth.
 - Migration check and API persistence tests are run or documented.
+
+Completion notes:
+
+- Added Prisma models and migration for `services`, `calculations`, `proposals`, `app_settings`, and `project_examples`.
+- Money, area, and totals are persisted as scaled integers/`BIGINT`: USD cents, BYN cents, rounded BYN rubles, area hundredths, and USD/BYN rate scaled by `10000`.
+- Added DB checks for nonnegative money, positive area/rate, allowed lead statuses, public token format, proposal checksum format, and proposal artifact completeness.
+- Added shared backend API contracts for service records, service mutations, exchange-rate settings, calculation save/record responses, project examples, and proposal artifact references.
+- Added backend engineering routes under `/api/public/*` and `/api/admin/*`; admin routes use the existing bearer auth middleware.
+- Public calculation saves validate with shared contracts, fetch current public services/rate from the database, recalculate through the shared calculation domain, ignore client-submitted fake totals/snapshots, and persist the recalculated immutable snapshot.
+- Public calculation saves reject unavailable selected services before persistence, including missing IDs, inactive services, unsupported formula services, and active but non-public services.
+- Saved calculations store service snapshots, skipped-service data, exchange-rate snapshot, calculation version, full calculation snapshot, totals, status, source metadata, and future proposal artifact references.
+- Project-example persistence/API foundations were added without copying or committing source XLSX/PDF assets.
+- No production public UI, lead-capture/PDF workflow, DigitalOcean resources, paid cloud resources, or Codex plugin-layer files were changed.
+
+Verification:
+
+- `bun run test:contracts` passed: 16/16.
+- `bun run --cwd backend test:unit` passed: 22/22.
+- `bun run --cwd backend test:integration` passed: 15/15, including `prisma migrate deploy` applying `20260516170057_init` and `20260708152036_pzk003_data_model_services_api` to a Docker PostgreSQL test DB.
+- `bun run --cwd backend prisma:validate` passed.
+- `bun run typecheck` passed.
+- `git diff --check` passed with only expected Windows CRLF warnings.
 
 ### PZK-004 - Public Calculator MVP
 
@@ -823,3 +845,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
 - 2026-07-08 PZK-DESIGN-001 v4 post-task review round 2:
   - Reviewer Bernoulli: 9.2/10; required adding an explicit contact block and reconciling visible BYN totals. Changes incorporated.
   - Reviewer Poincare: 9.6/10; confirmed contacts are explicit, visible BYN totals reconcile to `3 143 Br`, PNG dimensions are `1440 x 5281`, and the static design concept is safe to commit/push after tracker cleanup.
+- 2026-07-08 PZK-003 pre-task review:
+  - Reviewer Hooke: `gpt-5.5 xhigh`; recommended BigInt/scaled integer DB storage, full calculation result snapshots, rejecting unavailable selected services before persistence, exchange-rate snapshots separate from settings, proposal artifact foundations, UUIDv7 consistency, and integration coverage through real PostgreSQL migrations. Recommendations incorporated.
+- 2026-07-08 PZK-003 post-task review round 1:
+  - Reviewer Gauss: 9.3/10; required treating active but non-public services as unavailable for public calculation saves and adding no-persistence coverage. Changes incorporated.
+  - Reviewer Banach: 8.8/10; required the same hidden-service fix and review-log bookkeeping. Changes incorporated. Non-blocking recommendations included tightening weak response schemas and adding admin-auth/DB-constraint negative tests; these were also incorporated before round 2.
+- 2026-07-08 PZK-003 post-task review round 2:
+  - Reviewer Galileo: 9.6/10; confirmed hidden-service fix, server-side recalculation trust boundary, immutable snapshots, BigInt/scaled storage, exchange-rate snapshots, DB constraints, and PZK-003 scope. No required changes remained.
