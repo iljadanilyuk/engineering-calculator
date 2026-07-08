@@ -1,0 +1,75 @@
+import { OpenAPIHono } from '@hono/zod-openapi'
+import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
+
+import type { DbClient } from './db'
+import type { AppEnv } from './env'
+import { createAuthRoutes } from './auth/routes'
+import { AuthService } from './auth/service'
+import type { AppHonoEnv } from './http/context'
+import { errorResponse, handleError, validationErrorHook } from './http/errors'
+import { createStorageServiceFromEnv } from './storage/service'
+
+type CreateAppOptions = {
+  env: AppEnv
+  prisma: DbClient
+}
+
+export function createApp({ env, prisma }: CreateAppOptions) {
+  const authService = new AuthService(prisma, env)
+  const storageService = createStorageServiceFromEnv(env)
+  const app = new OpenAPIHono<AppHonoEnv>({
+    defaultHook: validationErrorHook,
+  })
+
+  app.use(secureHeaders())
+  app.use(
+    '*',
+    cors({
+      origin: (origin) => {
+        if (!origin) return env.CORS_ORIGINS[0] ?? null
+        return env.CORS_ORIGINS.includes(origin) ? origin : null
+      },
+      allowHeaders: ['Content-Type', 'Authorization', 'X-Client-Platform'],
+      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      credentials: true,
+      maxAge: 600,
+    }),
+  )
+  app.use('*', async (c, next) => {
+    c.set('authService', authService)
+    c.set('env', env)
+    c.set('storageService', storageService)
+    await next()
+  })
+
+  app.get('/', (c) => {
+    return c.json({
+      name: 'poznyak_engineering_calculator backend',
+      status: 'ok',
+    })
+  })
+
+  app.get('/health', (c) => {
+    return c.json({
+      status: 'ok',
+    })
+  })
+
+  app.route('/api/auth', createAuthRoutes())
+
+  app.doc('/openapi.json', {
+    openapi: '3.0.0',
+    info: {
+      title: 'poznyak_engineering_calculator API',
+      version: '1.0.0',
+    },
+  })
+
+  app.notFound((c) => c.json(errorResponse('NOT_FOUND', 'Route not found'), 404))
+  app.onError(handleError)
+
+  return app
+}
+
+export type AppType = ReturnType<typeof createApp>

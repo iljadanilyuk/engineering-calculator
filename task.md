@@ -367,7 +367,7 @@ Done when:
 
 ### PZK-001 - Scaffold Vibe Project
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -383,6 +383,35 @@ Acceptance criteria:
 - Repo is initialized locally.
 - No production secrets are committed.
 - Verification commands/scripts are documented.
+
+Completion notes:
+
+- Vibe template cloned to a temporary folder and merged into the existing local repository without copying template `.git`.
+- Existing git history preserved; previous commit remains `43265b3 Add project task tracker`.
+- Template source used: `https://github.com/di-sukharev/vibe` at `8562ffae2311` (`Add TanStack auth query mutations`).
+- Project/package identifiers renamed to `poznyak-engineering-calculator`, `@poznyak-engineering-calculator/*`, and local database names `poznyak_engineering_calculator` / `poznyak_engineering_calculator_test`.
+- `task.md` preserved.
+- `README.md` and `.env.example` / `backend/.env.example` added for local setup, placeholders, and v1 integration notes.
+- GitHub repository name recorded as `engineering-calculator`.
+- Remote status: no local git remote is configured because the exact repository URL is not available in this context.
+- Push status: not pushed. Add `origin` and push only after the user provides the exact `engineering-calculator` remote URL.
+- Docker status after verification: project-specific Compose/smoke containers were stopped/removed.
+- No paid DigitalOcean/cloud resources were created or changed.
+
+Verification:
+
+- `bun install --frozen-lockfile` passed.
+- `bun run typecheck` passed.
+- `bun run build` passed; non-blocking warnings: Vite webapp chunk-size warning and inherited local `NODE_TLS_REJECT_UNAUTHORIZED=0` warning during Astro build.
+- `bun run test:deploy` passed: 15/15.
+- `bun run test:contracts` passed: 5/5.
+- `bun run test:backend:unit` passed: 22/22.
+- `bun run test:webapp` passed: 37/37.
+- `bun run test:backend:integration` passed: 9/9 using Docker PostgreSQL test DB.
+- Runtime smoke passed for backend `/health`, webapp `/`, and website `/` on temporary local ports.
+- `bun run smoke:backend:docker` passed, including backend Docker image build, `/health`, and DB-backed auth smoke.
+- `bun run e2e:webapp` passed: 2/2.
+- Manual no-secrets scan run with `rg --pcre2`; findings were reviewed as false positives in SVG path data, lockfile hashes/package names, and documented `openssl rand` examples.
 
 ### PZK-002 - Shared Calculation Domain And Contracts
 
@@ -662,3 +691,11 @@ Use this section, or a dedicated review log file if it grows too large, to recor
 - 2026-07-08 PZK-000 post-task review round 2:
   - Reviewer Raman: 9.7/10; no remaining blocker for marking PZK-000 complete. PZK-000 marked complete.
   - Reviewer Erdos: 9.5/10; confirmed prior blockers are fixed and no required changes remain before completing PZK-000.
+- 2026-07-08 PZK-001 pre-task review:
+  - Reviewer Boole: `gpt-5.5 xhigh`; flagged scaffold/merge risks: do not copy template `.git`, preserve `task.md` and history, avoid mirror/delete copy modes, rename all workspace identifiers/imports, keep DigitalOcean work deferred, and do not invent a GitHub remote URL. Recommendations incorporated.
+- 2026-07-08 PZK-001 post-task review round 1:
+  - Reviewer Hilbert: 8/10; required tracker update, verification recording, commit after gate, remote/push status documentation, and recommended CI build plus Docker cleanup. Changes incorporated.
+  - Reviewer Banach: 7/10; required fixing backend Dockerfile missing `mobile/package.json`, replacing visible template UI copy, and removing operational bootstrap/template wording. Changes incorporated.
+- 2026-07-08 PZK-001 post-task review round 2:
+  - Reviewer Sartre: 9.6/10; no implementation blockers. Required final tracker update before commit; confirmed verification coverage and no-secrets review are sufficient.
+  - Reviewer Nash: 9.6/10; no scaffold/code-quality blockers. Confirmed PZK-001 can be marked complete after tracker update and commit.
