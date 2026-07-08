@@ -274,7 +274,19 @@ Telegram messages include personal data, so keep the message concise and send on
 Target:
 
 - GitHub repository as a standalone project.
-- DigitalOcean deployment as a separate project/app.
+- DigitalOcean deployment as a separate app/resources grouped under a dedicated DigitalOcean Project.
+
+DigitalOcean billing/project decision:
+
+- DigitalOcean Projects are organizational groupings, not separate paid subscriptions.
+- Billing is accrued at the team/account level based on actual resources used, regardless of how many Projects exist.
+- A new DigitalOcean Project named `engineering-calculator` was created on 2026-07-08 for organization only.
+- DigitalOcean Project ID: `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`.
+- Environment: `Development`.
+- Current resources in this Project: none.
+- No paid App Platform app, database, storage, Droplet, or other billable resource has been created for this calculator yet.
+- When creating future DigitalOcean App Platform resources for this product, pass this Project ID explicitly so resources do not land in the default project by accident.
+- Moving resources between Projects is separate approved work and does not stop billing for those resources; deleting or scaling down resources is what changes resource billing.
 
 Deployment preparation:
 
@@ -413,6 +425,7 @@ Completion notes:
 - Push status: `main` is pushed and tracks `origin/main`.
 - Docker status after verification: project-specific Compose/smoke containers were stopped/removed.
 - No paid DigitalOcean/cloud resources were created or changed.
+- DigitalOcean Project organizer created later: `engineering-calculator` / `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`; it currently contains no resources.
 
 Verification:
 
@@ -723,3 +736,6 @@ Use this section, or a dedicated review log file if it grows too large, to recor
 - 2026-07-08 PZK-001 post-task review round 2:
   - Reviewer Sartre: 9.6/10; no implementation blockers. Required final tracker update before commit; confirmed verification coverage and no-secrets review are sufficient.
   - Reviewer Nash: 9.6/10; no scaffold/code-quality blockers. Confirmed PZK-001 can be marked complete after tracker update and commit.
+- 2026-07-08 DigitalOcean Project organizer update:
+  - Pre-task reviewer Helmholtz: recommended idempotent project creation, no paid resources, zero-resource verification, explicit future project ID usage, and separating Project organization from deployment/billing changes. Recommendations incorporated.
+  - Post-task reviewer Sartre: 9.8/10; confirmed `engineering-calculator` Project exists, contains no resources, and documentation correctly states billing is based on team/account resource usage rather than Project count.

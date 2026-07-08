@@ -11,6 +11,8 @@ The project is scaffolded from the Vibe template (`https://github.com/di-sukhare
 
 Mobile is deferred. DigitalOcean deployment is deferred until the deployment decision gate is approved in `task.md`.
 
+DigitalOcean Project: `engineering-calculator` (`e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`) exists as an organizational container only. DigitalOcean billing is based on actual team/account resource usage, not the number of Projects. This Project currently contains no paid resources.
+
 Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app exists, add the required App Platform CNAME/A/AAAA/TXT records at the registrar to point the production domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless that decision changes explicitly. See `task.md` for the domain cutover checklist, including apex vs `www`, API/admin hostnames, CORS/public URL env updates, and preserving MX/SPF/DKIM/DMARC records.
 
 ## Product Direction
