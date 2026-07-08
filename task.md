@@ -393,8 +393,9 @@ Completion notes:
 - `task.md` preserved.
 - `README.md` and `.env.example` / `backend/.env.example` added for local setup, placeholders, and v1 integration notes.
 - GitHub repository name recorded as `engineering-calculator`.
-- Remote status: no local git remote is configured because the exact repository URL is not available in this context.
-- Push status: not pushed. Add `origin` and push only after the user provides the exact `engineering-calculator` remote URL.
+- GitHub repository URL: `https://github.com/iljadanilyuk/engineering-calculator`.
+- Remote status: `origin` is configured as `https://github.com/iljadanilyuk/engineering-calculator.git`.
+- Push status: `main` is pushed and tracks `origin/main`.
 - Docker status after verification: project-specific Compose/smoke containers were stopped/removed.
 - No paid DigitalOcean/cloud resources were created or changed.
 
