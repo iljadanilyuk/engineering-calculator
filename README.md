@@ -11,7 +11,7 @@ The project is scaffolded from the Vibe template (`https://github.com/di-sukhare
 
 Mobile is deferred. DigitalOcean deployment is deferred until the deployment decision gate is approved in `task.md`.
 
-Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app exists, add the required CNAME/A records at the registrar to point the production domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless that decision changes explicitly.
+Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app exists, add the required App Platform CNAME/A/AAAA/TXT records at the registrar to point the production domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless that decision changes explicitly. See `task.md` for the domain cutover checklist, including apex vs `www`, API/admin hostnames, CORS/public URL env updates, and preserving MX/SPF/DKIM/DMARC records.
 
 ## Product Direction
 

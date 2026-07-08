@@ -294,6 +294,20 @@ Deployment decision gate:
 - Before creating cloud resources, choose and document DigitalOcean App Platform vs Droplet + Docker Compose.
 - Document database choice, generated PDF/proposal storage, migrations, health checks, env vars, runtime versions, domain/HTTPS/proxy assumptions, backups, rollback plan, and expected monthly cost/risk.
 - Domain DNS decision: keep DNS management at the current registrar. After the DigitalOcean app exists, add the required CNAME/A records at the registrar to point the domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless the user explicitly changes this decision.
+- Use DigitalOcean App Platform's self-managed/custom domain path where the registrar keeps DNS control. Do not add `domains[].zone` in App Platform specs unless the user explicitly decides to move DNS management to DigitalOcean.
+- Domain attach sequence:
+  - create the DigitalOcean app first;
+  - add the custom domain(s) in App Platform;
+  - copy DigitalOcean-provided CNAME/A/AAAA/TXT records;
+  - add those records at the registrar;
+  - allow DNS/TLS propagation time.
+- Define hostnames before cutover. The project may have separate website, webapp/admin, and backend surfaces; one hostname cannot cleanly point to multiple separate App Platform apps.
+- For apex/root domains, avoid assuming plain CNAME support. Use CNAME flattening/ALIAS/ANAME if the registrar supports it, or DigitalOcean-provided A/AAAA records. Prefer CNAME for subdomains.
+- Decide canonical `www` vs apex before launch. If both should work, add both in App Platform and registrar DNS, then redirect one to the canonical host.
+- After custom domains are live, update deployment env vars such as backend CORS origins, API/public URLs, website webapp links, and proposal URLs. `*.ondigitalocean.app` URLs are bootstrap/interim values only.
+- Watch TLS/DNS blockers: preserve or adjust CAA records to allow DigitalOcean's certificate issuers, check DNSSEC compatibility, and keep wildcard verification TXT records current if wildcards are used.
+- Preserve existing registrar DNS records such as MX, SPF, DKIM, DMARC, and existing verification TXT records. Remove only conflicting old A/AAAA/CNAME records for the same host during cutover.
+- Treat Cloudflare/external CDN and Spaces CDN file domains as separate DNS/certificate flows if they are introduced later.
 - Get explicit user approval before provisioning or changing paid cloud resources.
 
 Before relying on Docker locally, check:
@@ -630,6 +644,8 @@ Acceptance criteria:
 - App Platform vs Droplet + Docker Compose is chosen.
 - Database, PDF/proposal storage, migrations, health checks, env vars, runtime versions, domain/HTTPS/proxy assumptions, backups, rollback plan, and expected monthly cost/risk are documented.
 - Domain plan uses registrar-managed DNS with CNAME/A records pointing to the DigitalOcean app after it exists; nameserver migration to DigitalOcean is out of scope unless explicitly approved later.
+- Exact production hostnames are chosen for public website, admin/webapp, and API before DNS cutover.
+- Canonical `www` vs apex behavior is chosen and documented.
 - User explicitly approves paid cloud resource creation or changes.
 
 ### PZK-014 - DigitalOcean Deployment Prep
@@ -645,6 +661,9 @@ Acceptance criteria:
 - Required services and env vars are documented.
 - Database and storage persistence plan is documented.
 - Registrar-side DNS records are documented after the DigitalOcean app provides the target hostname/IP.
+- App Platform custom-domain records and registrar records are documented without moving nameservers.
+- Required post-domain env updates are documented for CORS/API/public/proposal URLs.
+- Existing registrar records to preserve are listed before cutover.
 - Health checks or smoke checks are defined.
 - Runtime smoke path is documented:
   - public calculator loads;
