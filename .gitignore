@@ -13,6 +13,10 @@ webapp/e2e/.artifacts/
 mobile/.expo/
 mobile/.maestro/reports/
 
+# Local design source materials with filled client/questionnaire data
+docs/design/Опросный лист.xlsx
+docs/design/Стоимость проектных работ (1).xlsx
+
 # Runtime and logs
 *.log
 npm-debug.log*

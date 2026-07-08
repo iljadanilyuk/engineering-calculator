@@ -1,200 +1,243 @@
 # PZK-DESIGN-001 - Public Calculator Visual Brief
 
 Date: 2026-07-08
+Revision: v4 after typography/hero feedback
 Artifact: `docs/design/public-calculator-concept.png`
 Preview source: `docs/design/public-calculator-concept.html`
+Questionnaire source: `docs/design/Опросный лист.xlsx`
+Pricing source: `docs/design/Стоимость проектных работ (1).xlsx`
 
 ## Scope
 
-This is a static visual concept for the public calculator page before PZK-004. It is not production UI, does not connect to backend APIs, and uses fixture services/rates derived from the shared calculation domain.
+This is a static visual concept before PZK-004. It does not implement production UI, does not connect backend APIs, does not create DigitalOcean/cloud resources, and does not touch the Codex plugin layer.
 
-The visual concept follows the public product requirements in `task.md`: first screen with brand, offer, and calculator; object parameters; service selection; BYN-first live summary with USD as secondary reference; project scope explanation; object examples; process; lead CTA; future PDF/proposal state; contacts.
+The two XLSX files are local design sources. They should not be committed without explicit approval because they contain working business/client-like data.
 
-## Visual Direction
+## Design Direction V4
 
-Design direction: light strict engineering bureau, inspired by the local `linear.app` and `stripe` design-md references, adapted for a calculator-first service page.
+Direction: dark professional engineering service for a male technical audience.
 
-The page should feel like a precise working instrument rather than a decorative landing widget. The calculator is the hero object. Marketing content supports the calculation, explains trust, and guides the user toward a commercial proposal.
+The concept uses the user's audience and identity research:
 
-Key qualities:
+- primary audience: men 35-55 building or renovating a private house;
+- decision style: rational, technical, comparison-driven;
+- anxiety: overpaying or getting a weak engineering solution;
+- trust drivers: numbers, схемы, состав проекта, examples of real PDF documentation;
+- tone: expert and direct, without salesy or template landing-page phrasing.
 
-- light technical workspace, not a dark SaaS dashboard;
-- clean grid, thin borders, restrained shadows, 8px or smaller radii;
-- tabular numerals for money, area, exchange rate, and proposal IDs;
-- BYN total is visually dominant, USD is smaller and secondary;
-- one primary action: `Получить коммерческое предложение`;
-- engineering plan/blueprint visual cues instead of generic stock imagery.
+Design references used:
 
-## Reference Analysis
+- `frontend-design`: distinctive, context-specific interface rather than a generic landing page.
+- `design-md-library`: BMW-style restraint adapted to engineering services: dark hero, precise grid, controlled accent, no decorative clutter.
+- `design-taste-frontend`: no serif fonts for this technical UI, no purple/neon, no generic 3-card filler, stable desktop grid.
+- `ui-ux-pro-max`: contrast, readable type scale, visible form labels, touch-friendly future controls.
 
-### Heaton
+## First Screen
 
-`https://calc.heaton.by/` is the closest functional reference. It puts calculator parameters first: object area, heat loss, occupants, currency, person type, detailed settings, and then results. For ИП Позняк, the useful pattern is not the full density, but the order of thinking:
+V4 returns to the classic page hierarchy requested by the user:
 
-- start with object parameters;
-- expose assumptions and currency/rate;
-- show results close to inputs;
-- allow details without making the first screen unreadable.
+1. Header with `ИП Позняк`.
+2. H1 with the offer.
+3. Supporting sub-offer.
+4. Real project-value bullets.
+5. Full-width calculator as the main working object.
 
-Adaptation for ИП Позняк:
+Hero bullets are not tech-meta cards. They describe client outcomes:
 
-- use fewer first-screen fields;
-- keep a compact expandable mental model for future advanced settings;
-- replace fuel/tariff comparisons with service-line breakdown;
-- make PDF/proposal capture explicit after the live calculation.
+- `Σ` - сумма до заявки;
+- `ΔT` - понятный состав проекта and calculations;
+- `КП` - PDF commercial proposal;
+- `ОП` - detailed questionnaire after КП.
 
-### 21st.dev
+The first screen uses conditional project symbols instead of generic checkmarks.
 
-`https://21st.dev/` contributes component-catalog polish: compact category navigation, refined component surfaces, filters, and a sense that the page is assembled from high-quality primitives.
+## Calculator Model
 
-Adaptation for ИП Позняк:
+The preview uses `docs/design/Стоимость проектных работ (1).xlsx` as the pricing reference.
 
-- use polished component patterns without shaders or visual spectacle;
-- favor tabs, tags, filters, rows, and dense cards;
-- keep the design quieter than a community component marketplace.
+Fixture values:
 
-### shadcn/ui
+- area: `180 м²`;
+- exchange rate: `2.8668`;
+- total: `1096 $` / about `3143 BYN`;
+- selected sections:
+  - `Проект котельной + 3D` - `200 $`;
+  - `Радиаторное отопление` - `90 $`;
+  - `Теплые полы` - `108 $`;
+  - `Водопровод` - `90 $`;
+  - `Канализация` - `108 $`;
+  - `Вентиляция` - `250 $`;
+  - `Кондиционирование` - `250 $`;
+- optional modifier shown but not enabled: `индивидуальные хотелки +40%`;
+- minimum design cost: `200 $`;
+- payment condition: `70% старт / 30% после передачи проекта`;
+- project delivery: PDF by email.
 
-`https://ui.shadcn.com/` is the component baseline. The concept should use shadcn-style primitives customized for this brand rather than raw browser controls.
+The calculator is intentionally simpler than the previous concept:
 
-Recommended components for PZK-004:
+- left column: object parameters;
+- center: service rows with rates and lever switches;
+- right: live BYN/USD result, short terms, lead CTA.
 
-- `Button` for primary/secondary actions;
-- `Input` and `InputGroup` for area, name, and phone;
-- `Checkbox` for service selection;
-- `ToggleGroup` or segmented control for object type;
-- `Slider` for optional area adjustment if it stays useful;
-- `Badge` for pricing type, PDF status, and rate source;
-- `Card` only for repeated items, examples, FAQ, and the calculator tool frame;
-- `Separator` for calculation sections;
-- `Tooltip` for rate source, rounding, and skipped/future services;
-- `Accordion` for FAQ or advanced assumptions;
-- `Table` or compact list rows for calculation breakdown when detail is expanded.
+PZK-004 must still use the shared calculation domain/backend recalculation rather than fixture values from this preview.
 
-## Grid And Composition
+## Lever Faucet Switch
 
-Desktop concept:
+The visual signature is a plumbing lever with a handle, not a circular valve wheel.
 
-- Canvas: 1440px wide static screenshot.
-- Inner container: 1240px.
-- First screen: two-column layout.
-  - Left column: brand promise, value copy, trust chips, small stats.
-  - Right column: calculator workspace.
-- Calculator workspace:
-  - Header with state badge.
-  - Main input/service area.
-  - Right summary rail with BYN/USD result, rate snapshot, breakdown, warning slot, lead fields.
-- Subsequent sections:
-  - Full-width bands with a 330px title column and flexible content column.
-  - Object parameters strip.
-  - Included work grid.
-  - Object examples with technical thumbnails.
-  - Process timeline.
-  - CTA/proposal band with form and future PDF preview.
-  - Optional FAQ near the end.
-  - Explicit contacts block with phone, Telegram, email, and response-time placeholders.
+States:
 
-Avoid nested decorative cards. The calculator is a framed tool; repeated content uses simple cards with thin borders.
+- active: orange handle is horizontal along the pipe;
+- inactive: grey handle is rotated upward;
+- row selection remains semantically a switch/checkbox in production.
 
-## Palette
+Why this works:
 
-The palette is intentionally multi-axis: paper/graphite base, engineering green, measured blue, and a small amber warning state.
-
-- Page paper: `#f7f8f5`
-- Secondary surface: `#eef2ef`
-- Surface: `#ffffff`
-- Text: `#14201b`
-- Muted text: `#647069`
-- Hairline: `#d9e0db`
-- Strong line: `#bcc8c0`
-- Primary green: `#1f6b57`
-- Green soft: `#dfeee7`
-- Technical blue: `#315f8f`
-- Blue soft: `#e4edf7`
-- Warning amber: `#a66a1f`
-- Warning soft: `#f4ead9`
-
-The page should not become a one-color green theme. Blue is used for engineering plan cues and indexed components; amber is reserved for stale/fallback rate warnings.
+- it is specific to heating/VK engineering;
+- it replaces generic checkmarks;
+- it is recognizable to homeowners and монтажники;
+- it can later animate without changing calculation logic.
 
 ## Typography
 
-Preview uses Windows-safe local fonts to keep the screenshot stable:
+Use Google Fonts with Cyrillic support:
 
-- body: `Aptos`, `Segoe UI`, `Noto Sans`, sans-serif;
-- numerals/IDs: `Cascadia Mono`, `Consolas`, monospace.
+- headings: `Montserrat` 700-800;
+- body/UI: `IBM Plex Sans` 400-700.
 
-Production recommendation:
+Reasons:
 
-- choose a self-hosted Cyrillic-safe sans such as IBM Plex Sans, Noto Sans, or another licensed engineering-appropriate family;
-- keep `font-variant-numeric: tabular-nums` for totals, rates, area, and proposal numbers;
-- avoid viewport-scaled font sizes;
+- `Montserrat` gives sturdy geometric authority for the offer and section titles;
+- `IBM Plex Sans` reads as technical, precise, and less generic than a default UI stack;
+- no serif fonts;
 - no negative letter spacing;
-- hero heading can be large, but form panels and cards should use compact headings.
+- tabular numerals for prices, rates, and area.
 
-## Calculator Content Model
+Rejected for this direction:
 
-The preview mirrors the existing shared domain instead of inventing another model:
+- serif display pairings;
+- overly soft lifestyle fonts;
+- generic default Inter-only look.
 
-- `areaSqm` controls per-square-meter services;
-- services can be `fixed`, `per_sqm`, or future `formula`;
-- active fixed/per-square-meter services contribute line items;
-- future formula services should be shown as `по запросу` or disabled until formulas are implemented;
-- exchange rate is shown as a snapshot;
-- BYN display rounds to whole rubles;
-- PDF/proposal state is gated by name, phone, and consent in later tasks.
+## Palette
 
-Fixture example in the preview:
+Primary palette:
 
-- area: `180 м²`;
-- rate: `1 USD = 3.2500 BYN`;
-- selected services:
-  - отопление: `5 $/м²`;
-  - водоснабжение и канализация: `3 $/м²`;
-  - пояснительная записка и ведомости: `250 $ fixed`;
-- result: `5 493 Br`, secondary `~1 690 $`.
+- dark hero navy: `#0B2239`;
+- secondary navy: `#123452`;
+- warm off-white: `#F9F7F4`;
+- surface: `#FFFFFF`;
+- main CTA / active lever: `#FF6B35`;
+- neutral text: `#4A4A48`;
+- steel blue: `#2F5F7F`;
+- steel light: `#A4B4D4`;
+- line: `#DED7CC`.
 
-Use `Br` in the visual concept. Confirm the exact Belarusian ruble glyph/notation before final launch and PDF polish.
+The palette is masculine by material and contrast: dark engineering field, steel notation, warm paper, orange CTA/lever. No green glow, no beige-only theme, no purple/blue gradient language.
 
-The fixture is intentionally chosen so the whole-ruble BYN line display visibly reconciles with the whole-ruble total in the mockup. Production should still use the shared domain rounding policy as the source of truth.
+## BYN Sign
+
+The preview uses an approximation of the 2026 NBRB graphic sign: Cyrillic `Б` with a horizontal stroke.
+
+Production notes:
+
+- prefer official SVG/font asset if available and reliable;
+- keep `BYN` as accessibility/PDF fallback;
+- verify browser and generated PDF rendering before launch.
+
+Reference: NBRB page `https://www.nbrb.by/coinsbanknotes/byn-ico`.
+
+## Page Structure
+
+The mockup covers the planned public page:
+
+- first screen: brand, offer, bullets, calculator;
+- object parameters;
+- project-service selection;
+- live result summary in BYN/USD;
+- what is included in design work;
+- object types and project examples;
+- stages of work;
+- lead form / CTA `Получить коммерческое предложение`;
+- future PDF/proposal state;
+- post-КП questionnaire preview.
+
+## Project Examples
+
+The example block must have visible download actions:
+
+- `Пример проекта ОВ` -> `E:\vc\bella\proekt_primer_ov.pdf`;
+- `Пример проекта ВК` -> `E:\vc\bella\primer_proekt_vk.pdf`.
+
+The cards use schematic project-sheet miniatures, not stock photos. This keeps the design technical and close to the actual product.
+
+## Questionnaire
+
+The questionnaire remains a post-КП step.
+
+Reason:
+
+- the main product promise is quick calculation;
+- the questionnaire is long and technical;
+- a client who has already requested КП is more ready to fill detailed data.
+
+Concept behavior:
+
+- section progress;
+- grouped questions;
+- answer chips;
+- free-text field;
+- future upload state;
+- manager-assisted flow.
+
+Do not surface filled sample answers from `Опросный лист.xlsx` in the public preview.
+
+## Components For PZK-004
+
+Recommended shadcn/21st-style building blocks:
+
+- `Button`;
+- `Input`;
+- numeric input/slider for area;
+- accessible `Switch`/`Checkbox` with custom lever visual;
+- `Badge` for rate/mode labels;
+- compact result/breakdown list;
+- `Progress`;
+- `Tabs` or stepper for questionnaire sections;
+- `Textarea`;
+- file upload component;
+- PDF/proposal preview card.
+
+The production implementation should customize radii, color tokens, typography, and switch visuals. Do not ship default shadcn styling as-is.
 
 ## Mobile Notes
 
-Mobile should not be a squeezed desktop calculator.
+- Hero stacks as: brand, H1, sub-offer, bullets, calculator.
+- Calculator columns collapse to: result first or sticky result, then object fields, then service rows.
+- Lever rows become large touch targets.
+- PDF example buttons stay visible under each example.
+- Questionnaire should become a separate route/step, not a cramped block under the calculator.
 
-- Header compresses to brand, phone/action, and menu.
-- First screen stacks: offer copy, then calculator, then result summary.
-- The BYN total should stay visible after service changes, either as a sticky bottom summary or a compact summary directly after services.
-- Service rows become single-column touch targets with checkbox, title, pricing type, BYN and USD.
-- Advanced rate/fallback warning should stay inline and readable.
-- Proposal form fields stack vertically; CTA remains full-width.
-- Object examples should become a horizontal carousel or single-column cards.
-- Process timeline becomes vertical.
-- PDF preview should be simplified to a compact proposal status card.
-
-## States To Cover In PZK-004
-
-The static PNG shows only one default selected state. Future implementation should cover:
-
-- empty service selection;
-- selected/unselected service rows;
-- unsupported future formula service;
-- inactive/skipped service;
-- stale exchange rate warning;
-- fallback exchange rate warning;
-- invalid area;
-- invalid/missing name and phone;
-- consent not accepted;
-- lead submitted and PDF pending;
-- PDF ready;
-- Telegram/API failure later, without blocking lead creation.
-
-## Files
-
-- Static preview HTML: `docs/design/public-calculator-concept.html`
-- Screenshot artifact: `docs/design/public-calculator-concept.png`
+## Verification Notes
 
 Screenshot command:
 
 ```powershell
-bun x playwright screenshot --full-page --viewport-size=1440,2540 "file:///E:/vc/poznyak-engineering-calculator/docs/design/public-calculator-concept.html" docs/design/public-calculator-concept.png
+bun x playwright screenshot --full-page --viewport-size=1440,2600 "file:///E:/vc/poznyak-engineering-calculator/docs/design/public-calculator-concept.html" docs/design/public-calculator-concept.png
 ```
+
+PDF page count check:
+
+```powershell
+@'
+from pypdf import PdfReader
+for path in [r'E:\vc\bella\primer_proekt_vk.pdf', r'E:\vc\bella\proekt_primer_ov.pdf']:
+    reader = PdfReader(path)
+    print(path.split('\\')[-1], len(reader.pages))
+'@ | python -
+```
+
+Expected:
+
+- `primer_proekt_vk.pdf 24`;
+- `proekt_primer_ov.pdf 39`.

@@ -496,19 +496,27 @@ Acceptance criteria:
 
 Completion notes:
 
-- Added `docs/design/public-calculator-visual-brief.md` with visual direction, grid/composition, palette, typography, shadcn/21st component recommendations, Heaton adaptation notes, mobile notes, states for PZK-004, and screenshot command.
+- Added `docs/design/public-calculator-visual-brief.md` with visual direction, grid/composition, palette, typography, shadcn/21st component recommendations, Heaton/GALF adaptation notes, NBRB BYN sign notes, questionnaire-flow notes, mobile notes, states for PZK-004, and screenshot command.
 - Added `docs/design/public-calculator-concept.html` as a standalone static desktop preview source, outside the production `website` route.
 - Generated `docs/design/public-calculator-concept.png` as a 1440px-wide full-page desktop mockup.
-- The mockup uses fixture services/rate aligned with the shared calculation domain: area, selected services, `fixed` and `per_sqm` pricing, BYN primary total, USD secondary reference, future formula as `по запросу`, and future proposal/PDF state.
-- Reviewer feedback corrected the fixture so visible BYN line totals reconcile with the displayed BYN total, and added an explicit contacts section.
+- The mockup uses fixture services/rate aligned with the shared calculation domain: area, selected services, `fixed` and `per_sqm` pricing, BYN primary total with a visual BYN graphic-mark approximation, USD secondary reference, future formula as `по запросу`, and future proposal/PDF state.
+- After user feedback, revised the concept from the initial green calculator-first layout into a classic hero structure: headline, sub-offer, real design-work bullets, then a wider calculator workbench.
+- Added project-symbol service rows, stronger calculator controls, downloadable PDF example actions for the known VK/OV sample projects, and a post-КП questionnaire flow based on the structure of `docs/design/Опросный лист.xlsx`.
+- After follow-up user feedback, softened the v2 visual language, removed sharp corporate corners and public-facing internal warning copy, switched to a single sans-serif UI stack, aligned the calculator fixture with `docs/design/Стоимость проектных работ (1).xlsx`, and added valve-style section toggles as the primary interaction idea.
+- After latest typography/identity feedback, produced a local v4 revision with a dark navy first screen, Google Fonts `Montserrat` + `IBM Plex Sans`, orange CTA/lever accent, classic hero order, client-facing bullets before the calculator, a simpler Excel-like calculator, lever-handle faucet switches instead of circular valves, and cleaner public copy.
+- The filled XLSX questionnaire source contains example/client-like answers and is intentionally ignored rather than committed.
+- The pricing XLSX source is also intentionally ignored rather than committed.
+- Reviewer feedback corrected the fixture so visible BYN line totals reconcile with the displayed BYN total, added an explicit contacts section, and made PDF download controls credible static links.
+- The v4 review gate passed with reviewer Poincare score `9.6/10` after the visible BYN total was reconciled to `3 143 Br` and the contact pattern was added without fake phone/email values.
 - No backend/API, Astro production page, webapp, cloud resources, or Codex plugin-layer files were changed.
 
 Verification:
 
-- `bun x playwright screenshot --full-page --viewport-size=1440,2540 "file:///E:/vc/poznyak-engineering-calculator/docs/design/public-calculator-concept.html" docs/design/public-calculator-concept.png` passed.
-- PNG dimension check passed: `1440 x 3859`.
+- `bun x playwright screenshot --full-page --viewport-size=1440,2600 "file:///E:/vc/poznyak-engineering-calculator/docs/design/public-calculator-concept.html" docs/design/public-calculator-concept.png` passed.
+- PNG dimension check passed: `1440 x 5281`.
+- PDF page count check with `pypdf` passed: `primer_proekt_vk.pdf` 24 pages, `proekt_primer_ov.pdf` 39 pages.
 - Visual inspection of `docs/design/public-calculator-concept.png` passed after regeneration.
-- Post-task review gate passed with reviewer Bohr score `9.6/10`.
+- Initial post-task review gate passed with reviewer Bohr score `9.6/10`; v2 user-feedback review loop continued in the review log below.
 
 ### PZK-003 - Backend Data Model And Services API
 
@@ -804,3 +812,14 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Socrates: 9.2/10; required an explicit contacts section and recording `PZK-DESIGN-001` in `task.md` before closure. Changes incorporated.
 - 2026-07-08 PZK-DESIGN-001 post-task review round 2:
   - Reviewer Bohr: 9.6/10; confirmed BYN totals reconcile and contacts are present. Required tracker/review-log update before commit; this update records the final gate.
+- 2026-07-08 PZK-DESIGN-001 v2 user-feedback pre-task review:
+  - Reviewer Popper: `gpt-5.5 xhigh`; recommended classic hero hierarchy, real design-work bullets, project symbols instead of checkmarks, stronger calculator controls, post-КП questionnaire flow based on `Опросный лист.xlsx`, PDF example download actions, and avoiding commit/exposure of filled questionnaire answers. Recommendations incorporated.
+- 2026-07-08 PZK-DESIGN-001 v2 post-task review round 1:
+  - Reviewer Goodall: 9.2/10; required making `Скачать PDF` controls credible links, updating stale PNG dimensions in this tracker, ignoring the untracked filled questionnaire XLSX, and cleaning markdown trailing whitespace. Changes incorporated.
+- 2026-07-08 PZK-DESIGN-001 v4 user-feedback pre-task review attempt:
+  - `multi_agent_v1.spawn_agent` requested with `gpt-5.5 xhigh`, but failed with `collab spawn failed: agent thread limit reached`. Local v4 work proceeded without committing/pushing because the mandatory review gate is blocked.
+- 2026-07-08 PZK-DESIGN-001 v4 post-task review attempt:
+  - `multi_agent_v1.spawn_agent` requested with `gpt-5.5 xhigh`, but failed again with `collab spawn failed: agent thread limit reached`. The v4 PNG/brief/HTML remain local pending a reviewer score of `9.5/10` or explicit user-approved fallback.
+- 2026-07-08 PZK-DESIGN-001 v4 post-task review round 2:
+  - Reviewer Bernoulli: 9.2/10; required adding an explicit contact block and reconciling visible BYN totals. Changes incorporated.
+  - Reviewer Poincare: 9.6/10; confirmed contacts are explicit, visible BYN totals reconcile to `3 143 Br`, PNG dimensions are `1440 x 5281`, and the static design concept is safe to commit/push after tracker cleanup.
