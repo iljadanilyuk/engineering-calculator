@@ -476,6 +476,40 @@ Verification:
 - `bun run --cwd packages/contracts typecheck` passed.
 - `bun run typecheck` passed.
 
+### PZK-DESIGN-001 - Public Calculator Visual Concept
+
+Status: complete
+
+Goal:
+
+- Prepare a visual direction for the public calculator page before PZK-004 implementation.
+- Produce one desktop PNG mockup that the user can open and evaluate for design direction.
+
+Acceptance criteria:
+
+- First screen shows `ИП Позняк`, offer copy, and a working-calculator visual.
+- Page structure covers object parameters, service selection, live BYN/USD result summary, included project work, object examples, process stages, lead CTA, contacts, and future PDF/proposal state.
+- Design brief exists at `docs/design/public-calculator-visual-brief.md`.
+- Static preview source exists separately from production UI and does not wire backend/API behavior.
+- Final PNG exists at `docs/design/public-calculator-concept.png`.
+- No production UI/backend, DigitalOcean resources, paid cloud resources, or Codex plugin-layer changes are introduced.
+
+Completion notes:
+
+- Added `docs/design/public-calculator-visual-brief.md` with visual direction, grid/composition, palette, typography, shadcn/21st component recommendations, Heaton adaptation notes, mobile notes, states for PZK-004, and screenshot command.
+- Added `docs/design/public-calculator-concept.html` as a standalone static desktop preview source, outside the production `website` route.
+- Generated `docs/design/public-calculator-concept.png` as a 1440px-wide full-page desktop mockup.
+- The mockup uses fixture services/rate aligned with the shared calculation domain: area, selected services, `fixed` and `per_sqm` pricing, BYN primary total, USD secondary reference, future formula as `по запросу`, and future proposal/PDF state.
+- Reviewer feedback corrected the fixture so visible BYN line totals reconcile with the displayed BYN total, and added an explicit contacts section.
+- No backend/API, Astro production page, webapp, cloud resources, or Codex plugin-layer files were changed.
+
+Verification:
+
+- `bun x playwright screenshot --full-page --viewport-size=1440,2540 "file:///E:/vc/poznyak-engineering-calculator/docs/design/public-calculator-concept.html" docs/design/public-calculator-concept.png` passed.
+- PNG dimension check passed: `1440 x 3859`.
+- Visual inspection of `docs/design/public-calculator-concept.png` passed after regeneration.
+- Post-task review gate passed with reviewer Bohr score `9.6/10`.
+
 ### PZK-003 - Backend Data Model And Services API
 
 Status: pending
@@ -763,3 +797,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Parfit: 8/10; required safe HTTPS URL validation, strict discriminated line-item quantities, reason-specific skipped-service schemas, immutable proposal artifact requirement, and matching tests. Changes incorporated.
 - 2026-07-08 PZK-002 post-task review round 2:
   - Reviewer Confucius: 9.5/10; confirmed Parfit's required changes are resolved, no new required changes remain, and PZK-002 can be marked complete after tracker update.
+- 2026-07-08 PZK-DESIGN-001 pre-task review:
+  - Reviewer Galileo: `gpt-5.5 xhigh`; flagged that the task must remain a static design concept outside production UI/backend, use domain concepts from contracts, keep BYN primary and USD secondary, avoid paid cloud/plugin changes, and show calculator-first structure with future PDF state. Recommendations incorporated.
+- 2026-07-08 PZK-DESIGN-001 post-task review round 1:
+  - Reviewer Linnaeus: 9.1/10; required visible BYN line totals to reconcile with the displayed total and required an explicit contacts section. Changes incorporated.
+  - Reviewer Socrates: 9.2/10; required an explicit contacts section and recording `PZK-DESIGN-001` in `task.md` before closure. Changes incorporated.
+- 2026-07-08 PZK-DESIGN-001 post-task review round 2:
+  - Reviewer Bohr: 9.6/10; confirmed BYN totals reconcile and contacts are present. Required tracker/review-log update before commit; this update records the final gate.

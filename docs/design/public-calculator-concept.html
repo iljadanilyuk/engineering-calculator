@@ -1,0 +1,1414 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ИП Позняк - public calculator visual concept</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f7f8f5;
+        --paper-2: #eef2ef;
+        --surface: #ffffff;
+        --surface-soft: #f2f5f2;
+        --ink: #14201b;
+        --muted: #647069;
+        --subtle: #8a948d;
+        --line: #d9e0db;
+        --line-strong: #bcc8c0;
+        --green: #1f6b57;
+        --green-soft: #dfeee7;
+        --blue: #315f8f;
+        --blue-soft: #e4edf7;
+        --amber: #a66a1f;
+        --amber-soft: #f4ead9;
+        --danger: #9a3d39;
+        --shadow: 0 24px 72px rgba(29, 43, 36, 0.11);
+        --radius: 8px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        background: #dfe5e0;
+        color: var(--ink);
+        font-family:
+          Aptos,
+          "Segoe UI",
+          "Noto Sans",
+          sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+
+      .mockup {
+        width: 1440px;
+        min-height: 2540px;
+        margin: 0 auto;
+        background:
+          linear-gradient(rgba(31, 107, 87, 0.055) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(49, 95, 143, 0.045) 1px, transparent 1px),
+          var(--paper);
+        background-size: 48px 48px;
+        overflow: hidden;
+      }
+
+      .container {
+        width: 1240px;
+        margin: 0 auto;
+      }
+
+      .topbar {
+        height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+      }
+
+      .brand-mark {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: var(--surface);
+        color: var(--green);
+        font-weight: 800;
+      }
+
+      .brand small,
+      .nav,
+      .meta,
+      .eyebrow,
+      .label,
+      .chip,
+      .micro,
+      .step-number,
+      .money-note {
+        font-size: 12px;
+      }
+
+      .brand small {
+        display: block;
+        margin-top: 1px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        color: var(--muted);
+      }
+
+      .nav span:first-child {
+        color: var(--ink);
+        font-weight: 650;
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .button {
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: var(--surface);
+        color: var(--ink);
+        padding: 0 14px;
+        font-weight: 650;
+      }
+
+      .button.primary {
+        border-color: var(--green);
+        background: var(--green);
+        color: white;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 448px 1fr;
+        gap: 34px;
+        padding: 58px 0 70px;
+        align-items: start;
+      }
+
+      .hero-copy {
+        padding-top: 18px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 18px;
+        color: var(--green);
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 26px;
+        height: 1px;
+        background: var(--green);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 430px;
+        font-size: 54px;
+        line-height: 1.03;
+        letter-spacing: 0;
+        font-weight: 780;
+      }
+
+      .lead {
+        margin-top: 20px;
+        max-width: 410px;
+        color: #3e4b44;
+        font-size: 18px;
+      }
+
+      .hero-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 30px;
+      }
+
+      .stat {
+        min-height: 86px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.72);
+        padding: 13px;
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 22px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .trust-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 24px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 30px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--muted);
+        padding: 0 11px;
+        font-weight: 650;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 99px;
+        background: var(--green);
+      }
+
+      .calculator {
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .calc-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .calc-title {
+        font-size: 18px;
+        font-weight: 760;
+      }
+
+      .calc-body {
+        display: grid;
+        grid-template-columns: 1fr 288px;
+        gap: 0;
+      }
+
+      .calc-main {
+        padding: 20px;
+        border-right: 1px solid var(--line);
+      }
+
+      .section-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+
+      .section-label strong {
+        font-size: 14px;
+      }
+
+      .section-label span {
+        color: var(--subtle);
+        font-size: 12px;
+      }
+
+      .param-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .field {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface-soft);
+        padding: 12px;
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-weight: 650;
+      }
+
+      .input-shell {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--ink);
+      }
+
+      .input-value {
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 760;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .unit {
+        margin-bottom: 4px;
+        color: var(--muted);
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--surface);
+        padding: 3px;
+        gap: 3px;
+      }
+
+      .segment {
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .segment.active {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .range {
+        height: 6px;
+        margin-top: 13px;
+        border-radius: 99px;
+        background: linear-gradient(90deg, var(--green) 0 58%, #d7dfd9 58% 100%);
+      }
+
+      .service-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .service-row {
+        display: grid;
+        grid-template-columns: 26px 1fr auto;
+        gap: 12px;
+        align-items: center;
+        min-height: 68px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 12px;
+      }
+
+      .service-row.active {
+        border-color: #a9c9bd;
+        background: #fbfdfb;
+      }
+
+      .check {
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--line-strong);
+        border-radius: 5px;
+        background: var(--surface);
+      }
+
+      .active .check {
+        border-color: var(--green);
+        background:
+          linear-gradient(135deg, transparent 0 42%, white 42% 52%, transparent 52%),
+          var(--green);
+      }
+
+      .service-name {
+        font-weight: 720;
+      }
+
+      .service-meta {
+        display: flex;
+        gap: 8px;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .price {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .price strong {
+        display: block;
+        font-size: 17px;
+      }
+
+      .price span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .calc-side {
+        padding: 20px;
+        background: #f8faf8;
+      }
+
+      .result-card {
+        border: 1px solid #b8c8c0;
+        border-radius: var(--radius);
+        background: #ffffff;
+        padding: 16px;
+      }
+
+      .result-title {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .total {
+        margin-top: 10px;
+        color: var(--green);
+        font-size: 42px;
+        line-height: 1;
+        font-weight: 820;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .usd {
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 16px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .rate {
+        margin-top: 13px;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .breakdown {
+        display: grid;
+        gap: 9px;
+        margin-top: 16px;
+      }
+
+      .breakdown-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .breakdown-row strong {
+        color: var(--ink);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .notice {
+        margin-top: 14px;
+        border: 1px solid #e2c790;
+        border-radius: var(--radius);
+        background: var(--amber-soft);
+        color: #6d4b1d;
+        padding: 11px;
+        font-size: 12px;
+      }
+
+      .proposal-gate {
+        margin-top: 16px;
+        display: grid;
+        gap: 9px;
+      }
+
+      .mini-field {
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--subtle);
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+
+      .wide-button {
+        height: 38px;
+        border-radius: 7px;
+        border: 0;
+        background: var(--green);
+        color: white;
+        font-weight: 760;
+      }
+
+      .section {
+        padding: 58px 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .section-header {
+        display: grid;
+        grid-template-columns: 330px 1fr;
+        gap: 40px;
+        margin-bottom: 24px;
+      }
+
+      h2 {
+        font-size: 31px;
+        line-height: 1.14;
+        font-weight: 780;
+      }
+
+      .section-header p {
+        max-width: 670px;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .object-strip {
+        display: grid;
+        grid-template-columns: 1.05fr 1fr 1fr 0.9fr;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.84);
+      }
+
+      .object-cell {
+        min-height: 112px;
+        padding: 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .object-cell:last-child {
+        border-right: 0;
+      }
+
+      .object-cell strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 22px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .object-cell span {
+        color: var(--muted);
+      }
+
+      .included-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+
+      .included-item,
+      .example-card,
+      .faq-item {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .included-item {
+        min-height: 138px;
+        padding: 18px;
+      }
+
+      .icon-square {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        background: var(--blue-soft);
+        color: var(--blue);
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .included-item h3,
+      .example-card h3 {
+        margin-top: 13px;
+        font-size: 17px;
+      }
+
+      .included-item p,
+      .example-card p {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .examples-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+
+      .example-card {
+        overflow: hidden;
+      }
+
+      .plan {
+        height: 150px;
+        position: relative;
+        background:
+          linear-gradient(rgba(49, 95, 143, 0.16) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(49, 95, 143, 0.16) 1px, transparent 1px),
+          #f2f7f7;
+        background-size: 18px 18px;
+      }
+
+      .plan::before,
+      .plan::after {
+        content: "";
+        position: absolute;
+        border: 2px solid var(--blue);
+        opacity: 0.74;
+      }
+
+      .plan::before {
+        left: 34px;
+        top: 30px;
+        width: 164px;
+        height: 82px;
+      }
+
+      .plan::after {
+        right: 38px;
+        top: 46px;
+        width: 106px;
+        height: 56px;
+        border-left-width: 8px;
+      }
+
+      .pipe {
+        position: absolute;
+        left: 56px;
+        right: 58px;
+        bottom: 32px;
+        height: 2px;
+        background: var(--green);
+      }
+
+      .pipe::before,
+      .pipe::after {
+        content: "";
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        border: 2px solid var(--green);
+        border-radius: 99px;
+        background: #f2f7f7;
+        top: -4px;
+      }
+
+      .pipe::before {
+        left: 24%;
+      }
+
+      .pipe::after {
+        right: 18%;
+      }
+
+      .example-body {
+        padding: 17px;
+      }
+
+      .card-meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      .tag {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        padding: 4px 8px;
+        font-size: 11px;
+      }
+
+      .timeline {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .step {
+        min-height: 160px;
+        padding: 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .step:last-child {
+        border-right: 0;
+      }
+
+      .step-number {
+        color: var(--blue);
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .step h3 {
+        margin-top: 26px;
+        font-size: 17px;
+      }
+
+      .step p {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .lead-band {
+        display: grid;
+        grid-template-columns: 1fr 398px;
+        gap: 26px;
+        align-items: stretch;
+        border: 1px solid #b7c7bf;
+        border-radius: var(--radius);
+        background: #ffffff;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .lead-copy {
+        padding: 30px;
+        background:
+          linear-gradient(rgba(31, 107, 87, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(31, 107, 87, 0.05) 1px, transparent 1px),
+          #fbfcfb;
+        background-size: 32px 32px;
+      }
+
+      .lead-copy h2 {
+        max-width: 650px;
+      }
+
+      .lead-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 22px;
+        max-width: 640px;
+      }
+
+      .lead-form .mini-field {
+        height: 42px;
+        font-size: 13px;
+      }
+
+      .lead-form .wide-button {
+        height: 42px;
+      }
+
+      .consent {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .proposal-state {
+        padding: 24px;
+        border-left: 1px solid var(--line);
+        background: #f7faf7;
+      }
+
+      .pdf-sheet {
+        height: 420px;
+        border: 1px solid var(--line-strong);
+        border-radius: 6px;
+        background: white;
+        padding: 18px;
+        box-shadow: 0 16px 42px rgba(30, 44, 38, 0.08);
+      }
+
+      .pdf-head {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 14px;
+      }
+
+      .pdf-title {
+        font-weight: 780;
+      }
+
+      .pdf-lines {
+        display: grid;
+        gap: 8px;
+        margin-top: 24px;
+      }
+
+      .pdf-line {
+        height: 10px;
+        border-radius: 99px;
+        background: #dfe7e2;
+      }
+
+      .pdf-line.short {
+        width: 62%;
+      }
+
+      .pdf-total {
+        margin-top: 32px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 14px;
+      }
+
+      .pdf-total strong {
+        display: block;
+        color: var(--green);
+        font-size: 30px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .faq-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+
+      .faq-item {
+        padding: 16px;
+      }
+
+      .faq-item strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .faq-item p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .contact-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr 1fr 1fr;
+        gap: 12px;
+      }
+
+      .contact-card {
+        min-height: 116px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 17px;
+      }
+
+      .contact-card strong {
+        display: block;
+        margin-top: 10px;
+        font-size: 18px;
+      }
+
+      .contact-card span {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        padding: 30px 0 42px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .mono,
+      .money,
+      .total,
+      .price,
+      .pdf-total,
+      .object-cell strong,
+      .stat strong {
+        font-family:
+          "Cascadia Mono",
+          "SFMono-Regular",
+          Consolas,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="mockup">
+      <header class="container topbar">
+        <div class="brand">
+          <div class="brand-mark">ПЗ</div>
+          <div>
+            ИП Позняк
+            <small>инженерное проектирование</small>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Основная навигация">
+          <span>Калькулятор</span>
+          <span>Что входит</span>
+          <span>Объекты</span>
+          <span>Этапы</span>
+        </nav>
+        <div class="top-actions">
+          <div class="button">+375 29 000-00-00</div>
+          <div class="button primary">Получить КП</div>
+        </div>
+      </header>
+
+      <section class="container hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Проектирование ОВ / ВК</p>
+          <h1>Расчет стоимости проекта инженерных сетей за 2 минуты</h1>
+          <p class="lead">
+            Введите площадь объекта, выберите разделы проектирования и получите ориентир
+            стоимости в BYN с аккуратной USD-справкой для коммерческого предложения.
+          </p>
+
+          <div class="hero-stats">
+            <div class="stat">
+              <strong>Br</strong>
+              <span>основная валюта публичного расчета</span>
+            </div>
+            <div class="stat">
+              <strong>2 стр.</strong>
+              <span>будущий формат PDF-предложения</span>
+            </div>
+            <div class="stat">
+              <strong>v1</strong>
+              <span>фиксированные и м² цены из домена</span>
+            </div>
+          </div>
+
+          <div class="trust-row">
+            <span class="chip"><span class="dot"></span>Снимок курса</span>
+            <span class="chip">Расчет по строкам</span>
+            <span class="chip">PDF после заявки</span>
+          </div>
+        </div>
+
+        <div class="calculator" aria-label="Статичный превью-калькулятор">
+          <div class="calc-head">
+            <div>
+              <div class="calc-title">Калькулятор проектных работ</div>
+              <div class="micro" style="color: var(--muted)">Пример расчета для будущей публичной страницы</div>
+            </div>
+            <span class="chip"><span class="dot"></span>Live summary</span>
+          </div>
+
+          <div class="calc-body">
+            <div class="calc-main">
+              <div class="section-label">
+                <strong>1. Параметры объекта</strong>
+                <span>areaSqm + exchangeRate snapshot</span>
+              </div>
+              <div class="param-grid">
+                <div class="field">
+                  <span class="label">Площадь объекта</span>
+                  <div class="input-shell">
+                    <span class="input-value">180</span>
+                    <span class="unit">м²</span>
+                  </div>
+                  <div class="range"></div>
+                </div>
+                <div class="field">
+                  <span class="label">Тип объекта</span>
+                  <div class="segmented">
+                    <span class="segment active">Дом</span>
+                    <span class="segment">Коммерция</span>
+                  </div>
+                  <div class="micro" style="margin-top: 12px; color: var(--muted)">Курс: 1 USD = 3.2500 BYN</div>
+                </div>
+              </div>
+
+              <div class="section-label">
+                <strong>2. Выбор проектных услуг</strong>
+                <span>fixed / per_sqm</span>
+              </div>
+              <div class="service-list">
+                <div class="service-row active">
+                  <div class="check"></div>
+                  <div>
+                    <div class="service-name">Отопление, тепловой пункт, спецификации</div>
+                    <div class="service-meta">
+                      <span>per_sqm</span>
+                      <span>5 $/м²</span>
+                    </div>
+                  </div>
+                  <div class="price">
+                    <strong>2 925 Br</strong>
+                    <span>~900 $</span>
+                  </div>
+                </div>
+                <div class="service-row active">
+                  <div class="check"></div>
+                  <div>
+                    <div class="service-name">Водоснабжение и канализация</div>
+                    <div class="service-meta">
+                      <span>per_sqm</span>
+                      <span>3 $/м²</span>
+                    </div>
+                  </div>
+                  <div class="price">
+                    <strong>1 755 Br</strong>
+                    <span>~540 $</span>
+                  </div>
+                </div>
+                <div class="service-row active">
+                  <div class="check"></div>
+                  <div>
+                    <div class="service-name">Пояснительная записка и ведомости</div>
+                    <div class="service-meta">
+                      <span>fixed</span>
+                      <span>250 $</span>
+                    </div>
+                  </div>
+                  <div class="price">
+                    <strong>813 Br</strong>
+                    <span>~250 $</span>
+                  </div>
+                </div>
+                <div class="service-row">
+                  <div class="check"></div>
+                  <div>
+                    <div class="service-name">Авторское сопровождение</div>
+                    <div class="service-meta">
+                      <span>future formula</span>
+                      <span>показывать как опцию позже</span>
+                    </div>
+                  </div>
+                  <div class="price">
+                    <strong>по запросу</strong>
+                    <span>не в сумме</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="calc-side">
+              <div class="result-card">
+                <div class="result-title">Итого к проектированию</div>
+                <div class="total">5 493 Br</div>
+                <div class="usd">~1 690 $</div>
+                <div class="rate">
+                  BYN округлен до целого рубля. USD показан как справка, курс сохранится в заявке.
+                </div>
+              </div>
+
+              <div class="breakdown">
+                <div class="breakdown-row">
+                  <span>ОВ</span>
+                  <strong>2 925 Br</strong>
+                </div>
+                <div class="breakdown-row">
+                  <span>ВК</span>
+                  <strong>1 755 Br</strong>
+                </div>
+                <div class="breakdown-row">
+                  <span>Ведомости</span>
+                  <strong>813 Br</strong>
+                </div>
+              </div>
+
+              <div class="notice">
+                Если курс устарел, здесь появится предупреждение и источник fallback.
+              </div>
+
+              <div class="proposal-gate">
+                <div class="mini-field">Имя для коммерческого предложения</div>
+                <div class="mini-field">Телефон</div>
+                <button class="wide-button">Получить PDF-предложение</button>
+                <div class="money-note" style="color: var(--muted)">PDF формируется после отправки заявки.</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>Параметры объекта остаются на виду</h2>
+            <p>
+              Данные, влияющие на расчет, собраны в спокойную техническую строку:
+              площадь, тип объекта, стадия и курс. Это продолжение логики Heaton, но
+              без перегруза тарифными таблицами на первом экране.
+            </p>
+          </div>
+          <div class="object-strip">
+            <div class="object-cell">
+              <span class="label">Площадь</span>
+              <strong>180 м²</strong>
+              <span>допуск до 2 знаков</span>
+            </div>
+            <div class="object-cell">
+              <span class="label">Объект</span>
+              <strong>Частный дом</strong>
+              <span>жилой сценарий по умолчанию</span>
+            </div>
+            <div class="object-cell">
+              <span class="label">Стадия</span>
+              <strong>Эскиз → Рабочий</strong>
+              <span>для будущих формул и услуг</span>
+            </div>
+            <div class="object-cell">
+              <span class="label">Курс</span>
+              <strong>3.2500</strong>
+              <span>manual / NBRB / fallback</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>Что входит в проектирование</h2>
+            <p>
+              Под калькулятором раскрывается ценность услуги: состав разделов,
+              рабочие чертежи, спецификации и сопровождение. Блоки компактные, чтобы
+              страница оставалась инструментальной.
+            </p>
+          </div>
+          <div class="included-grid">
+            <article class="included-item">
+              <div class="icon-square">01</div>
+              <h3>Схемы и планы систем</h3>
+              <p>Планы трасс, узлы подключения, принципиальные схемы и расчетные параметры.</p>
+            </article>
+            <article class="included-item">
+              <div class="icon-square">02</div>
+              <h3>Спецификации оборудования</h3>
+              <p>Ведомости материалов и оборудования для сметы, закупки и монтажа.</p>
+            </article>
+            <article class="included-item">
+              <div class="icon-square">03</div>
+              <h3>Пояснительная записка</h3>
+              <p>Краткое описание решений, допущений и требований к монтажу.</p>
+            </article>
+            <article class="included-item">
+              <div class="icon-square">04</div>
+              <h3>Координация разделов</h3>
+              <p>Увязка отопления, водоснабжения, канализации и архитектурных ограничений.</p>
+            </article>
+            <article class="included-item">
+              <div class="icon-square">05</div>
+              <h3>Коммерческое предложение</h3>
+              <p>Будущий PDF фиксирует выбранные услуги, курс, сумму и срок действия.</p>
+            </article>
+            <article class="included-item">
+              <div class="icon-square">06</div>
+              <h3>Контроль изменений</h3>
+              <p>Снимок расчета сохраняется, чтобы старые предложения не менялись после правок.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>Типы объектов и примеры</h2>
+            <p>
+              Вместо абстрактных картинок - технические миниатюры, напоминающие листы
+              проекта. В production их можно заменить обложками реальных PDF-примеров.
+            </p>
+          </div>
+          <div class="examples-grid">
+            <article class="example-card">
+              <div class="plan"><span class="pipe"></span></div>
+              <div class="example-body">
+                <h3>Частный дом 120-250 м²</h3>
+                <p>Отопление, теплые полы, котельная, водоснабжение и канализация.</p>
+                <div class="card-meta">
+                  <span class="tag">ОВ</span>
+                  <span class="tag">ВК</span>
+                  <span class="tag">PDF-пример</span>
+                </div>
+              </div>
+            </article>
+            <article class="example-card">
+              <div class="plan"><span class="pipe"></span></div>
+              <div class="example-body">
+                <h3>Коттедж с тепловым насосом</h3>
+                <p>Схемы теплогенерации, обвязка, автоматика и спецификация оборудования.</p>
+                <div class="card-meta">
+                  <span class="tag">ТП</span>
+                  <span class="tag">ОВ</span>
+                  <span class="tag">спецификация</span>
+                </div>
+              </div>
+            </article>
+            <article class="example-card">
+              <div class="plan"><span class="pipe"></span></div>
+              <div class="example-body">
+                <h3>Небольшая коммерция</h3>
+                <p>Разделы для офиса, магазина или сервиса с быстрым предварительным расчетом.</p>
+                <div class="card-meta">
+                  <span class="tag">ВК</span>
+                  <span class="tag">вентиляция позже</span>
+                  <span class="tag">по м²</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>Этапы работы</h2>
+            <p>
+              Процесс оформлен как короткая инженерная дорожная карта: клиент понимает,
+              что произойдет после расчета и почему заявка нужна перед PDF.
+            </p>
+          </div>
+          <div class="timeline">
+            <div class="step">
+              <div class="step-number">01 / ввод</div>
+              <h3>Площадь и разделы</h3>
+              <p>Пользователь выбирает услуги, видит сумму в BYN и вторичный USD.</p>
+            </div>
+            <div class="step">
+              <div class="step-number">02 / заявка</div>
+              <h3>Контакты</h3>
+              <p>Имя, телефон и согласие открывают генерацию коммерческого предложения.</p>
+            </div>
+            <div class="step">
+              <div class="step-number">03 / КП</div>
+              <h3>PDF на 2 страницы</h3>
+              <p>Расчет, состав работ, этапы и контакты фиксируются в артефакте.</p>
+            </div>
+            <div class="step">
+              <div class="step-number">04 / CRM</div>
+              <h3>Админ ведет лид</h3>
+              <p>Заявка попадает в будущую таблицу лидов со статусом New.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container lead-band">
+          <div class="lead-copy">
+            <p class="eyebrow">Коммерческое предложение</p>
+            <h2>Получите расчет и PDF, который удобно отправить заказчику или обсудить с инженером</h2>
+            <p class="lead" style="max-width: 640px">
+              Форма остается короткой: контакты нужны только для создания предложения и связи по объекту.
+              Итоговая сумма, услуги, курс и дата сохраняются в snapshot.
+            </p>
+            <div class="lead-form">
+              <div class="mini-field">Ваше имя</div>
+              <div class="mini-field">+375 29 123-45-67</div>
+              <button class="wide-button">Получить коммерческое предложение</button>
+              <div class="button" style="height: 42px">Задать вопрос</div>
+              <div class="consent">Нажимая кнопку, клиент соглашается на обработку данных для подготовки КП.</div>
+            </div>
+          </div>
+          <aside class="proposal-state">
+            <div class="pdf-sheet">
+              <div class="pdf-head">
+                <div>
+                  <div class="pdf-title">КП PZK-2026-0042</div>
+                  <div class="micro" style="color: var(--muted)">ИП Позняк · 08.07.2026</div>
+                </div>
+                <div class="chip">PDF</div>
+              </div>
+              <div class="pdf-lines">
+                <div class="pdf-line"></div>
+                <div class="pdf-line short"></div>
+                <div class="pdf-line"></div>
+                <div class="pdf-line short"></div>
+              </div>
+              <div class="pdf-total">
+                <span class="label">Итого по выбранным услугам</span>
+                <strong>5 493 Br</strong>
+                <div class="micro" style="color: var(--muted)">~1 690 $, курс 3.2500</div>
+              </div>
+              <div class="status-row">
+                <span>snapshot сохранен</span>
+                <span>checksum позже</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" style="padding-bottom: 40px">
+        <div class="container">
+          <div class="section-header">
+            <h2>Короткие ответы перед заявкой</h2>
+            <p>
+              FAQ можно добавить в PZK-004 как тихий блок в конце страницы, чтобы закрыть
+              вопросы про точность расчета, сроки и состав PDF.
+            </p>
+          </div>
+          <div class="faq-grid">
+            <div class="faq-item">
+              <strong>Это финальная цена?</strong>
+              <p>Нет, это ориентир по выбранным разделам. Финальная стоимость уточняется по объекту.</p>
+            </div>
+            <div class="faq-item">
+              <strong>Почему BYN главный?</strong>
+              <p>Публичный расчет и PDF показывают BYN основным, USD остается справочной величиной.</p>
+            </div>
+            <div class="faq-item">
+              <strong>Что будет с PDF?</strong>
+              <p>Будущий PDF будет неизменяемым артефактом с расчетом, составом работ и контактами.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" style="padding-top: 24px; padding-bottom: 42px">
+        <div class="container">
+          <div class="section-header">
+            <h2>Контакты</h2>
+            <p>
+              Отдельный контактный блок нужен для будущего лендинга: пользователь может
+              сразу позвонить, написать в мессенджер или оставить заявку через форму.
+            </p>
+          </div>
+          <div class="contact-grid">
+            <div class="contact-card">
+              <span class="label">Телефон</span>
+              <strong>+375 29 000-00-00</strong>
+              <span>уточнить production номер перед запуском</span>
+            </div>
+            <div class="contact-card">
+              <span class="label">Telegram</span>
+              <strong>@poznyak_engineer</strong>
+              <span>плейсхолдер публичного контакта</span>
+            </div>
+            <div class="contact-card">
+              <span class="label">Email</span>
+              <strong>project@example.by</strong>
+              <span>для отправки исходных данных</span>
+            </div>
+            <div class="contact-card">
+              <span class="label">Ответ</span>
+              <strong>1 рабочий день</strong>
+              <span>после заявки или сообщения</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="container footer">
+        <span>ИП Позняк · публичный калькулятор проектных работ</span>
+        <span class="mono">PZK-DESIGN-001 / static desktop visual concept</span>
+      </footer>
+    </main>
+  </body>
+</html>
