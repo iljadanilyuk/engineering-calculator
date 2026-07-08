@@ -11,6 +11,8 @@ The project is scaffolded from the Vibe template (`https://github.com/di-sukhare
 
 Mobile is deferred. DigitalOcean deployment is deferred until the deployment decision gate is approved in `task.md`.
 
+Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app exists, add the required CNAME/A records at the registrar to point the production domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless that decision changes explicitly.
+
 ## Product Direction
 
 The first product version should let public users calculate an indicative design-work offer, submit name and phone, and download a polished PDF proposal. Admin users should manage services/prices, review submitted calculations, change lead statuses, and use the app as a lightweight mini-CRM.

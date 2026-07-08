@@ -293,6 +293,7 @@ Deployment decision gate:
 
 - Before creating cloud resources, choose and document DigitalOcean App Platform vs Droplet + Docker Compose.
 - Document database choice, generated PDF/proposal storage, migrations, health checks, env vars, runtime versions, domain/HTTPS/proxy assumptions, backups, rollback plan, and expected monthly cost/risk.
+- Domain DNS decision: keep DNS management at the current registrar. After the DigitalOcean app exists, add the required CNAME/A records at the registrar to point the domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless the user explicitly changes this decision.
 - Get explicit user approval before provisioning or changing paid cloud resources.
 
 Before relying on Docker locally, check:
@@ -628,6 +629,7 @@ Acceptance criteria:
 
 - App Platform vs Droplet + Docker Compose is chosen.
 - Database, PDF/proposal storage, migrations, health checks, env vars, runtime versions, domain/HTTPS/proxy assumptions, backups, rollback plan, and expected monthly cost/risk are documented.
+- Domain plan uses registrar-managed DNS with CNAME/A records pointing to the DigitalOcean app after it exists; nameserver migration to DigitalOcean is out of scope unless explicitly approved later.
 - User explicitly approves paid cloud resource creation or changes.
 
 ### PZK-014 - DigitalOcean Deployment Prep
@@ -642,6 +644,7 @@ Acceptance criteria:
 
 - Required services and env vars are documented.
 - Database and storage persistence plan is documented.
+- Registrar-side DNS records are documented after the DigitalOcean app provides the target hostname/IP.
 - Health checks or smoke checks are defined.
 - Runtime smoke path is documented:
   - public calculator loads;
@@ -667,6 +670,7 @@ These do not block PZK-001, but should be resolved before final public launch:
 - Exact BYN symbol/notation to use everywhere: confirm final glyph/mark before UI/PDF polish.
 - Confirm privacy policy text and retention period for public lead data.
 - Confirm whether public PDF/proposal links should expire or remain permanently accessible by token.
+- Confirm the exact production domain/subdomain and registrar account access before attaching it to DigitalOcean.
 
 ## 12. Known Risks And Edge Cases
 
