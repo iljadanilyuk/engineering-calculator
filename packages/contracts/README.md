@@ -35,6 +35,8 @@ When a schema changes, validate both sides in the same pass:
 
 Do not add runtime-only business logic here. Contracts should stay focused on data validation, normalization, and shared TypeScript types.
 
+The engineering calculator is the one intentional shared-domain exception: `src/calculation.ts` contains the pure deterministic calculation rules, money rounding, and the Zod shapes those rules return. Keep that module side-effect free so the website, admin app, backend, and PDF renderer can use the same totals without duplicating formulas.
+
 For user-provided or database-stored public media URLs, validate the scheme explicitly instead of relying on `.url()` alone. Public image, video, and file URL fields should require `https:` unless a product has a documented reason to accept another scheme.
 
 ## Current Upstream Documentation

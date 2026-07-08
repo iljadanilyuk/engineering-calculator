@@ -444,7 +444,7 @@ Verification:
 
 ### PZK-002 - Shared Calculation Domain And Contracts
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -458,6 +458,23 @@ Acceptance criteria:
 - Stores/returns enough breakdown data for UI, backend, admin preview, and PDF.
 - Zod/shared contracts exist for service, calculation, lead submission, and proposal shapes.
 - Verification includes unit tests for normal, empty, fixed-only, per-square-meter, large-area, inactive-service, and rounding cases.
+
+Completion notes:
+
+- Added `packages/contracts/src/calculation.ts` as the shared pure calculation/domain module and exported it from `packages/contracts/src/index.ts`.
+- Services support `fixed`, `per_sqm`, and future `formula` pricing; unsupported formula services are skipped with explicit breakdown metadata until formula evaluation is implemented.
+- Calculation uses integer/BigInt math: USD cents, area hundredths, scaled USD/BYN rate, BYN cents, and one named BYN display rounding rule. JS floating point totals are not used as source of truth.
+- Result payload includes immutable-friendly service snapshots, line items, skipped services, exchange-rate snapshot, totals, rounding policy, and calculation version for UI/backend/admin/PDF reuse.
+- Added Zod contracts for engineering services, exchange-rate snapshots, calculation input/result, lead submission, and proposal artifacts.
+- Proposal contract requires an unguessable public token and either immutable PDF artifact metadata with checksum or an immutable HTML snapshot.
+- Hardened contracts with strict discriminated quantity shapes, reason-specific skipped-service shapes, HTTPS-only proposal URLs, and shared proposal artifact validation.
+- Added unit tests for normal mixed calculation, empty selection, fixed-only, per-square-meter-only, large area, inactive service, unsupported formula service, rounding, BYN line-total reconciliation, contract negatives, lead submission, and proposal shapes.
+
+Verification:
+
+- `bun run test:contracts` passed: 16/16.
+- `bun run --cwd packages/contracts typecheck` passed.
+- `bun run typecheck` passed.
 
 ### PZK-003 - Backend Data Model And Services API
 
@@ -739,3 +756,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
 - 2026-07-08 DigitalOcean Project organizer update:
   - Pre-task reviewer Helmholtz: recommended idempotent project creation, no paid resources, zero-resource verification, explicit future project ID usage, and separating Project organization from deployment/billing changes. Recommendations incorporated.
   - Post-task reviewer Sartre: 9.8/10; confirmed `engineering-calculator` Project exists, contains no resources, and documentation correctly states billing is based on team/account resource usage rather than Project count.
+- 2026-07-08 PZK-002 pre-task review:
+  - Reviewer Tesla: `gpt-5.5 xhigh`; flagged integer money/area scaling, unified BYN rounding, inactive/empty-service semantics, immutable-friendly snapshots, proposal-token safety, and keeping backend wiring for later tasks. Recommendations incorporated.
+- 2026-07-08 PZK-002 post-task review round 1:
+  - Reviewer Bernoulli: 9.5/10; no required code changes. Noted non-blocking gaps for unsupported formula skip tests and helper validation.
+  - Reviewer Parfit: 8/10; required safe HTTPS URL validation, strict discriminated line-item quantities, reason-specific skipped-service schemas, immutable proposal artifact requirement, and matching tests. Changes incorporated.
+- 2026-07-08 PZK-002 post-task review round 2:
+  - Reviewer Confucius: 9.5/10; confirmed Parfit's required changes are resolved, no new required changes remain, and PZK-002 can be marked complete after tracker update.
