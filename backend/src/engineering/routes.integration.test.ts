@@ -24,6 +24,7 @@ maybeDescribe('engineering API integration', () => {
   }
   const prisma = createPrisma(databaseUrl!)
   const app = createApp({ env, prisma })
+  let idempotencySequence = 0
 
   beforeEach(async () => {
     await prisma.proposal.deleteMany()
@@ -70,10 +71,25 @@ maybeDescribe('engineering API integration', () => {
       'Heating drawings',
     ])
 
+    const publicConfig = await app.request('/api/public/calculator-config')
+    const publicConfigBody = await publicConfig.json()
+    expect(publicConfig.status).toBe(200)
+    expect(publicConfigBody.exchangeRate.usdToBynRate).toBe('3')
+    expect(publicConfigBody.services.map((service: { id: string }) => service.id)).toEqual([
+      fixedService.id,
+      perSqmService.id,
+    ])
+
+    const idempotencyKey = nextIdempotencyKey()
     const response = await app.request('/api/public/calculations', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'pzk-happy-path-test',
+        'X-Real-IP': '203.0.113.10',
+      },
       body: JSON.stringify({
+        idempotencyKey,
         clientName: '  Анна Клиент  ',
         clientPhone: '+375 29 111-22-33',
         objectName: 'Дом 10',
@@ -98,8 +114,17 @@ maybeDescribe('engineering API integration', () => {
     const body = await response.json()
 
     expect(response.status).toBe(201)
-    expect(body.calculation.clientName).toBe('Анна Клиент')
-    expect(body.calculation.status).toBe('new')
+    expect(body.calculation.clientPhone).toBe('+375291112233')
+    expect(body.calculation.id).toBeUndefined()
+    expect(body.calculation.clientName).toBeUndefined()
+    expect(body.calculation.idempotencyKey).toBeUndefined()
+    expect(body.calculation.requestFingerprintHash).toBeUndefined()
+    expect(body.calculation.duplicateFingerprintHash).toBeUndefined()
+    expect(body.calculation.source).toBeUndefined()
+    expect(body.calculation.referrer).toBeUndefined()
+    expect(body.calculation.utm).toBeUndefined()
+    expect(body.calculation.consentIpAddress).toBeUndefined()
+    expect(body.calculation.status).toBeUndefined()
     expect(body.calculation.areaSqmHundredths).toBe(1_000)
     expect(body.calculation.totalUsdCents).toBe(12_500)
     expect(body.calculation.totalBynCents).toBe(37_500)
@@ -113,12 +138,33 @@ maybeDescribe('engineering API integration', () => {
       'Boiler room fixed package',
       'Heating drawings',
     ])
+    expect(body.calculation.proposal).toMatchObject({
+      status: 'pending',
+      offerNumber: expect.stringMatching(/^PZK-\d{4}-/),
+      urlPath: expect.stringMatching(/^\/api\/public\/proposals\/[A-Za-z0-9_-]{32,128}$/),
+    })
 
     const saved = await prisma.calculation.findUniqueOrThrow({
-      where: { id: body.calculation.id },
+      where: { publicToken: body.calculation.publicToken },
+      include: { proposals: true },
     })
     expect(saved.totalBynCents).toBe(37_500n)
+    expect(saved.clientPhone).toBe('+375291112233')
+    expect(saved.idempotencyKey).toBe(idempotencyKey)
+    expect(saved.requestFingerprintHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(saved.duplicateFingerprintHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(saved.consentVersion).toBe('pzk-public-lead-consent-v1')
+    expect(saved.consentText).toBe(
+      'Согласен на обработку имени, телефона и выбранного расчета для подготовки коммерческого предложения.',
+    )
+    expect(saved.consentIpAddress).toBe('203.0.113.10')
     expect(saved.publicToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/)
+    expect(saved.proposals).toHaveLength(1)
+
+    const publicProposal = await app.request(`/api/public/proposals/${saved.proposals[0].publicToken}`)
+    const publicProposalHtml = await publicProposal.text()
+    expect(publicProposal.status).toBe(200)
+    expect(publicProposalHtml).toContain('Коммерческое предложение готовится')
 
     await patchService(accessToken, fixedService.id, {
       title: 'Changed boiler price',
@@ -127,12 +173,15 @@ maybeDescribe('engineering API integration', () => {
     })
     await setExchangeRate(accessToken, '4.0000')
 
-    const snapshotResponse = await app.request(`/api/admin/calculations/${body.calculation.id}`, {
+    const snapshotResponse = await app.request(`/api/admin/calculations/${saved.id}`, {
       headers: authHeaders(accessToken),
     })
     const snapshotBody = await snapshotResponse.json()
 
     expect(snapshotResponse.status).toBe(200)
+    expect(snapshotBody.calculation.id).toBe(saved.id)
+    expect(snapshotBody.calculation.requestFingerprintHash).toBe(saved.requestFingerprintHash)
+    expect(snapshotBody.calculation.consentIpAddress).toBe('203.0.113.10')
     expect(snapshotBody.calculation.totalBynCents).toBe(37_500)
     expect(snapshotBody.calculation.exchangeRate.usdToBynRate).toBe('3')
     expect(snapshotBody.calculation.calculationSnapshot.lineItems[0].serviceSnapshot).toMatchObject({
@@ -234,6 +283,234 @@ maybeDescribe('engineering API integration', () => {
     expect(await prisma.calculation.count()).toBe(0)
   })
 
+  test('rejects invalid public lead fields before persistence', async () => {
+    const accessToken = await registerAdmin('invalid-lead@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Valid public service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+
+    const invalidName = await saveCalculation({
+      clientName: 'A',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const invalidNameBody = await invalidName.json()
+    expect(invalidName.status).toBe(400)
+    expect(invalidNameBody.error.code).toBe('VALIDATION_ERROR')
+
+    const invalidPhone = await saveCalculation({
+      clientName: 'Client',
+      clientPhone: 'abcde',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const invalidPhoneBody = await invalidPhone.json()
+    expect(invalidPhone.status).toBe(400)
+    expect(invalidPhoneBody.error.message).toBe('Invalid lead phone number')
+
+    const missingConsent = await app.request('/api/public/calculations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotencyKey: nextIdempotencyKey(),
+        clientName: 'Client',
+        clientPhone: '+375291112233',
+        calculation: {
+          areaSqm: '10',
+          selectedServiceIds: [service.id],
+        },
+        consentAccepted: false,
+      }),
+    })
+    expect(missingConsent.status).toBe(400)
+    expect(await prisma.calculation.count()).toBe(0)
+  })
+
+  test('returns existing calculation for idempotent and recent duplicate submissions', async () => {
+    const accessToken = await registerAdmin('duplicates@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Duplicate-safe service',
+      pricingType: 'per_sqm',
+      priceUsdCents: 100,
+    })
+    const payload = {
+      idempotencyKey: nextIdempotencyKey(),
+      clientName: 'Duplicate Client',
+      clientPhone: '8 029 111-22-33',
+      calculation: {
+        areaSqm: '25',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+      source: 'public_website',
+    }
+
+    const first = await saveCalculation(payload)
+    const firstBody = await first.json()
+    const sameKeyReplay = await saveCalculation(payload)
+    const sameKeyReplayBody = await sameKeyReplay.json()
+    const recentDuplicate = await saveCalculation({
+      ...payload,
+      idempotencyKey: nextIdempotencyKey(),
+    })
+    const recentDuplicateBody = await recentDuplicate.json()
+
+    expect(first.status).toBe(201)
+    expect(sameKeyReplay.status).toBe(200)
+    expect(recentDuplicate.status).toBe(200)
+    expect(sameKeyReplayBody.calculation.publicToken).toBe(firstBody.calculation.publicToken)
+    expect(recentDuplicateBody.calculation.publicToken).toBe(firstBody.calculation.publicToken)
+    expect(firstBody.calculation.clientPhone).toBe('+375291112233')
+    expect(firstBody.calculation.source).toBeUndefined()
+    expect(await prisma.calculation.count()).toBe(1)
+    expect(await prisma.proposal.count()).toBe(1)
+  })
+
+  test('rejects idempotency key replay with a different payload', async () => {
+    const accessToken = await registerAdmin('idempotency-mismatch@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Idempotency service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const idempotencyKey = nextIdempotencyKey()
+    const first = await saveCalculation({
+      idempotencyKey,
+      clientName: 'First Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const mismatch = await saveCalculation({
+      idempotencyKey,
+      clientName: 'Second Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '20',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const mismatchBody = await mismatch.json()
+
+    expect(first.status).toBe(201)
+    expect(mismatch.status).toBe(409)
+    expect(mismatchBody.error.message).toBe(
+      'Idempotency key was already used for a different calculation submission',
+    )
+    expect(await prisma.calculation.count()).toBe(1)
+  })
+
+  test('keeps exact idempotent retries safe after the public throttle threshold', async () => {
+    const accessToken = await registerAdmin('idempotency-throttle@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Retry-safe service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const payload = {
+      idempotencyKey: nextIdempotencyKey(),
+      clientName: 'Retry Client',
+      clientPhone: '+375291119999',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    }
+    const headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': `pzk-idempotency-retry-${Date.now()}`,
+    }
+    const first = await app.request('/api/public/calculations', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    })
+    let latestReplayStatus = 0
+
+    for (let index = 0; index < 25; index += 1) {
+      const replay = await app.request('/api/public/calculations', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+      latestReplayStatus = replay.status
+    }
+
+    expect(first.status).toBe(201)
+    expect(latestReplayStatus).toBe(200)
+    expect(await prisma.calculation.count()).toBe(1)
+  })
+
+  test('rate limits mismatched idempotency-key replays instead of exempting them', async () => {
+    const accessToken = await registerAdmin('idempotency-mismatch-rate@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Mismatch limited service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const idempotencyKey = nextIdempotencyKey()
+    const headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': `pzk-idempotency-mismatch-rate-${Date.now()}`,
+    }
+    const first = await app.request('/api/public/calculations', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        idempotencyKey,
+        clientName: 'Mismatch Client',
+        clientPhone: '+375291118888',
+        calculation: {
+          areaSqm: '10',
+          selectedServiceIds: [service.id],
+        },
+        consentAccepted: true,
+      }),
+    })
+    let latestMismatchStatus = 0
+
+    for (let index = 0; index < 21; index += 1) {
+      const mismatch = await app.request('/api/public/calculations', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          idempotencyKey,
+          clientName: 'Mismatch Client Changed',
+          clientPhone: '+375291118888',
+          calculation: {
+            areaSqm: '20',
+            selectedServiceIds: [service.id],
+          },
+          consentAccepted: true,
+        }),
+      })
+      latestMismatchStatus = mismatch.status
+    }
+
+    expect(first.status).toBe(201)
+    expect(latestMismatchStatus).toBe(429)
+    expect(await prisma.calculation.count()).toBe(1)
+  })
+
   test('rejects public calculation saves when exchange rate is missing', async () => {
     const response = await saveCalculation({
       clientName: 'Client',
@@ -304,11 +581,14 @@ maybeDescribe('engineering API integration', () => {
       consentAccepted: true,
     })
     const body = await response.json()
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: body.calculation.publicToken },
+    })
 
     expect(response.status).toBe(201)
     await expectRejects(() =>
       prisma.$executeRawUnsafe(
-        `UPDATE "calculations" SET "status" = 'bad_status' WHERE "id" = '${body.calculation.id}'::uuid`,
+        `UPDATE "calculations" SET "status" = 'bad_status' WHERE "id" = '${saved.id}'::uuid`,
       ),
     )
     await expectRejects(() =>
@@ -316,7 +596,7 @@ maybeDescribe('engineering API integration', () => {
         INSERT INTO "proposals" ("calculation_id", "public_token", "offer_number", "template_version", "calculation_snapshot")
         SELECT "id", '${'p'.repeat(32)}', 'PZK-TEST', 'proposal-v1', "calculation_snapshot"
         FROM "calculations"
-        WHERE "id" = '${body.calculation.id}'::uuid
+        WHERE "id" = '${saved.id}'::uuid
       `),
     )
     await expectRejects(() =>
@@ -324,7 +604,7 @@ maybeDescribe('engineering API integration', () => {
         INSERT INTO "proposals" ("calculation_id", "public_token", "offer_number", "template_version", "html_snapshot", "calculation_snapshot")
         SELECT "id", 'short', 'PZK-TEST', 'proposal-v1', '<main>ok</main>', "calculation_snapshot"
         FROM "calculations"
-        WHERE "id" = '${body.calculation.id}'::uuid
+        WHERE "id" = '${saved.id}'::uuid
       `),
     )
     await expectRejects(() =>
@@ -332,9 +612,45 @@ maybeDescribe('engineering API integration', () => {
         INSERT INTO "proposals" ("calculation_id", "public_token", "offer_number", "template_version", "pdf_url", "storage_key", "checksum_sha256", "calculation_snapshot")
         SELECT "id", '${'q'.repeat(32)}', 'PZK-TEST', 'proposal-v1', 'https://example.com/proposal.pdf', 'proposals/test.pdf', 'bad-checksum', "calculation_snapshot"
         FROM "calculations"
-        WHERE "id" = '${body.calculation.id}'::uuid
+        WHERE "id" = '${saved.id}'::uuid
       `),
     )
+  })
+
+  test('rate limits repeated public calculation submissions by client bucket', async () => {
+    const accessToken = await registerAdmin('rate-limit@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Rate limited service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': `pzk-rate-limit-test-${Date.now()}`,
+    }
+    let latestStatus = 0
+
+    for (let index = 0; index < 21; index += 1) {
+      const response = await app.request('/api/public/calculations', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          idempotencyKey: nextIdempotencyKey(),
+          clientName: 'Rate Limit Client',
+          clientPhone: '+375291112233',
+          calculation: {
+            areaSqm: '10',
+            selectedServiceIds: [service.id],
+          },
+          consentAccepted: true,
+        }),
+      })
+      latestStatus = response.status
+    }
+
+    expect(latestStatus).toBe(429)
+    expect(await prisma.calculation.count()).toBe(1)
   })
 
   async function registerAdmin(email = 'admin@example.com') {
@@ -419,8 +735,16 @@ maybeDescribe('engineering API integration', () => {
     return app.request('/api/public/calculations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        idempotencyKey: nextIdempotencyKey(),
+        ...payload,
+      }),
     })
+  }
+
+  function nextIdempotencyKey() {
+    idempotencySequence += 1
+    return `test-idempotency-${Date.now().toString(36)}-${idempotencySequence}`
   }
 })
 

@@ -48,6 +48,10 @@ model Service {
 model Calculation {
   id                     String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
   publicToken            String     @unique @map("public_token")
+  idempotencyKey         String?    @unique(map: "calculations_idempotency_key_key") @map("idempotency_key")
+  requestFingerprintHash String?    @map("request_fingerprint_hash")
+  duplicateFingerprintHash String?  @unique(map: "calculations_duplicate_fingerprint_hash_key") @map("duplicate_fingerprint_hash")
+  duplicateWindowStartedAt DateTime? @map("duplicate_window_started_at")
   clientName             String     @map("client_name")
   clientPhone            String     @map("client_phone")
   objectName             String?    @map("object_name")
@@ -67,8 +71,14 @@ model Calculation {
   status                 String     @default("new")
   statusUpdatedAt        DateTime   @default(now()) @map("status_updated_at")
   notes                  String?
+  source                 String?
   referrer               String?
   utm                    Json?
+  consentAcceptedAt      DateTime?  @map("consent_accepted_at")
+  consentVersion         String?    @map("consent_version")
+  consentText            String?    @map("consent_text")
+  consentIpAddress       String?    @map("consent_ip_address")
+  consentUserAgent       String?    @map("consent_user_agent")
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
   proposals              Proposal[]
@@ -76,6 +86,8 @@ model Calculation {
   @@index([createdAt], map: "calculations_created_at_idx")
   @@index([status, createdAt], map: "calculations_status_created_at_idx")
   @@index([clientPhone], map: "calculations_client_phone_idx")
+  @@index([clientPhone, createdAt], map: "calculations_client_phone_created_at_idx")
+  @@index([duplicateWindowStartedAt], map: "calculations_duplicate_window_started_at_idx")
   @@map("calculations")
 }
 

@@ -65,11 +65,13 @@ if (target === 'backend-initial' || target === 'backend-final' || target === 'al
   const jwtSecret = requiredEnv('JWT_SECRET')
   assertStrongJwtSecret(jwtSecret)
   const webappUrl = target === 'backend-initial' ? 'https://placeholder.invalid' : requiredUrlEnv('DO_WEBAPP_URL')
+  const websiteUrl = target === 'backend-initial' ? 'https://placeholder.invalid' : requiredUrlEnv('DO_WEBSITE_URL')
 
   await writePreparedSpec('backend-app.yaml.example', 'backend-app.yaml', {
     ...commonReplacements(),
     REPLACE_WITH_AT_LEAST_32_RANDOM_CHARS: jwtSecret,
     'https://REPLACE_WITH_WEBAPP_DEFAULT_INGRESS': webappUrl,
+    'https://REPLACE_WITH_WEBSITE_DEFAULT_INGRESS': websiteUrl,
     REPLACE_WITH_OPTIONAL_BACKEND_WORKERS: optionalBackendWorkersBlock(),
     REPLACE_WITH_OPTIONAL_BACKEND_CRON_JOBS: optionalBackendCronJobsBlock(),
   })
@@ -89,6 +91,7 @@ if (target === 'website' || target === 'all') {
   await writePreparedSpec('website-static-app.yaml.example', 'website-static-app.yaml', {
     ...commonReplacements(),
     'https://REPLACE_WITH_WEBAPP_DEFAULT_INGRESS': requiredUrlEnv('DO_WEBAPP_URL'),
+    'https://REPLACE_WITH_BACKEND_DEFAULT_INGRESS': requiredUrlEnv('DO_BACKEND_URL'),
   })
 }
 
@@ -130,10 +133,10 @@ function printUsage() {
   console.error('Required env:')
   console.error('  all targets: DO_GITHUB_REPO, optional DO_PROJECT_SLUG, DO_GIT_BRANCH, DO_APP_REGION')
   console.error('  backend-initial: JWT_SECRET')
-  console.error('  backend-final: JWT_SECRET, DO_WEBAPP_URL')
+  console.error('  backend-final: JWT_SECRET, DO_WEBAPP_URL, DO_WEBSITE_URL')
   console.error('  webapp: DO_BACKEND_URL')
-  console.error('  website: DO_WEBAPP_URL')
-  console.error('  all: JWT_SECRET, DO_BACKEND_URL, DO_WEBAPP_URL')
+  console.error('  website: DO_BACKEND_URL, DO_WEBAPP_URL')
+  console.error('  all: JWT_SECRET, DO_BACKEND_URL, DO_WEBAPP_URL, DO_WEBSITE_URL')
   console.error('')
   console.error('Optional deployment settings:')
   console.error('  API sizing: DO_API_INSTANCE_SIZE_SLUG, DO_API_INSTANCE_COUNT')
@@ -293,7 +296,7 @@ function assertSafeProductionEnv(outputName, contents) {
     assertCorsOrigins(outputName, corsOrigins)
   }
 
-  for (const key of ['VITE_API_URL', 'PUBLIC_WEBAPP_URL']) {
+  for (const key of ['VITE_API_URL', 'PUBLIC_API_URL', 'PUBLIC_WEBAPP_URL']) {
     const value = findEnvValue(contents, key)
     if (value !== undefined) {
       assertBuildTimeHttpsUrl(outputName, key, value)

@@ -47,6 +47,7 @@ Create local env files from examples:
 ```powershell
 Copy-Item .env.example .env
 Copy-Item backend/.env.example backend/.env
+Copy-Item website/.env.example website/.env
 ```
 
 Apply Prisma migrations:

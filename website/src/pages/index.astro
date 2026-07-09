@@ -200,7 +200,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
               <article class="hero-bullet">
                 <span class="symbol">КП</span>
                 <strong>Коммерческое</strong>
-                <span>Форма ниже готовит данные для будущего КП без отправки на этом этапе.</span>
+                <span>После контактов расчет сохраняется, а КП переходит в подготовку.</span>
               </article>
               <article class="hero-bullet">
                 <span class="symbol">ОП</span>
@@ -361,22 +361,62 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
                   <div>Для точного КП менеджер уточнит исходные данные объекта.</div>
                 </div>
 
-                <div class="lead-shell" id="lead-shell">
-                  <label>
+                <form class="lead-shell" id="lead-shell" data-lead-form novalidate>
+                  <label for="lead-name">
                     <span>Имя</span>
-                    <input data-lead-input type="text" placeholder="Например, Андрей" />
+                    <input
+                      id="lead-name"
+                      data-lead-name
+                      type="text"
+                      autocomplete="name"
+                      placeholder="Например, Андрей"
+                      aria-describedby="lead-name-error"
+                    />
                   </label>
-                  <label>
-                    <span>Телефон</span>
-                    <input data-lead-input type="tel" placeholder="+375 ..." />
-                  </label>
-                  <button class="button primary" type="button" data-lead-shell-trigger>
-                    Подготовить КП
-                  </button>
-                  <p data-lead-shell-status>
-                    Пока это подготовленное состояние: данные остаются на странице и не отправляются.
+                  <p class="field-error" id="lead-name-error" data-lead-name-error hidden>
+                    Укажите имя: минимум 2 символа.
                   </p>
-                </div>
+                  <label for="lead-phone">
+                    <span>Телефон</span>
+                    <input
+                      id="lead-phone"
+                      data-lead-phone
+                      type="tel"
+                      inputmode="tel"
+                      autocomplete="tel"
+                      placeholder="+375 ..."
+                      aria-describedby="lead-phone-error"
+                    />
+                  </label>
+                  <p class="field-error" id="lead-phone-error" data-lead-phone-error hidden>
+                    Укажите телефон в белорусском или международном формате.
+                  </p>
+                  <label class="consent-row" for="lead-consent">
+                    <input
+                      id="lead-consent"
+                      data-lead-consent
+                      type="checkbox"
+                      aria-describedby="lead-consent-error privacy-note"
+                    />
+                    <span>
+                      Согласен на обработку имени, телефона и выбранного расчета для подготовки коммерческого предложения.
+                    </span>
+                  </label>
+                  <p class="field-error" id="lead-consent-error" data-lead-consent-error hidden>
+                    Подтвердите согласие перед отправкой.
+                  </p>
+                  <button class="button primary" type="submit" data-lead-shell-trigger>
+                    Получить КП
+                  </button>
+                  <p class="privacy-note" id="privacy-note">
+                    Данные используются только для связи по расчету и подготовки предложения.
+                    Удаление заявки - по запросу через контакты после их подтверждения перед запуском.
+                  </p>
+                  <p data-lead-shell-status role="status">
+                    Заполните контакты: PDF появится отдельным шагом, сейчас заявка сохранится в системе.
+                  </p>
+                  <div class="lead-success" data-lead-success hidden></div>
+                </form>
               </aside>
             </div>
           </div>
@@ -545,8 +585,8 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
             <details>
               <summary>Когда появится PDF-коммерческое?</summary>
               <p>
-                PDF-коммерческое появится после подключения сохранения заявки. Сейчас форма только
-                готовит данные на странице.
+                Заявка уже сохраняется после имени, телефона и согласия. Полноценный PDF-рендер
+                будет подключен отдельным шагом.
               </p>
             </details>
           </div>
@@ -560,9 +600,9 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
               <p class="section-kicker">Контакты</p>
               <h2 id="contacts-title">Связаться с ИП Позняк</h2>
               <p>
-                Перед публичным запуском здесь будут подтвержденные телефон, email и ссылки на
-                мессенджеры. Сейчас блок фиксирует место контактов без отправки персональных
-                данных.
+                После отправки формы имя, телефон и расчет сохраняются для подготовки КП.
+                Перед публичным запуском здесь будут подтвержденные контакты и ссылка/адрес для
+                запросов на уточнение, исправление или удаление заявки.
               </p>
             </div>
             <div class="contact-card">
@@ -577,7 +617,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
                 </div>
                 <div>
                   <dt>Email для PDF</dt>
-                  <dd>уточнить перед запуском</dd>
+                  <dd>уточнить перед запуском и политикой данных</dd>
                 </div>
               </dl>
               <a class="button primary" href="#calculator">Вернуться к расчету</a>
@@ -592,7 +632,8 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 <script>
   import {
     calculateEngineeringOffer,
-    serviceListResponseSchema,
+    publicCalculatorConfigResponseSchema,
+    publicCalculationSaveResponseSchema,
     type CalculationResult,
     type EngineeringService,
     type ServiceRecord,
@@ -621,20 +662,34 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   const totalByn = document.querySelector<HTMLElement>('[data-total-byn]')
   const totalUsd = document.querySelector<HTMLElement>('[data-total-usd]')
   const summaryList = document.querySelector<HTMLElement>('[data-summary-list]')
+  const leadForm = document.querySelector<HTMLFormElement>('[data-lead-form]')
+  const leadNameInput = document.querySelector<HTMLInputElement>('[data-lead-name]')
+  const leadPhoneInput = document.querySelector<HTMLInputElement>('[data-lead-phone]')
+  const leadConsent = document.querySelector<HTMLInputElement>('[data-lead-consent]')
+  const leadNameError = document.querySelector<HTMLElement>('[data-lead-name-error]')
+  const leadPhoneError = document.querySelector<HTMLElement>('[data-lead-phone-error]')
+  const leadConsentError = document.querySelector<HTMLElement>('[data-lead-consent-error]')
   const leadTrigger = document.querySelector<HTMLButtonElement>('[data-lead-shell-trigger]')
   const leadStatus = document.querySelector<HTMLElement>('[data-lead-shell-status]')
+  const leadSuccess = document.querySelector<HTMLElement>('[data-lead-success]')
 
   const numberFormatter = new Intl.NumberFormat('ru-RU')
   const usdFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
   const usdUnitFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
   const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
+  const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
 
   let services = normalizeServices(data.fallbackServices)
   let selectedServiceIds = new Set(data.selectedServiceIds)
+  let currentCalculation: CalculationResult | null = null
+  let currentCalculationSignature = ''
+  let hasApiConfig = false
+  let isSubmitting = false
+  let submissionIdempotencyKey = createIdempotencyKey()
 
   render()
   attachHandlers()
-  void loadPublicServices()
+  void loadPublicConfig()
 
   function attachHandlers() {
     areaInput?.addEventListener('input', () => {
@@ -660,47 +715,66 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       })
     })
 
-    leadTrigger?.addEventListener('click', () => {
-      if (!leadStatus) return
-      leadStatus.textContent =
-        'Форма подготовлена визуально. Заявка не отправляется, PDF и сохранение будут подключены позже.'
-      leadStatus.classList.add('is-ready')
+    leadNameInput?.addEventListener('input', () => {
+      validateLeadForm(false)
+      resetLeadSubmissionState()
+    })
+
+    leadPhoneInput?.addEventListener('input', () => {
+      validateLeadForm(false)
+      resetLeadSubmissionState()
+    })
+
+    leadConsent?.addEventListener('change', () => {
+      validateLeadForm(false)
+      resetLeadSubmissionState()
+    })
+
+    leadForm?.addEventListener('submit', (event) => {
+      event.preventDefault()
+      void submitLead()
     })
   }
 
-  async function loadPublicServices() {
-    const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
-
+  async function loadPublicConfig() {
     if (!apiBaseUrl) {
       setSourceMessage(`Базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+      setLeadStatus('Сохранение заявки требует подключенный backend API.')
+      updateSubmitState()
       return
     }
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/public/services`, {
+      const response = await fetch(`${apiBaseUrl}/api/public/calculator-config`, {
         headers: { Accept: 'application/json' },
       })
 
-      if (!response.ok) throw new Error(`Service request failed: ${response.status}`)
+      if (!response.ok) throw new Error(`Calculator config request failed: ${response.status}`)
 
-      const payload = serviceListResponseSchema.parse(await response.json())
+      const payload = publicCalculatorConfigResponseSchema.parse(await response.json())
       const publicServices = normalizeServices(payload.services)
+      data.exchangeRate = payload.exchangeRate
 
       if (publicServices.length === 0) {
         services = []
         selectedServiceIds = new Set()
+        hasApiConfig = false
         setSourceMessage('Нет опубликованных услуг в API')
       } else {
         services = publicServices
         selectedServiceIds = new Set(publicServices.map((service) => service.id))
+        hasApiConfig = true
         setSourceMessage(`Публичные услуги из API · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+        setLeadStatus('Заполните контакты: заявка сохранится, КП перейдет в подготовку.')
       }
 
       render()
     } catch {
       services = normalizeServices(data.fallbackServices)
       selectedServiceIds = new Set(data.selectedServiceIds)
+      hasApiConfig = false
       setSourceMessage(`API недоступен · базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+      setLeadStatus('API недоступен: расчет можно посмотреть, но заявку сейчас нельзя сохранить.')
       render()
     }
   }
@@ -740,10 +814,12 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     }
 
     if (!canCalculate) {
+      setCurrentCalculation(null)
       renderServices(null, focusServiceId)
       renderTotals(null)
       renderSummary(null)
       if (serviceEmpty) serviceEmpty.hidden = services.length > 0
+      updateSubmitState()
       return
     }
 
@@ -754,10 +830,12 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       exchangeRate: data.exchangeRate,
     })
 
+    setCurrentCalculation(calculation)
     renderServices(calculation, focusServiceId)
     renderTotals(calculation)
     renderSummary(calculation)
     if (serviceEmpty) serviceEmpty.hidden = true
+    updateSubmitState()
   }
 
   function renderServices(calculation: CalculationResult | null, focusServiceId?: string) {
@@ -838,6 +916,241 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
         `,
       )
       .join('')
+  }
+
+  function setCurrentCalculation(calculation: CalculationResult | null) {
+    const signature = calculation ? calculationSignature(calculation) : ''
+    currentCalculation = calculation
+
+    if (signature !== currentCalculationSignature) {
+      currentCalculationSignature = signature
+      submissionIdempotencyKey = createIdempotencyKey()
+      hideLeadSuccess()
+    }
+  }
+
+  async function submitLead() {
+    if (isSubmitting) return
+
+    const validation = validateLeadForm(true)
+
+    if (!validation.valid) {
+      setLeadStatus('Проверьте поля формы перед отправкой.', 'error')
+      return
+    }
+
+    if (!apiBaseUrl || !hasApiConfig || !currentCalculation) {
+      setLeadStatus('Сохранение недоступно: публичный API или курс сейчас не подключены.', 'error')
+      return
+    }
+
+    isSubmitting = true
+    updateSubmitState()
+    setLeadStatus('Сохраняю расчет и контакты...', 'loading')
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/calculations`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          idempotencyKey: submissionIdempotencyKey,
+          clientName: validation.clientName,
+          clientPhone: validation.clientPhone,
+          calculation: {
+            areaSqm: currentCalculation.areaSqm,
+            selectedServiceIds: [...selectedServiceIds],
+          },
+          consentAccepted: true,
+          source: 'public_website',
+          referrer: document.referrer || undefined,
+          utm: readAttributionMetadata(),
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        applyServerValidationErrors(payload)
+        throw new Error(publicSubmitErrorMessage(response.status, payload))
+      }
+
+      const parsed = publicCalculationSaveResponseSchema.parse(payload)
+      showLeadSuccess(parsed.calculation, response.status === 200)
+    } catch (error) {
+      setLeadStatus(
+        error instanceof Error ? error.message : 'Не удалось сохранить заявку. Попробуйте еще раз.',
+        'error',
+      )
+    } finally {
+      isSubmitting = false
+      updateSubmitState()
+    }
+  }
+
+  function validateLeadForm(showErrors: boolean) {
+    const clientName = leadNameInput?.value.trim() ?? ''
+    const clientPhone = leadPhoneInput?.value.trim() ?? ''
+    const phoneDigits = clientPhone.replace(/\D/g, '')
+    const nameValid = clientName.length >= 2 && clientName.length <= 120
+    const phoneValid =
+      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
+      phoneDigits.length >= 8 &&
+      phoneDigits.length <= 15 &&
+      !/^(\d)\1+$/.test(phoneDigits)
+    const consentValid = leadConsent?.checked === true
+
+    setFieldValidity(leadNameInput, leadNameError, nameValid, showErrors)
+    setFieldValidity(leadPhoneInput, leadPhoneError, phoneValid, showErrors)
+    setFieldValidity(leadConsent, leadConsentError, consentValid, showErrors)
+
+    return {
+      valid: nameValid && phoneValid && consentValid,
+      clientName,
+      clientPhone,
+    }
+  }
+
+  function setFieldValidity(
+    input: HTMLInputElement | null,
+    errorElement: HTMLElement | null,
+    isValid: boolean,
+    showError: boolean,
+  ) {
+    if (input) {
+      if (isValid) {
+        input.removeAttribute('aria-invalid')
+      } else {
+        input.setAttribute('aria-invalid', 'true')
+      }
+    }
+
+    if (errorElement) {
+      errorElement.hidden = isValid || !showError
+    }
+  }
+
+  function updateSubmitState() {
+    if (!leadTrigger) return
+
+    const unavailable =
+      isSubmitting || !apiBaseUrl || !hasApiConfig || currentCalculation === null || currentCalculation.lineItems.length === 0
+    leadTrigger.disabled = unavailable
+    leadTrigger.textContent = isSubmitting ? 'Сохраняю...' : 'Получить КП'
+  }
+
+  function showLeadSuccess(
+    calculation: {
+      publicToken: string
+      clientPhone: string
+      totalUsdCents: number
+      totalBynRoundedRubles: number
+      proposal: { offerNumber: string; urlPath: string } | null
+    },
+    returnedExisting: boolean,
+  ) {
+    if (leadSuccess) {
+      const proposal = calculation.proposal
+      leadSuccess.hidden = false
+      leadSuccess.innerHTML = `
+        <strong>${returnedExisting ? 'Этот расчет уже сохранен' : 'Заявка сохранена'}</strong>
+        <span>Итог: ${formatRubles(calculation.totalBynRoundedRubles)} Br · ~${formatUsd(calculation.totalUsdCents)} $</span>
+        <span>Телефон сохранен как ${escapeHtml(calculation.clientPhone)}.</span>
+        <span>${proposal ? `КП ${escapeHtml(proposal.offerNumber)} принято в подготовку.` : 'КП принято в подготовку.'}</span>
+        ${
+          proposal
+            ? `<a class="pending-offer-link" href="${apiBaseUrl}${escapeHtml(proposal.urlPath)}" target="_blank" rel="noopener">Открыть страницу КП</a>`
+            : ''
+        }
+      `
+    }
+
+    setLeadStatus(
+      returnedExisting
+        ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
+        : 'Заявка принята. PDF будет подключен следующим этапом.',
+      'ready',
+    )
+  }
+
+  function hideLeadSuccess() {
+    if (!leadSuccess) return
+    leadSuccess.hidden = true
+    leadSuccess.innerHTML = ''
+  }
+
+  function resetLeadSubmissionState() {
+    submissionIdempotencyKey = createIdempotencyKey()
+    hideLeadSuccess()
+  }
+
+  function applyServerValidationErrors(payload: unknown) {
+    if (!payload || typeof payload !== 'object' || !('error' in payload)) return
+    const details = (payload as { error?: { details?: unknown } }).error?.details
+    if (!Array.isArray(details)) return
+
+    const phoneIssue = details.find((issue) =>
+      Array.isArray((issue as { path?: unknown }).path)
+        ? ((issue as { path: unknown[] }).path ?? []).includes('clientPhone')
+        : false,
+    )
+
+    if (phoneIssue) {
+      setFieldValidity(leadPhoneInput, leadPhoneError, false, true)
+    }
+  }
+
+  function publicSubmitErrorMessage(status: number, payload: unknown) {
+    const serverMessage =
+      payload && typeof payload === 'object' && 'error' in payload
+        ? (payload as { error?: { message?: string } }).error?.message
+        : undefined
+
+    if (status === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
+    if (status === 409) return 'Тарифы или курс изменились. Обновите страницу и повторите расчет.'
+    if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
+    return serverMessage ?? 'Не удалось сохранить заявку. Попробуйте еще раз.'
+  }
+
+  function readAttributionMetadata() {
+    const searchParams = new URLSearchParams(window.location.search)
+    const metadata: Record<string, string> = {}
+
+    searchParams.forEach((value, key) => {
+      if (!/^(utm_[a-z0-9_]+|gclid|yclid|fbclid)$/i.test(key)) return
+      const trimmedValue = value.trim()
+      if (!trimmedValue) return
+      metadata[key.slice(0, 64)] = trimmedValue.slice(0, 500)
+    })
+
+    return Object.keys(metadata).length > 0 ? metadata : undefined
+  }
+
+  function calculationSignature(calculation: CalculationResult) {
+    return JSON.stringify({
+      areaSqm: calculation.areaSqm,
+      selectedServiceIds: calculation.selectedServiceIds,
+      exchangeRateScaled: calculation.exchangeRate.usdToBynRateScaled,
+      totalUsdCents: calculation.totals.totalUsdCents,
+      totalBynCents: calculation.totals.totalBynCents,
+    })
+  }
+
+  function createIdempotencyKey() {
+    if ('randomUUID' in crypto) {
+      return crypto.randomUUID()
+    }
+
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`
+  }
+
+  function setLeadStatus(message: string, state?: 'ready' | 'error' | 'loading') {
+    if (!leadStatus) return
+    leadStatus.textContent = message
+    leadStatus.classList.toggle('is-ready', state === 'ready')
+    leadStatus.classList.toggle('is-error', state === 'error')
+    leadStatus.classList.toggle('is-loading', state === 'loading')
   }
 
   function parseArea(value: string) {
@@ -1133,6 +1446,11 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   .button.primary:hover {
     background: var(--orange-2);
     border-color: var(--orange-2);
+  }
+
+  .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
   }
 
   .button.secondary {
@@ -1646,6 +1964,38 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     padding: 0 14px;
   }
 
+  .lead-shell input[aria-invalid] {
+    border-color: #b6401a;
+    background: #fff8f4;
+  }
+
+  .lead-shell .field-error {
+    margin-top: -2px;
+  }
+
+  .consent-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    border-radius: 16px;
+    background: var(--paper);
+    padding: 11px 12px;
+  }
+
+  .consent-row input {
+    width: 16px;
+    height: 16px;
+    min-height: 0;
+    margin: 3px 0 0;
+    padding: 0;
+    accent-color: var(--orange);
+  }
+
+  .consent-row span {
+    color: var(--body);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
   .lead-shell .button {
     width: 100%;
     padding-inline: 10px;
@@ -1659,6 +2009,48 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 
   .lead-shell p.is-ready {
     color: #8f3519;
+  }
+
+  .lead-shell p.is-error {
+    color: #b6401a;
+  }
+
+  .lead-shell p.is-loading {
+    color: var(--steel);
+  }
+
+  .privacy-note {
+    border-top: 1px solid var(--line-soft);
+    padding-top: 10px;
+  }
+
+  .lead-success {
+    display: grid;
+    gap: 5px;
+    border: 1px solid rgba(47, 95, 127, 0.24);
+    border-radius: 16px;
+    background: #eef5f8;
+    padding: 12px;
+    color: var(--body);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .lead-success strong,
+  .lead-success span {
+    display: block;
+  }
+
+  .lead-success strong {
+    color: var(--navy);
+    font-size: 13px;
+  }
+
+  .pending-offer-link {
+    width: fit-content;
+    border-bottom: 1px solid var(--steel);
+    color: var(--steel);
+    font-weight: 800;
   }
 
   .section {

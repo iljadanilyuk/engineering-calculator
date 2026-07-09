@@ -134,15 +134,17 @@ bun run deploy:do:specs webapp
 doctl apps spec validate .scratch/deploy/webapp-static-app.yaml
 doctl apps create --spec .scratch/deploy/webapp-static-app.yaml
 
-# 3. After the webapp URL exists, update backend CORS and create website if active.
+# 3. After the webapp URL exists, create the website static app if active.
 export DO_WEBAPP_URL=https://<webapp-default-ingress>
-bun run deploy:do:specs backend-final
-doctl apps spec validate .scratch/deploy/backend-app.yaml
-doctl apps update <backend-app-id> --spec .scratch/deploy/backend-app.yaml
-
 bun run deploy:do:specs website
 doctl apps spec validate .scratch/deploy/website-static-app.yaml
 doctl apps create --spec .scratch/deploy/website-static-app.yaml
+
+# 4. After the website URL exists, update backend CORS for both browser origins.
+export DO_WEBSITE_URL=https://<website-default-ingress>
+bun run deploy:do:specs backend-final
+doctl apps spec validate .scratch/deploy/backend-app.yaml
+doctl apps update <backend-app-id> --spec .scratch/deploy/backend-app.yaml
 ```
 
 Static Sites build from the connected Git branch, not from local `dist` folders. The branch must contain the full web/backend monorepo: root `package.json`, `bun.lock`, `backend`, `webapp`, `website`, and `packages/contracts`.
@@ -259,7 +261,7 @@ Required component shape (static build):
 - Build command: `bun install --frozen-lockfile && bun run build:website`.
 - Output directory: `website/dist`.
 - Index document: `index.html`.
-- Build-time env only when the website intentionally needs public config, such as `PUBLIC_WEBAPP_URL=https://webapp.example.com`.
+- Build-time env: `PUBLIC_API_URL=https://api.example.com` for public lead capture, plus `PUBLIC_WEBAPP_URL=https://webapp.example.com` when the website links to the admin/app surface.
 
 Keep website independent from authenticated browser-app flows unless the product explicitly needs shared API data.
 

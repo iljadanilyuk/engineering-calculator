@@ -84,6 +84,12 @@ export const serviceListResponseSchema = z.object({
   services: z.array(serviceRecordSchema),
 })
 
+export const publicCalculatorConfigResponseSchema = z.object({
+  services: z.array(serviceRecordSchema),
+  exchangeRate: exchangeRateSnapshotSchema,
+  exchangeRateUpdatedAt: z.string().datetime(),
+})
+
 export const serviceResponseSchema = z.object({
   service: serviceRecordSchema,
 })
@@ -109,6 +115,10 @@ export const calculationSaveRequestSchema = leadSubmissionSchema
 export const calculationRecordSchema = z.object({
   id: uuidSchema,
   publicToken: publicTokenSchema,
+  idempotencyKey: z.string().nullable(),
+  requestFingerprintHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  duplicateFingerprintHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  duplicateWindowStartedAt: z.string().datetime().nullable(),
   clientName: z.string(),
   clientPhone: z.string(),
   objectName: z.string().nullable(),
@@ -126,15 +136,49 @@ export const calculationRecordSchema = z.object({
   status: calculationStatusSchema,
   statusUpdatedAt: z.string().datetime(),
   notes: z.string().nullable(),
+  source: z.string().nullable(),
   referrer: z.string().nullable(),
   utm: z.record(z.string(), z.unknown()).nullable(),
+  consentAcceptedAt: z.string().datetime().nullable(),
+  consentVersion: z.string().nullable(),
+  consentText: z.string().nullable(),
+  consentIpAddress: z.string().nullable(),
+  consentUserAgent: z.string().nullable(),
   proposalArtifacts: z.array(proposalArtifactReferenceSchema),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 })
 
+export const publicCalculationProposalSchema = z.object({
+  status: z.literal('pending'),
+  publicToken: publicTokenSchema,
+  offerNumber: z.string(),
+  urlPath: z.string().startsWith('/api/public/proposals/'),
+})
+
+export const publicCalculationRecordSchema = z.object({
+  publicToken: publicTokenSchema,
+  clientPhone: z.string(),
+  areaSqm: z.string(),
+  areaSqmHundredths: z.number().int().positive(),
+  selectedServiceIds: z.array(z.string()),
+  serviceSnapshots: z.array(calculationServiceSnapshotSchema),
+  exchangeRate: exchangeRateSnapshotSchema,
+  calculationVersion: z.string(),
+  calculationSnapshot: calculationResultSchema,
+  totalUsdCents: usdCentsSchema,
+  totalBynCents: bynCentsSchema,
+  totalBynRoundedRubles: z.number().int().nonnegative(),
+  proposal: publicCalculationProposalSchema.nullable(),
+  createdAt: z.string().datetime(),
+})
+
 export const calculationSaveResponseSchema = z.object({
   calculation: calculationRecordSchema,
+})
+
+export const publicCalculationSaveResponseSchema = z.object({
+  calculation: publicCalculationRecordSchema,
 })
 
 export const projectExampleCreateRequestSchema = z.object({
@@ -178,10 +222,12 @@ export const projectExampleResponseSchema = z.object({
 export type ServiceCreateRequest = z.infer<typeof serviceCreateRequestSchema>
 export type ServiceUpdateRequest = z.infer<typeof serviceUpdateRequestSchema>
 export type ServiceRecord = z.infer<typeof serviceRecordSchema>
+export type PublicCalculatorConfigResponse = z.infer<typeof publicCalculatorConfigResponseSchema>
 export type ExchangeRateSettingRequest = z.infer<typeof exchangeRateSettingRequestSchema>
 export type CalculationStatus = z.infer<typeof calculationStatusSchema>
 export type CalculationSaveRequest = z.infer<typeof calculationSaveRequestSchema>
 export type CalculationRecord = z.infer<typeof calculationRecordSchema>
+export type PublicCalculationRecord = z.infer<typeof publicCalculationRecordSchema>
 export type ProjectExampleCreateRequest = z.infer<typeof projectExampleCreateRequestSchema>
 export type ProjectExampleUpdateRequest = z.infer<typeof projectExampleUpdateRequestSchema>
 export type ProjectExampleRecord = z.infer<typeof projectExampleRecordSchema>

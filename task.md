@@ -597,7 +597,7 @@ Verification:
 
 ### PZK-005 - Lead Capture And Calculation Save
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -619,6 +619,30 @@ Acceptance criteria:
   - retention/deletion approach documented;
   - Telegram PII sharing limited to the approved internal chat.
 - API/browser verification covers valid submission, invalid fields, duplicate attempt, and recalculation on server.
+
+Completion notes:
+
+- Added real public lead capture on the Astro calculator with required name, phone, consent checkbox, inline field errors, loading/error/success states, and idempotency reset when the calculation or contact fields change.
+- Added `GET /api/public/calculator-config` so the public page can load the same services and exchange-rate snapshot used by backend persistence.
+- Extended `POST /api/public/calculations` to normalize phone numbers server-side, recalculate totals from DB services and the current stored exchange-rate setting, persist immutable calculation snapshots/totals/service snapshots/source/referrer/UTM metadata, and create a pending proposal artifact without rendering a PDF.
+- Added a token-protected pending offer page at `GET /api/public/proposals/{token}` and linked it from the public success state. Full PDF rendering remains PZK-006.
+- Added idempotency keys, request fingerprints, duplicate fingerprints with DB uniqueness, a short duplicate window, and basic public submit throttling. Exact idempotent retries return the existing calculation; mismatched same-key replays are not throttle-exempt and return conflict/429 as appropriate.
+- Split public submit responses from admin calculation records so public responses do not expose DB ids, idempotency keys, audit hashes, source/referrer/UTM, consent IP/user-agent, notes, status, storage keys, or checksums.
+- Persisted consent evidence on calculations: accepted timestamp, consent version, exact accepted text, IP address, and user-agent. Website privacy/contact copy now reflects that submitted lead data is stored for offer preparation and that correction/deletion contact details must be finalized before public launch.
+- Updated DigitalOcean static-site/backend spec templates and generator so `PUBLIC_API_URL` is baked into the website build and backend CORS includes both webapp and website origins in the documented deploy order.
+- Added `website/.env.example` and updated backend/local setup examples so local public lead capture can call the backend API.
+
+Verification:
+
+- `docker info` passed before DB-backed verification.
+- `bun run typecheck` passed.
+- `bun run test:contracts` passed: 16/16.
+- `bun run test:deploy` passed: 16/16.
+- `bun run test:backend:unit` passed: 22/22.
+- `bun run test:backend:integration` passed: 21/21 using Docker PostgreSQL test DB.
+- `PUBLIC_API_URL=http://127.0.0.1:49380 bun run build:website` passed; non-blocking inherited local warning: `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+- Browser verification passed with `node .scratch\verify-pzk005-lead-ui-file.mjs`.
+- Browser verification covered inline invalid name/phone/consent errors with no POST, valid submit with changed area and service selection reflected in payload, UTM capture, success state using backend-normalized phone and backend totals, pending offer-page link, and mobile `390px` layout without horizontal overflow.
 
 ### PZK-006 - PDF Commercial Offer
 
@@ -879,3 +903,13 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Meitner: 9.2/10; required the same BYN reconciliation plus service-switch focus restoration after row re-render; recommended explicit `aria-invalid` handling. Changes incorporated.
 - 2026-07-09 PZK-004 focused post-task review round 2:
   - Reviewer Carver: 9.6/10; confirmed BYN row allocation reconciles to the shared-domain headline total, service switch focus is restored after toggling, and `aria-invalid` is set explicitly. No remaining required changes; PZK-004 gate cleared.
+- 2026-07-09 PZK-005 pre-task review:
+  - Reviewer Pasteur: `gpt-5.5 xhigh`; recommended idempotency in JSON body, server-side phone normalization, public services plus exchange-rate config, backend-only recalculation, pending proposal placeholder instead of PDF, duplicate/rate limiting, and API-backed browser verification. Recommendations incorporated.
+- 2026-07-09 PZK-005 post-task review round 1:
+  - Reviewer Plato: 8.0/10; required persisted consent evidence, idempotency fingerprint mismatch protection, safer idempotent retry/rate-limit behavior, and DB-backed duplicate race mitigation. Changes incorporated.
+  - Reviewer Heisenberg: 8.2/10; required website/backend deploy wiring for `PUBLIC_API_URL` and CORS, privacy/contact copy alignment, idempotency reset on contact edits, and stronger browser verification. Changes incorporated.
+- 2026-07-09 PZK-005 focused post-task review round 2:
+  - Reviewer Darwin: 8.6/10; required minimizing public save responses, preventing same-key mismatched replay from bypassing throttling, and aligning persisted consent text with the UI copy. Changes incorporated.
+  - Reviewer Dewey: 9.0/10; required a pending offer/PDF link or explicit pending state, fixing DigitalOcean deployment order around `DO_WEBSITE_URL`, closing the idempotency mismatch rate-limit hole, and making the privacy/deletion path less contradictory. Changes incorporated.
+- 2026-07-09 PZK-005 focused post-task review round 3:
+  - Reviewer Sartre: 9.6/10; confirmed public submit response minimization, rich admin records, pending proposal link/page, exact idempotent retry exemption, mismatched replay rate limiting, deployment sequence/env fixes, matching consent copy, and visible test coverage. No required changes remained; PZK-005 gate cleared.

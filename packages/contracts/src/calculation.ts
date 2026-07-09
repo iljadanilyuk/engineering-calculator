@@ -7,6 +7,12 @@ export const EXCHANGE_RATE_SCALE = 10_000
 const MONEY_MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER
 
 const publicIdSchema = z.string().trim().min(1).max(128)
+export const idempotencyKeySchema = z
+  .string()
+  .trim()
+  .min(16)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/, 'Expected a URL-safe idempotency key')
 const decimalStringSchema = (fractionDigits: number, wholeDigits: number) =>
   z
     .string()
@@ -144,11 +150,13 @@ export const calculationResultSchema = z.object({
 })
 
 export const leadSubmissionSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
   clientName: z.string().trim().min(2).max(120),
   clientPhone: z.string().trim().min(5).max(40),
   objectName: z.string().trim().min(1).max(160).optional(),
   calculation: calculationRequestSchema,
   consentAccepted: z.literal(true),
+  source: z.string().trim().min(1).max(80).optional(),
   referrer: z.string().trim().max(2_048).optional(),
   utm: z.record(z.string().trim().min(1).max(64), z.string().trim().max(500)).optional(),
 })

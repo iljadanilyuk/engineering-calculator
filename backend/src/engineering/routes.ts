@@ -8,6 +8,8 @@ import {
   projectExampleListResponseSchema,
   projectExampleResponseSchema,
   projectExampleUpdateRequestSchema,
+  publicCalculatorConfigResponseSchema,
+  publicCalculationSaveResponseSchema,
   serviceCreateRequestSchema,
   serviceListResponseSchema,
   serviceResponseSchema,
@@ -18,7 +20,7 @@ import { z } from 'zod'
 
 import { requireAuth } from '../auth/middleware'
 import type { AppHonoEnv, AuthenticatedHonoEnv } from '../http/context'
-import { validationErrorHook } from '../http/errors'
+import { AppError, validationErrorHook } from '../http/errors'
 
 const errorResponseContent = {
   'application/json': {
@@ -28,6 +30,10 @@ const errorResponseContent = {
 
 const idParamsSchema = z.object({
   id: z.string().uuid(),
+})
+
+const publicTokenParamsSchema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
 })
 
 const publicServicesRoute = createRoute({
@@ -41,6 +47,25 @@ const publicServicesRoute = createRoute({
         },
       },
       description: 'Public active engineering services',
+    },
+  },
+})
+
+const publicCalculatorConfigRoute = createRoute({
+  method: 'get',
+  path: '/public/calculator-config',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicCalculatorConfigResponseSchema,
+        },
+      },
+      description: 'Public calculator services and current exchange-rate snapshot',
+    },
+    409: {
+      content: errorResponseContent,
+      description: 'Exchange rate is not configured',
     },
   },
 })
@@ -73,10 +98,18 @@ const saveCalculationRoute = createRoute({
     },
   },
   responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicCalculationSaveResponseSchema,
+        },
+      },
+      description: 'Existing calculation returned for idempotent or duplicate public submission',
+    },
     201: {
       content: {
         'application/json': {
-          schema: calculationSaveResponseSchema,
+          schema: publicCalculationSaveResponseSchema,
         },
       },
       description: 'Saved recalculated public calculation',
@@ -88,6 +121,32 @@ const saveCalculationRoute = createRoute({
     409: {
       content: errorResponseContent,
       description: 'Exchange rate missing or selected service unavailable',
+    },
+    429: {
+      content: errorResponseContent,
+      description: 'Too many public calculation submissions',
+    },
+  },
+})
+
+const publicProposalRoute = createRoute({
+  method: 'get',
+  path: '/public/proposals/{token}',
+  request: {
+    params: publicTokenParamsSchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'text/html': {
+          schema: z.string(),
+        },
+      },
+      description: 'Token-protected pending public proposal page',
+    },
+    404: {
+      content: errorResponseContent,
+      description: 'Proposal not found',
     },
   },
 })
@@ -356,10 +415,25 @@ export function createEngineeringRoutes() {
   const protectedRoutes = new OpenAPIHono<AuthenticatedHonoEnv>({
     defaultHook: validationErrorHook,
   })
+  const enforcePublicSubmitRateLimit = createPublicSubmitRateLimiter()
 
   routes.openapi(publicServicesRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
     return c.json({ services: await engineering.listPublicServices() }, 200)
+  })
+
+  routes.openapi(publicCalculatorConfigRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const exchangeRateSetting = await engineering.getExchangeRate()
+
+    return c.json(
+      {
+        services: await engineering.listPublicServices(),
+        exchangeRate: exchangeRateSetting.exchangeRate,
+        exchangeRateUpdatedAt: exchangeRateSetting.updatedAt,
+      },
+      200,
+    )
   })
 
   routes.openapi(publicProjectExamplesRoute, async (c) => {
@@ -369,8 +443,25 @@ export function createEngineeringRoutes() {
 
   routes.openapi(saveCalculationRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
-    const calculation = await engineering.saveCalculation(c.req.valid('json'))
-    return c.json({ calculation }, 201)
+    const payload = c.req.valid('json')
+    const metadata = {
+      referrer: c.req.header('referer'),
+      ipAddress: publicSubmitIpAddress(c),
+      userAgent: c.req.header('user-agent'),
+    }
+
+    if (!(await engineering.isExactIdempotencyReplay(payload, metadata))) {
+      enforcePublicSubmitRateLimit(c)
+    }
+
+    const result = await engineering.saveCalculation(payload, metadata)
+    return c.json({ calculation: result.publicCalculation }, result.created ? 201 : 200)
+  })
+
+  routes.openapi(publicProposalRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const html = await engineering.getPublicProposalHtml(c.req.valid('param').token)
+    return c.html(html, 200)
   })
 
   protectedRoutes.use('/admin/*', requireAuth)
@@ -428,4 +519,74 @@ export function createEngineeringRoutes() {
   routes.route('/', protectedRoutes)
 
   return routes
+}
+
+type RateLimitBucket = {
+  count: number
+  windowStartedAt: number
+}
+
+function createPublicSubmitRateLimiter() {
+  const buckets = new Map<string, RateLimitBucket>()
+  const windowMs = 10 * 60 * 1_000
+  const maxSubmissionsPerWindow = 20
+  const maxBuckets = 10_000
+
+  return (c: { req: { header: (name: string) => string | undefined } }) => {
+    const now = Date.now()
+    cleanupRateLimitBuckets(buckets, now, windowMs, maxBuckets)
+    const key = publicSubmitClientKey(c)
+    const existing = buckets.get(key)
+    const bucket =
+      existing && now - existing.windowStartedAt < windowMs
+        ? existing
+        : { count: 0, windowStartedAt: now }
+
+    bucket.count += 1
+    buckets.set(key, bucket)
+
+    if (bucket.count > maxSubmissionsPerWindow) {
+      throw new AppError(429, 'RATE_LIMITED', 'Too many calculation submissions. Please try again later.')
+    }
+  }
+}
+
+function publicSubmitClientKey(c: { req: { header: (name: string) => string | undefined } }) {
+  const ipAddress = publicSubmitIpAddress(c)
+  const userAgent = c.req.header('user-agent')?.slice(0, 120) ?? 'unknown-agent'
+  return `${ipAddress || 'anonymous'}:${userAgent}`
+}
+
+function publicSubmitIpAddress(c: { req: { header: (name: string) => string | undefined } }) {
+  return (
+    c.req.header('cf-connecting-ip')?.trim() ||
+    c.req.header('x-real-ip')?.trim() ||
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+    undefined
+  )
+}
+
+function cleanupRateLimitBuckets(
+  buckets: Map<string, RateLimitBucket>,
+  now: number,
+  windowMs: number,
+  maxBuckets: number,
+) {
+  if (buckets.size <= maxBuckets) return
+
+  for (const [key, bucket] of buckets) {
+    if (now - bucket.windowStartedAt >= windowMs) {
+      buckets.delete(key)
+    }
+  }
+
+  if (buckets.size <= maxBuckets) return
+
+  const oldestKeys = [...buckets.entries()]
+    .sort((first, second) => first[1].windowStartedAt - second[1].windowStartedAt)
+    .slice(0, buckets.size - maxBuckets)
+
+  for (const [key] of oldestKeys) {
+    buckets.delete(key)
+  }
 }

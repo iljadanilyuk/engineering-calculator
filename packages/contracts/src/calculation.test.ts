@@ -448,6 +448,7 @@ describe('engineering calculation domain', () => {
 
     expect(
       leadSubmissionSchema.parse({
+        idempotencyKey: 'lead-submit-key-001',
         clientName: '  Анна Позняк  ',
         clientPhone: '+375 29 123-45-67',
         calculation: {
@@ -455,13 +456,16 @@ describe('engineering calculation domain', () => {
           selectedServiceIds: [service.id],
         },
         consentAccepted: true,
+        source: 'public_website',
         utm: {
           source: 'google',
         },
       }),
     ).toMatchObject({
+      idempotencyKey: 'lead-submit-key-001',
       clientName: 'Анна Позняк',
       clientPhone: '+375 29 123-45-67',
+      source: 'public_website',
       calculation: {
         areaSqm: '45.25',
         selectedServiceIds: [service.id],
@@ -490,6 +494,7 @@ describe('engineering calculation domain', () => {
 
     expect(() =>
       leadSubmissionSchema.parse({
+        idempotencyKey: 'short',
         clientName: 'A',
         clientPhone: '1234',
         calculation: {
@@ -497,6 +502,19 @@ describe('engineering calculation domain', () => {
           selectedServiceIds: [service.id],
         },
         consentAccepted: false,
+      }),
+    ).toThrow()
+
+    expect(() =>
+      leadSubmissionSchema.parse({
+        idempotencyKey: 'not valid key with spaces',
+        clientName: 'Анна Позняк',
+        clientPhone: '+375 29 123-45-67',
+        calculation: {
+          areaSqm: '45.25',
+          selectedServiceIds: [service.id],
+        },
+        consentAccepted: true,
       }),
     ).toThrow()
 
