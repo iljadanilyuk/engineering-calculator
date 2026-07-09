@@ -9,6 +9,7 @@ COPY webapp/package.json webapp/package.json
 COPY website/package.json website/package.json
 
 RUN bun install --frozen-lockfile
+RUN bun x playwright install --with-deps chromium
 
 COPY packages/contracts packages/contracts
 COPY backend backend

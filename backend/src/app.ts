@@ -6,6 +6,10 @@ import type { DbClient } from './db'
 import type { AppEnv } from './env'
 import { createAuthRoutes } from './auth/routes'
 import { AuthService } from './auth/service'
+import {
+  createCommercialProposalGenerator,
+  type ProposalGenerator,
+} from './engineering/proposal'
 import { createEngineeringRoutes } from './engineering/routes'
 import { EngineeringDataService } from './engineering/service'
 import type { AppHonoEnv } from './http/context'
@@ -15,11 +19,17 @@ import { createStorageServiceFromEnv } from './storage/service'
 type CreateAppOptions = {
   env: AppEnv
   prisma: DbClient
+  proposalGenerator?: ProposalGenerator
 }
 
-export function createApp({ env, prisma }: CreateAppOptions) {
+export function createApp({ env, prisma, proposalGenerator }: CreateAppOptions) {
   const authService = new AuthService(prisma, env)
-  const engineeringDataService = new EngineeringDataService(prisma)
+  const resolvedProposalGenerator =
+    proposalGenerator ??
+    createCommercialProposalGenerator({
+      chromiumExecutablePath: env.PDF_CHROMIUM_EXECUTABLE_PATH,
+    })
+  const engineeringDataService = new EngineeringDataService(prisma, resolvedProposalGenerator)
   const storageService = createStorageServiceFromEnv(env)
   const app = new OpenAPIHono<AppHonoEnv>({
     defaultHook: validationErrorHook,

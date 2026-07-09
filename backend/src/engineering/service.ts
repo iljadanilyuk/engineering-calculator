@@ -21,11 +21,14 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { DbClient } from '../db'
 import { Prisma } from '../generated/prisma/client'
 import { AppError } from '../http/errors'
+import {
+  createCommercialProposalGenerator,
+  type ProposalGenerator,
+} from './proposal'
 
 const exchangeRateSettingKey = 'exchange_rate'
 const defaultLeadSource = 'public_calculator'
 const duplicateDetectionWindowMs = 10 * 60 * 1_000
-const pendingProposalTemplateVersion = 'proposal-pending-v1'
 const consentVersion = 'pzk-public-lead-consent-v1'
 const consentText =
   'Согласен на обработку имени, телефона и выбранного расчета для подготовки коммерческого предложения.'
@@ -41,6 +44,8 @@ type ProposalRow = {
   pdfUrl: string | null
   storageKey: string | null
   checksumSha256: string | null
+  pdfBytes?: Uint8Array | Buffer | null
+  pdfByteSize: number | null
   htmlSnapshot: string | null
   createdAt: Date
 }
@@ -52,7 +57,10 @@ type SaveCalculationMetadata = {
 }
 
 export class EngineeringDataService {
-  constructor(private readonly db: DbClient) {}
+  constructor(
+    private readonly db: DbClient,
+    private readonly proposalGenerator: ProposalGenerator = createCommercialProposalGenerator(),
+  ) {}
 
   async listPublicServices() {
     const services = await this.db.service.findMany({
@@ -209,8 +217,18 @@ export class EngineeringDataService {
 
     const publicToken = await this.createUniqueCalculationToken()
     const proposalToken = await this.createUniqueProposalToken()
-    const offerNumber = pendingOfferNumber(publicToken)
     const consentAcceptedAt = new Date()
+    const offerNumber = offerNumberFromToken(proposalToken, consentAcceptedAt)
+    const proposalArtifact = await this.proposalGenerator.generate({
+      offerNumber,
+      publicToken: proposalToken,
+      clientName: input.clientName,
+      clientPhone: normalizedPhone,
+      objectName: input.objectName ?? null,
+      calculation,
+      issuedAt: consentAcceptedAt,
+      sourcePageUrl: normalizeOptionalText(metadata.referrer, 2_048),
+    })
 
     try {
       const persisted = await this.db.$transaction(async (tx) => {
@@ -254,13 +272,12 @@ export class EngineeringDataService {
             calculationId: row.id,
             publicToken: proposalToken,
             offerNumber,
-            templateVersion: pendingProposalTemplateVersion,
-            htmlSnapshot: pendingProposalHtmlSnapshot({
-              offerNumber,
-              clientName: input.clientName,
-              clientPhone: normalizedPhone,
-              calculation,
-            }),
+            templateVersion: proposalArtifact.templateVersion,
+            storageKey: proposalArtifact.storageKey,
+            checksumSha256: proposalArtifact.checksumSha256,
+            pdfBytes: Buffer.from(proposalArtifact.pdfBytes),
+            pdfByteSize: proposalArtifact.pdfByteSize,
+            htmlSnapshot: proposalArtifact.htmlSnapshot,
             calculationSnapshot: toJson(calculation),
           },
         })
@@ -355,10 +372,33 @@ export class EngineeringDataService {
       })
 
     if (proposal.htmlSnapshot) {
-      return publicProposalPageHtml(proposal.htmlSnapshot)
+      return proposal.htmlSnapshot
     }
 
     throw new AppError(404, 'NOT_FOUND', 'Proposal page is not available')
+  }
+
+  async getPublicProposalPdf(publicToken: string) {
+    const proposal = await this.db.proposal
+      .findUniqueOrThrow({
+        where: { publicToken },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Proposal not found')
+        }
+        throw error
+      })
+
+    if (!proposal.pdfBytes || !proposal.checksumSha256) {
+      throw new AppError(404, 'NOT_FOUND', 'Proposal PDF is not available')
+    }
+
+    return {
+      bytes: new Uint8Array(proposal.pdfBytes),
+      offerNumber: proposal.offerNumber,
+      checksumSha256: proposal.checksumSha256,
+    }
   }
 
   async listPublicProjectExamples() {
@@ -574,6 +614,7 @@ function calculationToRecord(
       pdfUrl: proposal.pdfUrl,
       storageKey: proposal.storageKey,
       checksumSha256: proposal.checksumSha256,
+      pdfByteSize: proposal.pdfByteSize,
       hasHtmlSnapshot: proposal.htmlSnapshot !== null,
       createdAt: proposal.createdAt.toISOString(),
     })),
@@ -605,14 +646,7 @@ function calculationToPublicRecord(
       calculation.totalBynRoundedRubles,
       'calculation BYN rounded rubles',
     ),
-    proposal: proposal
-      ? {
-          status: 'pending',
-          publicToken: proposal.publicToken,
-          offerNumber: proposal.offerNumber,
-          urlPath: `/api/public/proposals/${proposal.publicToken}`,
-        }
-      : null,
+    proposal: proposal ? publicProposalReference(proposal) : null,
     createdAt: calculation.createdAt.toISOString(),
   }
 }
@@ -628,6 +662,27 @@ function projectExampleToRecord(example: ProjectExampleRow): ProjectExampleRecor
     sortOrder: example.sortOrder,
     createdAt: example.createdAt.toISOString(),
     updatedAt: example.updatedAt.toISOString(),
+  }
+}
+
+function publicProposalReference(proposal: ProposalRow): PublicCalculationRecord['proposal'] {
+  const urlPath = `/api/public/proposals/${proposal.publicToken}`
+
+  if (proposal.pdfBytes && proposal.checksumSha256) {
+    return {
+      status: 'ready',
+      publicToken: proposal.publicToken,
+      offerNumber: proposal.offerNumber,
+      urlPath,
+      pdfUrlPath: `${urlPath}/pdf`,
+    }
+  }
+
+  return {
+    status: 'html_only',
+    publicToken: proposal.publicToken,
+    offerNumber: proposal.offerNumber,
+    urlPath,
   }
 }
 
@@ -794,66 +849,10 @@ function stableStringify(value: unknown): string {
     .join(',')}}`
 }
 
-function pendingOfferNumber(publicToken: string) {
-  const year = new Date().getUTCFullYear()
+function offerNumberFromToken(publicToken: string, issuedAt: Date) {
+  const year = issuedAt.getUTCFullYear()
   const suffix = publicToken.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase()
   return `PZK-${year}-${suffix}`
-}
-
-function pendingProposalHtmlSnapshot(input: {
-  offerNumber: string
-  clientName: string
-  clientPhone: string
-  calculation: CalculationResult
-}) {
-  const serviceList = input.calculation.lineItems
-    .map((lineItem) => `<li>${escapeHtml(lineItem.serviceSnapshot.title)}</li>`)
-    .join('')
-
-  return [
-    `<main data-template-version="${pendingProposalTemplateVersion}">`,
-    `<h1>Коммерческое предложение готовится</h1>`,
-    `<p>Номер: ${escapeHtml(input.offerNumber)}</p>`,
-    `<p>Клиент: ${escapeHtml(input.clientName)}</p>`,
-    `<p>Телефон: ${escapeHtml(input.clientPhone)}</p>`,
-    `<p>Площадь: ${escapeHtml(input.calculation.areaSqm)} м²</p>`,
-    `<p>Итог: ${input.calculation.totals.totalBynRoundedRubles} Br (~${Math.round(input.calculation.totals.totalUsdCents / 100)} $)</p>`,
-    `<ul>${serviceList}</ul>`,
-    `<p>PDF renderer будет подключен отдельной задачей PZK-006.</p>`,
-    `</main>`,
-  ].join('')
-}
-
-function publicProposalPageHtml(snapshotHtml: string) {
-  return [
-    '<!doctype html>',
-    '<html lang="ru">',
-    '<head>',
-    '<meta charset="utf-8" />',
-    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
-    '<title>КП принято в подготовку | ИП Позняк</title>',
-    '<style>',
-    'body{margin:0;background:#f9f7f4;color:#15191d;font-family:Arial,sans-serif;line-height:1.5}',
-    'main{max-width:760px;margin:40px auto;padding:28px;background:#fff;border:1px solid #ded7cc;border-radius:18px}',
-    'h1{margin:0 0 12px;font-size:32px;line-height:1.15}',
-    'p{margin:10px 0;color:#40484f}',
-    'ul{padding-left:22px}',
-    '</style>',
-    '</head>',
-    '<body>',
-    snapshotHtml,
-    '</body>',
-    '</html>',
-  ].join('')
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
 }
 
 function isPrismaNotFound(error: unknown) {

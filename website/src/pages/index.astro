@@ -413,7 +413,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
                     Удаление заявки - по запросу через контакты после их подтверждения перед запуском.
                   </p>
                   <p data-lead-shell-status role="status">
-                    Заполните контакты: PDF появится отдельным шагом, сейчас заявка сохранится в системе.
+                    Заполните контакты: после отправки откроется ссылка на коммерческое предложение и PDF.
                   </p>
                   <div class="lead-success" data-lead-success hidden></div>
                 </form>
@@ -585,8 +585,8 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
             <details>
               <summary>Когда появится PDF-коммерческое?</summary>
               <p>
-                Заявка уже сохраняется после имени, телефона и согласия. Полноценный PDF-рендер
-                будет подключен отдельным шагом.
+                PDF генерируется после отправки имени, телефона и согласия. Ссылка защищена
+                публичным токеном и фиксирует расчет на дату заявки.
               </p>
             </details>
           </div>
@@ -1046,21 +1046,37 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       clientPhone: string
       totalUsdCents: number
       totalBynRoundedRubles: number
-      proposal: { offerNumber: string; urlPath: string } | null
+      proposal:
+        | { status: 'ready'; offerNumber: string; urlPath: string; pdfUrlPath: string }
+        | { status: 'html_only'; offerNumber: string; urlPath: string }
+        | null
     },
     returnedExisting: boolean,
   ) {
     if (leadSuccess) {
       const proposal = calculation.proposal
+      const proposalStateText =
+        proposal?.status === 'ready'
+          ? `КП ${escapeHtml(proposal.offerNumber)} и PDF готовы.`
+          : proposal?.status === 'html_only'
+            ? `КП ${escapeHtml(proposal.offerNumber)} доступно как страница.`
+            : 'КП сохранено.'
       leadSuccess.hidden = false
       leadSuccess.innerHTML = `
         <strong>${returnedExisting ? 'Этот расчет уже сохранен' : 'Заявка сохранена'}</strong>
         <span>Итог: ${formatRubles(calculation.totalBynRoundedRubles)} Br · ~${formatUsd(calculation.totalUsdCents)} $</span>
         <span>Телефон сохранен как ${escapeHtml(calculation.clientPhone)}.</span>
-        <span>${proposal ? `КП ${escapeHtml(proposal.offerNumber)} принято в подготовку.` : 'КП принято в подготовку.'}</span>
+        <span>${proposalStateText}</span>
         ${
           proposal
-            ? `<a class="pending-offer-link" href="${apiBaseUrl}${escapeHtml(proposal.urlPath)}" target="_blank" rel="noopener">Открыть страницу КП</a>`
+            ? `<div class="proposal-actions">
+                <a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.urlPath)}" target="_blank" rel="noopener">Открыть КП</a>
+                ${
+                  proposal.status === 'ready'
+                    ? `<a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.pdfUrlPath)}" target="_blank" rel="noopener">Скачать PDF</a>`
+                    : ''
+                }
+              </div>`
             : ''
         }
       `
@@ -1069,7 +1085,9 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     setLeadStatus(
       returnedExisting
         ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
-        : 'Заявка принята. PDF будет подключен следующим этапом.',
+        : calculation.proposal?.status === 'ready'
+          ? 'Заявка принята. Коммерческое предложение и PDF готовы по ссылке.'
+          : 'Заявка принята. Коммерческое предложение сохранено по ссылке.',
       'ready',
     )
   }
@@ -2046,11 +2064,17 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     font-size: 13px;
   }
 
-  .pending-offer-link {
+  .proposal-link {
     width: fit-content;
     border-bottom: 1px solid var(--steel);
     color: var(--steel);
     font-weight: 800;
+  }
+
+  .proposal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
   }
 
   .section {

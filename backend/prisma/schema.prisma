@@ -100,6 +100,8 @@ model Proposal {
   pdfUrl              String?     @map("pdf_url")
   storageKey          String?     @map("storage_key")
   checksumSha256      String?     @map("checksum_sha256")
+  pdfBytes            Bytes?      @map("pdf_bytes")
+  pdfByteSize         Int?        @map("pdf_byte_size")
   htmlSnapshot        String?     @map("html_snapshot")
   calculationSnapshot Json        @map("calculation_snapshot")
   createdAt           DateTime    @default(now()) @map("created_at")

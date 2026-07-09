@@ -38,6 +38,7 @@ const proposalArtifactReferenceSchema = z.object({
   pdfUrl: z.string().url().nullable(),
   storageKey: z.string().nullable(),
   checksumSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  pdfByteSize: z.number().int().positive().nullable(),
   hasHtmlSnapshot: z.boolean(),
   createdAt: z.string().datetime(),
 })
@@ -149,12 +150,25 @@ export const calculationRecordSchema = z.object({
   updatedAt: z.string().datetime(),
 })
 
-export const publicCalculationProposalSchema = z.object({
-  status: z.literal('pending'),
+const publicCalculationReadyProposalSchema = z.object({
+  status: z.literal('ready'),
+  publicToken: publicTokenSchema,
+  offerNumber: z.string(),
+  urlPath: z.string().startsWith('/api/public/proposals/'),
+  pdfUrlPath: z.string().startsWith('/api/public/proposals/'),
+})
+
+const publicCalculationHtmlOnlyProposalSchema = z.object({
+  status: z.literal('html_only'),
   publicToken: publicTokenSchema,
   offerNumber: z.string(),
   urlPath: z.string().startsWith('/api/public/proposals/'),
 })
+
+export const publicCalculationProposalSchema = z.discriminatedUnion('status', [
+  publicCalculationReadyProposalSchema,
+  publicCalculationHtmlOnlyProposalSchema,
+])
 
 export const publicCalculationRecordSchema = z.object({
   publicToken: publicTokenSchema,

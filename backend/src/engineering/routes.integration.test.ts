@@ -1,8 +1,14 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 
 import { createApp } from '../app'
 import { createPrisma } from '../db'
 import type { AppEnv } from '../env'
+import {
+  createCommercialProposalArtifact,
+  type CommercialProposalInput,
+  type ProposalGenerator,
+} from './proposal'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 
@@ -23,7 +29,7 @@ maybeDescribe('engineering API integration', () => {
     SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
   }
   const prisma = createPrisma(databaseUrl!)
-  const app = createApp({ env, prisma })
+  const app = createApp({ env, prisma, proposalGenerator: createTestProposalGenerator() })
   let idempotencySequence = 0
 
   beforeEach(async () => {
@@ -139,9 +145,10 @@ maybeDescribe('engineering API integration', () => {
       'Heating drawings',
     ])
     expect(body.calculation.proposal).toMatchObject({
-      status: 'pending',
+      status: 'ready',
       offerNumber: expect.stringMatching(/^PZK-\d{4}-/),
       urlPath: expect.stringMatching(/^\/api\/public\/proposals\/[A-Za-z0-9_-]{32,128}$/),
+      pdfUrlPath: expect.stringMatching(/^\/api\/public\/proposals\/[A-Za-z0-9_-]{32,128}\/pdf$/),
     })
 
     const saved = await prisma.calculation.findUniqueOrThrow({
@@ -160,11 +167,33 @@ maybeDescribe('engineering API integration', () => {
     expect(saved.consentIpAddress).toBe('203.0.113.10')
     expect(saved.publicToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/)
     expect(saved.proposals).toHaveLength(1)
+    expect(saved.proposals[0].templateVersion).toBe('commercial-proposal-v1')
+    expect(saved.proposals[0].storageKey).toMatch(/^proposals\/\d{4}\/\d{2}\/pzk-\d{4}-/)
+    expect(saved.proposals[0].checksumSha256).toMatch(/^[a-f0-9]{64}$/)
+    expect(saved.proposals[0].pdfByteSize).toBeGreaterThan(20)
+    expect(saved.proposals[0].pdfBytes).toBeInstanceOf(Uint8Array)
+    expect(saved.proposals[0].htmlSnapshot).toContain('<!doctype html>')
 
     const publicProposal = await app.request(`/api/public/proposals/${saved.proposals[0].publicToken}`)
     const publicProposalHtml = await publicProposal.text()
     expect(publicProposal.status).toBe(200)
-    expect(publicProposalHtml).toContain('Коммерческое предложение готовится')
+    expect(publicProposal.headers.get('cache-control')).toBe('private, max-age=0, no-store')
+    expect(publicProposal.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    expect(publicProposalHtml).toContain('Коммерческое предложение')
+    expect(publicProposalHtml).toContain('Анна Клиент')
+    expect(publicProposalHtml).toContain('Boiler room fixed package')
+    expect(publicProposalHtml).not.toContain('Коммерческое предложение готовится')
+
+    const publicProposalPdf = await app.request(`/api/public/proposals/${saved.proposals[0].publicToken}/pdf`)
+    const publicProposalPdfBytes = new Uint8Array(await publicProposalPdf.arrayBuffer())
+    const savedProposalChecksum = saved.proposals[0].checksumSha256
+    if (!savedProposalChecksum) throw new Error('Expected saved proposal checksum')
+    expect(savedProposalChecksum).toMatch(/^[a-f0-9]{64}$/)
+    expect(publicProposalPdf.status).toBe(200)
+    expect(publicProposalPdf.headers.get('content-type')).toContain('application/pdf')
+    expect(publicProposalPdf.headers.get('x-proposal-checksum-sha256')).toBe(savedProposalChecksum)
+    expect(sha256Hex(publicProposalPdfBytes)).toBe(savedProposalChecksum)
+    expect(new TextDecoder().decode(publicProposalPdfBytes.slice(0, 8))).toContain('%PDF-')
 
     await patchService(accessToken, fixedService.id, {
       title: 'Changed boiler price',
@@ -184,11 +213,34 @@ maybeDescribe('engineering API integration', () => {
     expect(snapshotBody.calculation.consentIpAddress).toBe('203.0.113.10')
     expect(snapshotBody.calculation.totalBynCents).toBe(37_500)
     expect(snapshotBody.calculation.exchangeRate.usdToBynRate).toBe('3')
+    expect(snapshotBody.calculation.proposalArtifacts[0]).toMatchObject({
+      offerNumber: saved.proposals[0].offerNumber,
+      templateVersion: 'commercial-proposal-v1',
+      storageKey: saved.proposals[0].storageKey,
+      checksumSha256: saved.proposals[0].checksumSha256,
+      pdfByteSize: saved.proposals[0].pdfByteSize,
+      hasHtmlSnapshot: true,
+    })
     expect(snapshotBody.calculation.calculationSnapshot.lineItems[0].serviceSnapshot).toMatchObject({
       title: 'Boiler room fixed package',
       priceUsdCents: 10_000,
       isActive: true,
     })
+
+    const publicProposalAfterEdits = await app.request(
+      `/api/public/proposals/${saved.proposals[0].publicToken}`,
+    )
+    const publicProposalAfterEditsHtml = await publicProposalAfterEdits.text()
+    const publicProposalPdfAfterEdits = await app.request(
+      `/api/public/proposals/${saved.proposals[0].publicToken}/pdf`,
+    )
+    const publicProposalPdfAfterEditsBytes = new Uint8Array(
+      await publicProposalPdfAfterEdits.arrayBuffer(),
+    )
+
+    expect(publicProposalAfterEditsHtml).toContain('Boiler room fixed package')
+    expect(publicProposalAfterEditsHtml).not.toContain('Changed boiler price')
+    expect(publicProposalPdfAfterEditsBytes).toEqual(publicProposalPdfBytes)
   })
 
   test('rejects inactive, missing, and unsupported formula services before persistence', async () => {
@@ -377,6 +429,61 @@ maybeDescribe('engineering API integration', () => {
     expect(await prisma.proposal.count()).toBe(1)
   })
 
+  test('does not expose a PDF link for legacy HTML-only proposal artifacts', async () => {
+    const accessToken = await registerAdmin('legacy-html-proposal@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Legacy-safe service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const payload = {
+      idempotencyKey: nextIdempotencyKey(),
+      clientName: 'Legacy Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    }
+    const first = await saveCalculation(payload)
+    const firstBody = await first.json()
+
+    expect(first.status).toBe(201)
+    expect(firstBody.calculation.proposal.status).toBe('ready')
+
+    const savedProposal = await prisma.proposal.findUniqueOrThrow({
+      where: { publicToken: firstBody.calculation.proposal.publicToken },
+    })
+    await prisma.proposal.update({
+      where: { id: savedProposal.id },
+      data: {
+        pdfBytes: null,
+        pdfByteSize: null,
+        storageKey: null,
+        checksumSha256: null,
+      },
+    })
+
+    const replay = await saveCalculation(payload)
+    const replayBody = await replay.json()
+    const htmlOnlyProposal = replayBody.calculation.proposal
+
+    expect(replay.status).toBe(200)
+    expect(htmlOnlyProposal).toMatchObject({
+      status: 'html_only',
+      offerNumber: savedProposal.offerNumber,
+      urlPath: `/api/public/proposals/${savedProposal.publicToken}`,
+    })
+    expect(htmlOnlyProposal.pdfUrlPath).toBeUndefined()
+
+    const html = await app.request(`/api/public/proposals/${savedProposal.publicToken}`)
+    const pdf = await app.request(`/api/public/proposals/${savedProposal.publicToken}/pdf`)
+    expect(html.status).toBe(200)
+    expect(pdf.status).toBe(404)
+  })
+
   test('rejects idempotency key replay with a different payload', async () => {
     const accessToken = await registerAdmin('idempotency-mismatch@example.com')
     await setExchangeRate(accessToken, '3.0000')
@@ -528,6 +635,43 @@ maybeDescribe('engineering API integration', () => {
     expect(await prisma.calculation.count()).toBe(0)
   })
 
+  test('protects public proposal and PDF routes with unguessable tokens', async () => {
+    const accessToken = await registerAdmin('proposal-token-access@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Token gated service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const response = await saveCalculation({
+      clientName: 'Token Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const body = await response.json()
+    const proposalToken = body.calculation.proposal.publicToken
+    const validHtml = await app.request(`/api/public/proposals/${proposalToken}`)
+    const validPdf = await app.request(`/api/public/proposals/${proposalToken}/pdf`)
+    const unknownHtml = await app.request(`/api/public/proposals/${'u'.repeat(32)}`)
+    const unknownPdf = await app.request(`/api/public/proposals/${'v'.repeat(32)}/pdf`)
+    const invalidHtml = await app.request('/api/public/proposals/not-valid-token')
+    const invalidPdf = await app.request('/api/public/proposals/not-valid-token/pdf')
+    const missingToken = await app.request('/api/public/proposals/')
+
+    expect(response.status).toBe(201)
+    expect(validHtml.status).toBe(200)
+    expect(validPdf.status).toBe(200)
+    expect(unknownHtml.status).toBe(404)
+    expect(unknownPdf.status).toBe(404)
+    expect(invalidHtml.status).toBe(400)
+    expect(invalidPdf.status).toBe(400)
+    expect(missingToken.status).toBe(404)
+  })
+
   test('requires auth for admin engineering routes', async () => {
     const response = await app.request('/api/admin/services')
     const body = await response.json()
@@ -611,6 +755,14 @@ maybeDescribe('engineering API integration', () => {
       prisma.$executeRawUnsafe(`
         INSERT INTO "proposals" ("calculation_id", "public_token", "offer_number", "template_version", "pdf_url", "storage_key", "checksum_sha256", "calculation_snapshot")
         SELECT "id", '${'q'.repeat(32)}', 'PZK-TEST', 'proposal-v1', 'https://example.com/proposal.pdf', 'proposals/test.pdf', 'bad-checksum', "calculation_snapshot"
+        FROM "calculations"
+        WHERE "id" = '${saved.id}'::uuid
+      `),
+    )
+    await expectRejects(() =>
+      prisma.$executeRawUnsafe(`
+        INSERT INTO "proposals" ("calculation_id", "public_token", "offer_number", "template_version", "storage_key", "checksum_sha256", "pdf_bytes", "calculation_snapshot")
+        SELECT "id", '${'r'.repeat(32)}', 'PZK-TEST', 'proposal-v1', 'proposals/test.pdf', '${'a'.repeat(64)}', decode('255044462d312e34', 'hex'), "calculation_snapshot"
         FROM "calculations"
         WHERE "id" = '${saved.id}'::uuid
       `),
@@ -751,6 +903,28 @@ maybeDescribe('engineering API integration', () => {
 function authHeaders(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
+  }
+}
+
+function sha256Hex(value: Uint8Array) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function createTestProposalGenerator(): ProposalGenerator {
+  return {
+    generate: (input: CommercialProposalInput) =>
+      createCommercialProposalArtifact(input, async (html) => {
+        const pdfSource = [
+          '%PDF-1.4',
+          '% PZK integration fixture',
+          `1 0 obj << /Type /Catalog >> endobj`,
+          `2 0 obj << /Producer (${input.offerNumber}) >> endobj`,
+          html,
+          '%%EOF',
+        ].join('\n')
+
+        return new TextEncoder().encode(pdfSource)
+      }),
   }
 }
 

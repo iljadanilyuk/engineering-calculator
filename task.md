@@ -646,7 +646,7 @@ Verification:
 
 ### PZK-006 - PDF Commercial Offer
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -662,6 +662,33 @@ Acceptance criteria:
 - Long service lists remain within 2 pages or degrade to a compact summary with details available in the admin/offer page.
 - Public PDF/proposal access uses unguessable token-protected links, not sequential IDs or predictable file paths.
 - Verification includes PDF fixture/manual check for Cyrillic, 2-page limit, and token-protected access.
+
+Completion notes:
+
+- Added commercial proposal generation in `backend/src/engineering/proposal.ts` with a self-contained immutable HTML snapshot and PDF artifact generation through Chromium CLI print-to-PDF.
+- Proposal rows now store final artifact metadata: `offerNumber`, `templateVersion`, `storageKey`, `checksumSha256`, `pdfBytes`, `pdfByteSize`, `htmlSnapshot`, `publicToken`, and `calculationSnapshot`.
+- Added migration `20260709143000_pzk006_pdf_proposal_artifacts` for DB-backed immutable PDF bytes and positive byte-size checks while preserving compatibility with older HTML-only proposal artifacts.
+- Public proposal access now has token-protected HTML and PDF routes: `/api/public/proposals/{token}` and `/api/public/proposals/{token}/pdf`, with `noindex` and private `no-store` cache headers.
+- Public calculation response distinguishes final `ready` proposals from legacy `html_only` artifacts, so old HTML-only rows do not expose broken PDF links.
+- Website success state now links to the real proposal page and PDF after successful lead submission, instead of the PZK-005 pending placeholder.
+- PDF page 1 includes client/object, date, offer number, area, selected services, reconciled BYN line totals, large BYN total, USD reference, payment terms, and validity date.
+- PDF page 2 includes what is included, work stages, example-project links/placeholders, and a contact block.
+- Displayed BYN service rows in the PDF use allocation logic so visible line totals reconcile with the headline rounded BYN total.
+- Long service lists compact to the first 8 visible rows plus a remaining-sum row to keep the commercial offer within the 2-page A4 layout.
+- Docker backend image now installs Playwright Chromium dependencies for PDF rendering; `PDF_CHROMIUM_EXECUTABLE_PATH` is documented as an optional production override.
+
+Verification:
+
+- `docker info` passed before DB/Docker-backed verification.
+- `bun run typecheck` passed.
+- `bun run test:contracts` passed: 16/16.
+- `bun run test:backend:unit` passed: 25/25.
+- `bun run test:backend:integration` passed: 23/23 using Docker PostgreSQL test DB.
+- `bun run build:website` passed; non-blocking inherited local warning: `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+- `bun run smoke:backend:docker` passed, including backend Docker image build with Chromium dependencies, `/health`, and DB-backed auth smoke.
+- PDF fixture generated with `bun .scratch\render-pzk006-pdf.mjs`; `pdfinfo .scratch\pzk006-commercial-offer.pdf` reported `Pages: 2` and `Page size: 594.96 x 841.92 pts (A4)`.
+- Manual PDF visual check from Poppler PNG previews confirmed Cyrillic rendering, readable A4 layout, page 1/page 2 content, and reconciled fixture totals: `643 + 290 + 347 + 289 + 347 = 1 916 BYN`.
+- Browser verification passed with `node .scratch\verify-pzk006-browser.mjs`: submit lead -> success state -> open token-protected proposal HTML -> fetch token-protected PDF; mobile proposal HTML at `390px` had no horizontal overflow.
 
 ### PZK-007 - Admin Auth
 
@@ -913,3 +940,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Dewey: 9.0/10; required a pending offer/PDF link or explicit pending state, fixing DigitalOcean deployment order around `DO_WEBSITE_URL`, closing the idempotency mismatch rate-limit hole, and making the privacy/deletion path less contradictory. Changes incorporated.
 - 2026-07-09 PZK-005 focused post-task review round 3:
   - Reviewer Sartre: 9.6/10; confirmed public submit response minimization, rich admin records, pending proposal link/page, exact idempotent retry exemption, mismatched replay rate limiting, deployment sequence/env fixes, matching consent copy, and visible test coverage. No required changes remained; PZK-005 gate cleared.
+- 2026-07-09 PZK-006 pre-task review:
+  - Reviewer Euler: `gpt-5.5 xhigh`; flagged self-contained immutable snapshots, separate token-gated PDF route, final artifact before success, lack of server-side storage writer, Chromium/Docker runtime risk, no dynamic regeneration, compact long-service layout, Cyrillic/BYN verification, and public/admin data separation. Recommendations incorporated.
+- 2026-07-09 PZK-006 post-task review round 1:
+  - Reviewer Hubble: 9.2/10; required not exposing PDF links for legacy HTML-only proposal rows, adding private `no-store` cache headers on public HTML proposal pages, and regression coverage. Changes incorporated.
+  - Reviewer Kant: 9.2/10; required PDF BYN line totals to reconcile with the headline total and automated coverage for that allocation. Changes incorporated.
+- 2026-07-09 PZK-006 focused post-task review round 2:
+  - Reviewer Dirac: 9.6/10; confirmed legacy HTML-only handling, no-store proposal HTML headers, PDF BYN row allocation, and regression tests. No required changes remained; PZK-006 gate cleared.

@@ -142,11 +142,33 @@ const publicProposalRoute = createRoute({
           schema: z.string(),
         },
       },
-      description: 'Token-protected pending public proposal page',
+      description: 'Token-protected public commercial proposal page',
     },
     404: {
       content: errorResponseContent,
       description: 'Proposal not found',
+    },
+  },
+})
+
+const publicProposalPdfRoute = createRoute({
+  method: 'get',
+  path: '/public/proposals/{token}/pdf',
+  request: {
+    params: publicTokenParamsSchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/pdf': {
+          schema: z.string(),
+        },
+      },
+      description: 'Token-protected immutable proposal PDF',
+    },
+    404: {
+      content: errorResponseContent,
+      description: 'Proposal PDF not found',
     },
   },
 })
@@ -459,9 +481,22 @@ export function createEngineeringRoutes() {
   })
 
   routes.openapi(publicProposalRoute, async (c) => {
+    c.header('Cache-Control', 'private, max-age=0, no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
     const engineering = c.get('engineeringDataService')
     const html = await engineering.getPublicProposalHtml(c.req.valid('param').token)
     return c.html(html, 200)
+  })
+
+  routes.openapi(publicProposalPdfRoute, async (c) => {
+    c.header('Cache-Control', 'private, max-age=0, no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
+    const engineering = c.get('engineeringDataService')
+    const proposal = await engineering.getPublicProposalPdf(c.req.valid('param').token)
+    c.header('Content-Type', 'application/pdf')
+    c.header('Content-Disposition', `inline; filename="${proposal.offerNumber}.pdf"`)
+    c.header('X-Proposal-Checksum-Sha256', proposal.checksumSha256)
+    return c.body(proposal.bytes, 200)
   })
 
   protectedRoutes.use('/admin/*', requireAuth)
