@@ -1,102 +1,2037 @@
 ---
+import {
+  calculateEngineeringOffer,
+  type CalculationResult,
+  type EngineeringService,
+} from '@poznyak-engineering-calculator/contracts'
 
+const defaultAreaSqm = '180'
+const exchangeRate = {
+  source: 'fallback' as const,
+  usdToBynRate: '2.8668',
+  asOf: '2026-07-08T00:00:00.000Z',
+}
+
+const fallbackServices = [
+  {
+    id: 'boiler-room-3d',
+    title: 'Проект котельной + 3D',
+    description: 'Компоновка оборудования, узлы, схема котельной',
+    pricingType: 'fixed',
+    priceUsdCents: 20_000,
+    isActive: true,
+    sortOrder: 10,
+    code: 'КТ',
+  },
+  {
+    id: 'radiator-heating',
+    title: 'Радиаторное отопление',
+    description: 'Приборы, мощности, привязки и трассы',
+    pricingType: 'per_sqm',
+    priceUsdCents: 50,
+    isActive: true,
+    sortOrder: 20,
+    code: 'РО',
+  },
+  {
+    id: 'warm-floor',
+    title: 'Теплые полы',
+    description: 'Контуры, коллекторы, шаг укладки',
+    pricingType: 'per_sqm',
+    priceUsdCents: 60,
+    isActive: true,
+    sortOrder: 30,
+    code: 'ТП',
+  },
+  {
+    id: 'water-supply',
+    title: 'Водопровод',
+    description: 'Точки воды, ГВС, фильтрация, оборудование',
+    pricingType: 'per_sqm',
+    priceUsdCents: 50,
+    isActive: true,
+    sortOrder: 40,
+    code: 'В',
+  },
+  {
+    id: 'sewerage',
+    title: 'Канализация',
+    description: 'Выводы, стояки, подключение сантехники',
+    pricingType: 'per_sqm',
+    priceUsdCents: 60,
+    isActive: true,
+    sortOrder: 50,
+    code: 'К',
+  },
+  {
+    id: 'ventilation',
+    title: 'Вентиляция',
+    description: 'Схемы, воздуховоды, оборудование',
+    pricingType: 'fixed',
+    priceUsdCents: 25_000,
+    isActive: true,
+    sortOrder: 60,
+    code: 'ВН',
+  },
+  {
+    id: 'conditioning',
+    title: 'Кондиционирование',
+    description: 'Трассы, блоки, спецификация',
+    pricingType: 'fixed',
+    priceUsdCents: 25_000,
+    isActive: true,
+    sortOrder: 70,
+    code: 'КД',
+  },
+] satisfies Array<EngineeringService & { code: string }>
+
+const selectedServiceIds = fallbackServices.map((service) => service.id)
+const initialCalculation = calculateEngineeringOffer({
+  areaSqm: defaultAreaSqm,
+  selectedServiceIds,
+  services: fallbackServices,
+  exchangeRate,
+})
+const initialDisplayRubles = allocateDisplayBynRubles(initialCalculation)
+
+const calculatorData = {
+  defaultAreaSqm,
+  exchangeRate,
+  fallbackServices,
+  selectedServiceIds,
+}
+
+const formatRubles = (value: number) => new Intl.NumberFormat('ru-RU').format(value)
+const formatUsd = (cents: number) =>
+  new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(cents / 100))
+const formatUsdUnit = (cents: number) =>
+  new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  }).format(cents / 100)
+
+function priceModeLabel(service: EngineeringService) {
+  return service.pricingType === 'fixed'
+    ? `${formatUsd(service.priceUsdCents)} $`
+    : `${formatUsdUnit(service.priceUsdCents)} $/м²`
+}
+
+function allocateDisplayBynRubles(calculation: CalculationResult) {
+  const floorRows = calculation.lineItems.map((lineItem, index) => ({
+    serviceId: lineItem.serviceId,
+    rubles: Math.floor(lineItem.totalBynCents / 100),
+    remainder: lineItem.totalBynCents % 100,
+    index,
+  }))
+  const floorTotal = floorRows.reduce((total, row) => total + row.rubles, 0)
+  const remainingRubles = calculation.totals.totalBynRoundedRubles - floorTotal
+  const rowsByRemainder = [...floorRows].sort(
+    (first, second) => second.remainder - first.remainder || first.index - second.index,
+  )
+
+  for (const row of rowsByRemainder.slice(0, Math.max(0, remainingRubles))) {
+    row.rubles += 1
+  }
+
+  return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
+}
 ---
 
 <html lang="ru">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Инженерный калькулятор | ИП Позняк</title>
-	</head>
-	<body>
-		<main>
-			<section class="hero" aria-labelledby="page-title">
-				<p class="eyebrow">ИП Позняк</p>
-				<h1 id="page-title">Инженерный калькулятор</h1>
-				<p class="summary">
-					Публичная Astro-поверхность для будущего лендинга, расчета стоимости
-					проектных работ, примеров проектов, FAQ и контактов.
-				</p>
-			</section>
-		</main>
-	</body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <meta
+      name="description"
+      content="Инженерный калькулятор ИП Позняк для предварительного расчета проектных работ по отоплению, водоснабжению, канализации, вентиляции и кондиционированию."
+    />
+    <title>Инженерный калькулятор проектных работ | ИП Позняк</title>
+  </head>
+  <body>
+    <script
+      id="calculator-data"
+      type="application/json"
+      is:inline
+      set:html={JSON.stringify(calculatorData)}
+    />
+    <main>
+      <section class="top" aria-labelledby="page-title">
+        <div class="container">
+          <header class="nav" aria-label="Навигация">
+            <a class="brand" href="#top" aria-label="ИП Позняк">
+              <span class="brand-mark">П</span>
+              <span>
+                <strong>ИП Позняк</strong>
+                <small>инженерные проекты для частных домов</small>
+              </span>
+            </a>
+            <nav class="nav-links" aria-label="Разделы страницы">
+              <a href="#calculator">Калькулятор</a>
+              <a href="#examples">Примеры</a>
+              <a href="#stages">Этапы</a>
+              <a href="#contacts">Контакты</a>
+            </nav>
+          </header>
+
+          <div class="hero" id="top">
+            <p class="eyebrow">ОВ · ВК · вентиляция · кондиционирование</p>
+            <h1 id="page-title">Расчет стоимости инженерного проекта до заявки</h1>
+            <p class="suboffer">
+              Выберите площадь и состав разделов, чтобы сразу увидеть ориентир по бюджету
+              проектирования. Основной итог показывается в BYN, USD остается справочной строкой.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="#calculator">Открыть калькулятор</a>
+              <a class="button secondary" href="#examples">Посмотреть примеры</a>
+            </div>
+            <div class="hero-bullets" aria-label="Ключевые преимущества">
+              <article class="hero-bullet">
+                <span class="symbol">Σ</span>
+                <strong>Сумма до заявки</strong>
+                <span>Итог пересчитывается при изменении площади и каждого раздела проекта.</span>
+              </article>
+              <article class="hero-bullet">
+                <span class="symbol">ΔT</span>
+                <strong>Понятный состав</strong>
+                <span>Разделы связаны с расчетами, схемами, спецификациями и узлами.</span>
+              </article>
+              <article class="hero-bullet">
+                <span class="symbol">КП</span>
+                <strong>Коммерческое</strong>
+                <span>Форма ниже готовит данные для будущего КП без отправки на этом этапе.</span>
+              </article>
+              <article class="hero-bullet">
+                <span class="symbol">ОП</span>
+                <strong>Опросный лист</strong>
+                <span>После КП собираются технические данные по дому и инженерным системам.</span>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="calculator-shell" id="calculator" aria-labelledby="calculator-title">
+        <div class="container">
+          <div class="calculator" data-calculator>
+            <header class="calc-head">
+              <div>
+                <p class="section-kicker">Онлайн-расчет</p>
+                <h2 id="calculator-title">Калькулятор проектных работ</h2>
+                <p>
+                  Меняйте площадь и разделы проекта, чтобы оценить порядок бюджета до разговора
+                  о деталях объекта.
+                </p>
+              </div>
+              <div class="calc-status" data-service-source>
+                Базовые тарифы · курс {exchangeRate.usdToBynRate} BYN/USD
+              </div>
+            </header>
+
+            <div class="calc-grid">
+              <aside class="calc-panel object-panel" aria-label="Параметры объекта">
+                <div class="panel-title">
+                  <span>Объект</span>
+                  <small>площадь дома</small>
+                </div>
+                <label class="area-field" for="area-input">
+                  <span>Площадь, м²</span>
+                  <input
+                    id="area-input"
+                    data-area-input
+                    inputmode="decimal"
+                    autocomplete="off"
+                    value={defaultAreaSqm}
+                    aria-describedby="area-help area-error"
+                  />
+                </label>
+                <input
+                  class="area-range"
+                  data-area-range
+                  type="range"
+                  min="30"
+                  max="500"
+                  step="5"
+                  value={defaultAreaSqm}
+                  aria-label="Площадь дома"
+                />
+                <p class="field-help" id="area-help">
+                  Можно ввести дробную площадь через точку или запятую, до двух знаков.
+                </p>
+                <p class="field-error" id="area-error" data-area-error hidden>
+                  Укажите площадь больше 0, максимум с двумя знаками после запятой.
+                </p>
+                <div class="area-presets" aria-label="Быстрый выбор площади">
+                  <button type="button" data-area-preset="120">120</button>
+                  <button type="button" data-area-preset="180">180</button>
+                  <button type="button" data-area-preset="240">240</button>
+                </div>
+                <dl class="terms-list">
+                  <div>
+                    <dt>Оплата</dt>
+                    <dd>70% старт / 30% после передачи проекта</dd>
+                  </div>
+                  <div>
+                    <dt>Формат</dt>
+                    <dd>PDF-комплект для согласования и монтажа</dd>
+                  </div>
+                  <div>
+                    <dt>Расчетный курс</dt>
+                    <dd>{exchangeRate.usdToBynRate} BYN за 1 USD</dd>
+                  </div>
+                </dl>
+              </aside>
+
+              <section class="calc-panel services-panel" aria-labelledby="services-title">
+                <div class="panel-title">
+                  <span id="services-title">Разделы проекта</span>
+                  <small>рычаг включает услугу</small>
+                </div>
+                <div class="services" data-service-list>
+                  {
+                    fallbackServices.map((service) => {
+                      const line = initialCalculation.lineItems.find(
+                        (item) => item.serviceId === service.id,
+                      )
+                      const displayRubles = initialDisplayRubles.get(service.id)
+
+                      return (
+                        <button
+                          type="button"
+                          class="service-row selected"
+                          data-service-id={service.id}
+                          role="switch"
+                          aria-checked="true"
+                        >
+                          <span class="lever" aria-hidden="true">
+                            <span class="pipe" />
+                            <span class="body" />
+                            <span class="stem" />
+                            <span class="handle" />
+                          </span>
+                          <span class="service-code">{service.code}</span>
+                          <span class="service-copy">
+                            <strong>{service.title}</strong>
+                            <span>{service.description}</span>
+                          </span>
+                          <span class="rate">{priceModeLabel(service)}</span>
+                          <span class="row-price">
+                            <strong>{displayRubles !== undefined ? formatRubles(displayRubles) : '0'} Br</strong>
+                            <span>~{line ? formatUsd(line.totalUsdCents) : '0'} $</span>
+                          </span>
+                        </button>
+                      )
+                    })
+                  }
+                </div>
+                <div class="service-empty" data-service-empty hidden>
+                  Сейчас нет опубликованных услуг для публичного расчета. Калькулятор не показывает
+                  нулевую сумму как рабочее КП.
+                </div>
+              </section>
+
+              <aside class="calc-panel result-panel" aria-live="polite" aria-label="Итог расчета">
+                <div class="result-card">
+                  <span class="result-label">Стоимость проекта</span>
+                  <div class="total" data-total-byn>
+                    {formatRubles(initialCalculation.totals.totalBynRoundedRubles)} <span>Br</span>
+                  </div>
+                  <p class="usd-line" data-total-usd>
+                    ~{formatUsd(initialCalculation.totals.totalUsdCents)} $ за выбранный состав
+                  </p>
+                </div>
+
+                <div class="summary-list" data-summary-list>
+                  {
+                    initialCalculation.lineItems.map((lineItem) => (
+                      <div class="summary-row" data-summary-service-id={lineItem.serviceId}>
+                        <span>{lineItem.serviceSnapshot.title}</span>
+                        <strong>
+                          {formatRubles(initialDisplayRubles.get(lineItem.serviceId) ?? 0)} Br
+                        </strong>
+                      </div>
+                    ))
+                  }
+                </div>
+
+                <div class="calc-note">
+                  <div>BYN - основной итог для клиента.</div>
+                  <div>USD - справочная строка по базовым тарифам.</div>
+                  <div>Для точного КП менеджер уточнит исходные данные объекта.</div>
+                </div>
+
+                <div class="lead-shell" id="lead-shell">
+                  <label>
+                    <span>Имя</span>
+                    <input data-lead-input type="text" placeholder="Например, Андрей" />
+                  </label>
+                  <label>
+                    <span>Телефон</span>
+                    <input data-lead-input type="tel" placeholder="+375 ..." />
+                  </label>
+                  <button class="button primary" type="button" data-lead-shell-trigger>
+                    Подготовить КП
+                  </button>
+                  <p data-lead-shell-status>
+                    Пока это подготовленное состояние: данные остаются на странице и не отправляются.
+                  </p>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="included" aria-labelledby="included-title">
+        <div class="container">
+          <div class="section-head">
+            <p class="section-kicker">Состав проекта</p>
+            <h2 id="included-title">Что входит в проектирование</h2>
+            <p>
+              Клиент видит не только цену, но и предмет работы: исходные данные, расчеты,
+              схемы, спецификации и комплект листов для монтажников.
+            </p>
+          </div>
+          <div class="deliverables">
+            <article class="tile">
+              <span class="symbol light">ОП</span>
+              <h3>Опросный лист</h3>
+              <p>Исходные данные по дому, системам, материалам, оборудованию и пожеланиям.</p>
+            </article>
+            <article class="tile">
+              <span class="symbol light">ΔT</span>
+              <h3>Расчетная база</h3>
+              <p>Теплопотери и технические решения, от которых зависит подбор оборудования.</p>
+            </article>
+            <article class="tile">
+              <span class="symbol light">Σ</span>
+              <h3>Спецификация</h3>
+              <p>Состав оборудования и материалов, который можно передать на закупку.</p>
+            </article>
+            <article class="tile">
+              <span class="symbol light">PDF</span>
+              <h3>Комплект листов</h3>
+              <p>Схемы, планы, узлы и пояснения в электронном виде для согласования.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section white" id="examples" aria-labelledby="examples-title">
+        <div class="container">
+          <div class="section-head">
+            <p class="section-kicker">Примеры и объекты</p>
+            <h2 id="examples-title">Проекты для домов и небольшой коммерции</h2>
+            <p>
+              Публичные ссылки на реальные PDF-примеры появятся после согласования файлов и
+              постоянного места хранения.
+            </p>
+          </div>
+          <div class="objects">
+            <article class="object-card">
+              <div class="blueprint" data-title="ОВ · частный дом">
+                <span class="room r1"></span>
+                <span class="room r2"></span>
+                <span class="pipe-line l1"></span>
+                <span class="pipe-line l2"></span>
+                <span class="node n1">ТП</span>
+                <span class="node n2">КТ</span>
+              </div>
+              <div class="object-body">
+                <h3>Частный дом 120-250 м²</h3>
+                <p>Отопление, теплые полы, котельная, водоснабжение и канализация.</p>
+                <a class="button small light" href="#contacts">Запросить пример ОВ</a>
+              </div>
+            </article>
+            <article class="object-card">
+              <div class="blueprint" data-title="ВК · коттедж">
+                <span class="room r1"></span>
+                <span class="room r2"></span>
+                <span class="pipe-line l1"></span>
+                <span class="pipe-line l2"></span>
+                <span class="node n1">В1</span>
+                <span class="node n2">К1</span>
+              </div>
+              <div class="object-body">
+                <h3>Коттедж с полной инженерией</h3>
+                <p>ВК, отопление, вентиляция, трассы и спецификация оборудования.</p>
+                <a class="button small light" href="#contacts">Запросить пример ВК</a>
+              </div>
+            </article>
+            <article class="object-card accent">
+              <div class="blueprint" data-title="КП · малая коммерция">
+                <span class="room r1"></span>
+                <span class="room r2"></span>
+                <span class="pipe-line l1"></span>
+                <span class="pipe-line l2"></span>
+                <span class="node n1">Σ</span>
+                <span class="node n2">PDF</span>
+              </div>
+              <div class="object-body">
+                <h3>Небольшая коммерция</h3>
+                <p>Офис, магазин или сервис, где нужен быстрый расчет состава проекта.</p>
+                <a class="button small primary" href="#calculator">Рассчитать по м²</a>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="stages" aria-labelledby="stages-title">
+        <div class="container">
+          <div class="section-head">
+            <p class="section-kicker">Процесс</p>
+            <h2 id="stages-title">Этапы работы</h2>
+            <p>
+              Путь короткий: предварительный расчет, коммерческое предложение, исходные данные
+              и проектный комплект.
+            </p>
+          </div>
+          <div class="steps">
+            <article class="step">
+              <span>01 / расчет</span>
+              <h3>Выбор разделов</h3>
+              <p>Клиент включает нужные рычаги и видит итог сразу.</p>
+            </article>
+            <article class="step">
+              <span>02 / КП</span>
+              <h3>Фиксация состава</h3>
+              <p>Состав, площадь и условия фиксируются перед детальной анкетой.</p>
+            </article>
+            <article class="step">
+              <span>03 / опросник</span>
+              <h3>Исходные данные</h3>
+              <p>Менеджер помогает пройти технические вопросы по объекту.</p>
+            </article>
+            <article class="step">
+              <span>04 / проект</span>
+              <h3>PDF-комплект</h3>
+              <p>Готовые листы, расчеты, спецификации и узлы передаются заказчику.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section white" id="faq" aria-labelledby="faq-title">
+        <div class="container">
+          <div class="section-head">
+            <p class="section-kicker">FAQ</p>
+            <h2 id="faq-title">Частые вопросы</h2>
+            <p>Ответы закрывают основные сомнения до разговора о деталях объекта.</p>
+          </div>
+          <div class="faq-grid">
+            <details open>
+              <summary>Это окончательная цена проекта?</summary>
+              <p>
+                Нет. Это предварительный расчет по площади и выбранным разделам. Итоговое КП
+                уточняется после исходных данных и состава оборудования.
+              </p>
+            </details>
+            <details>
+              <summary>Почему BYN основной, а USD вторичный?</summary>
+              <p>
+                Клиенту удобнее видеть сумму в BYN. USD остается справочным ориентиром, потому
+                что базовые тарифы проекта ведутся в USD.
+              </p>
+            </details>
+            <details>
+              <summary>Можно выбрать только часть разделов?</summary>
+              <p>
+                Да. Рычаги включают отдельные услуги, а расчет пересчитывается по выбранному
+                составу.
+              </p>
+            </details>
+            <details>
+              <summary>Когда появится PDF-коммерческое?</summary>
+              <p>
+                PDF-коммерческое появится после подключения сохранения заявки. Сейчас форма только
+                готовит данные на странице.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section dark" id="contacts" aria-labelledby="contacts-title">
+        <div class="container">
+          <div class="contact-layout">
+            <div>
+              <p class="section-kicker">Контакты</p>
+              <h2 id="contacts-title">Связаться с ИП Позняк</h2>
+              <p>
+                Перед публичным запуском здесь будут подтвержденные телефон, email и ссылки на
+                мессенджеры. Сейчас блок фиксирует место контактов без отправки персональных
+                данных.
+              </p>
+            </div>
+            <div class="contact-card">
+              <dl>
+                <div>
+                  <dt>Телефон</dt>
+                  <dd>уточнить перед запуском</dd>
+                </div>
+                <div>
+                  <dt>Мессенджер</dt>
+                  <dd>канал связи после подтверждения</dd>
+                </div>
+                <div>
+                  <dt>Email для PDF</dt>
+                  <dd>уточнить перед запуском</dd>
+                </div>
+              </dl>
+              <a class="button primary" href="#calculator">Вернуться к расчету</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
 </html>
 
-<style>
-	:root {
-		color-scheme: light;
-		font-family:
-			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-			sans-serif;
-		background: #f6f8fb;
-		color: #14221f;
-	}
+<script>
+  import {
+    calculateEngineeringOffer,
+    serviceListResponseSchema,
+    type CalculationResult,
+    type EngineeringService,
+    type ServiceRecord,
+  } from '@poznyak-engineering-calculator/contracts'
 
-	body {
-		margin: 0;
-		min-height: 100vh;
-		background: #f6f8fb;
-	}
+  type CalculatorService = EngineeringService & { code?: string; isPublic?: boolean }
+  type CalculatorData = {
+    defaultAreaSqm: string
+    exchangeRate: {
+      source: 'manual' | 'nbrb' | 'fallback'
+      usdToBynRate: string
+      asOf?: string
+    }
+    fallbackServices: CalculatorService[]
+    selectedServiceIds: string[]
+  }
 
-	main {
-		min-height: 100vh;
-		display: grid;
-		align-items: center;
-		padding: 3rem 1.5rem;
-	}
+  const dataElement = document.querySelector<HTMLScriptElement>('#calculator-data')
+  const data = JSON.parse(dataElement?.textContent ?? '{}') as CalculatorData
+  const areaInput = document.querySelector<HTMLInputElement>('[data-area-input]')
+  const areaRange = document.querySelector<HTMLInputElement>('[data-area-range]')
+  const areaError = document.querySelector<HTMLElement>('[data-area-error]')
+  const serviceList = document.querySelector<HTMLElement>('[data-service-list]')
+  const serviceEmpty = document.querySelector<HTMLElement>('[data-service-empty]')
+  const serviceSource = document.querySelector<HTMLElement>('[data-service-source]')
+  const totalByn = document.querySelector<HTMLElement>('[data-total-byn]')
+  const totalUsd = document.querySelector<HTMLElement>('[data-total-usd]')
+  const summaryList = document.querySelector<HTMLElement>('[data-summary-list]')
+  const leadTrigger = document.querySelector<HTMLButtonElement>('[data-lead-shell-trigger]')
+  const leadStatus = document.querySelector<HTMLElement>('[data-lead-shell-status]')
 
-	.hero {
-		max-width: 720px;
-	}
+  const numberFormatter = new Intl.NumberFormat('ru-RU')
+  const usdFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
+  const usdUnitFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
+  const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
 
-	.eyebrow {
-		margin: 0 0 1rem;
-		font-size: 0.8rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: #4c6f5b;
-	}
+  let services = normalizeServices(data.fallbackServices)
+  let selectedServiceIds = new Set(data.selectedServiceIds)
 
-	h1 {
-		margin: 0;
-		font-size: 4rem;
-		line-height: 0.92;
-		letter-spacing: 0;
-	}
+  render()
+  attachHandlers()
+  void loadPublicServices()
 
-	.summary {
-		margin: 1.5rem 0 0;
-		max-width: 580px;
-		font-size: 1.125rem;
-		line-height: 1.55;
-		color: #3e4a42;
-	}
+  function attachHandlers() {
+    areaInput?.addEventListener('input', () => {
+      const parsed = parseArea(areaInput.value)
+      if (parsed.valid && areaRange) {
+        const rangeValue = Math.min(Math.max(Number(parsed.canonical), 30), 500)
+        areaRange.value = String(rangeValue)
+      }
+      render()
+    })
 
-	@media (min-width: 720px) {
-		main {
-			padding: 5rem;
-		}
+    areaRange?.addEventListener('input', () => {
+      if (areaInput) areaInput.value = areaRange.value
+      render()
+    })
 
-		h1 {
-			font-size: 7rem;
-		}
+    document.querySelectorAll<HTMLButtonElement>('[data-area-preset]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const value = button.dataset.areaPreset ?? data.defaultAreaSqm
+        if (areaInput) areaInput.value = value
+        if (areaRange) areaRange.value = value
+        render()
+      })
+    })
 
-		.summary {
-			font-size: 1.25rem;
-		}
-	}
+    leadTrigger?.addEventListener('click', () => {
+      if (!leadStatus) return
+      leadStatus.textContent =
+        'Форма подготовлена визуально. Заявка не отправляется, PDF и сохранение будут подключены позже.'
+      leadStatus.classList.add('is-ready')
+    })
+  }
 
-	@media (min-width: 1120px) {
-		main {
-			padding: 6rem;
-		}
+  async function loadPublicServices() {
+    const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
 
-		h1 {
-			font-size: 9rem;
-		}
-	}
+    if (!apiBaseUrl) {
+      setSourceMessage(`Базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+      return
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/services`, {
+        headers: { Accept: 'application/json' },
+      })
+
+      if (!response.ok) throw new Error(`Service request failed: ${response.status}`)
+
+      const payload = serviceListResponseSchema.parse(await response.json())
+      const publicServices = normalizeServices(payload.services)
+
+      if (publicServices.length === 0) {
+        services = []
+        selectedServiceIds = new Set()
+        setSourceMessage('Нет опубликованных услуг в API')
+      } else {
+        services = publicServices
+        selectedServiceIds = new Set(publicServices.map((service) => service.id))
+        setSourceMessage(`Публичные услуги из API · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+      }
+
+      render()
+    } catch {
+      services = normalizeServices(data.fallbackServices)
+      selectedServiceIds = new Set(data.selectedServiceIds)
+      setSourceMessage(`API недоступен · базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+      render()
+    }
+  }
+
+  function normalizeServices(source: Array<CalculatorService | ServiceRecord>): CalculatorService[] {
+    return source
+      .filter((service) => service.isActive && supportedPricingTypes.has(service.pricingType))
+      .map((service, index) => ({
+        id: service.id,
+        title: service.title,
+        description: service.description ?? null,
+        pricingType: service.pricingType,
+        priceUsdCents: service.priceUsdCents,
+        isActive: service.isActive,
+        sortOrder: service.sortOrder,
+        pricingRule: service.pricingRule ?? undefined,
+        formulaVersion: service.formulaVersion ?? undefined,
+        createdAt: service.createdAt,
+        updatedAt: service.updatedAt,
+        code: 'code' in service && service.code ? service.code : makeServiceCode(service.title, index),
+        isPublic: 'isPublic' in service ? service.isPublic : true,
+      }))
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+  }
+
+  function render(focusServiceId?: string) {
+    const parsedArea = parseArea(areaInput?.value ?? data.defaultAreaSqm)
+    const canCalculate = parsedArea.valid && services.length > 0
+
+    if (areaError) areaError.hidden = parsedArea.valid
+    if (areaInput) {
+      if (parsedArea.valid) {
+        areaInput.removeAttribute('aria-invalid')
+      } else {
+        areaInput.setAttribute('aria-invalid', 'true')
+      }
+    }
+
+    if (!canCalculate) {
+      renderServices(null, focusServiceId)
+      renderTotals(null)
+      renderSummary(null)
+      if (serviceEmpty) serviceEmpty.hidden = services.length > 0
+      return
+    }
+
+    const calculation = calculateEngineeringOffer({
+      areaSqm: parsedArea.canonical,
+      selectedServiceIds: [...selectedServiceIds],
+      services,
+      exchangeRate: data.exchangeRate,
+    })
+
+    renderServices(calculation, focusServiceId)
+    renderTotals(calculation)
+    renderSummary(calculation)
+    if (serviceEmpty) serviceEmpty.hidden = true
+  }
+
+  function renderServices(calculation: CalculationResult | null, focusServiceId?: string) {
+    if (!serviceList) return
+    const displayRubles = calculation ? allocateDisplayBynRubles(calculation) : new Map<string, number>()
+
+    serviceList.innerHTML = services
+      .map((service) => {
+        const line = calculation?.lineItems.find((item) => item.serviceId === service.id)
+        const isSelected = selectedServiceIds.has(service.id)
+        const buttonClass = isSelected ? 'service-row selected' : 'service-row'
+        const lineRubles = displayRubles.get(service.id)
+
+        return `
+          <button type="button" class="${buttonClass}" data-service-id="${escapeHtml(service.id)}" role="switch" aria-checked="${isSelected}">
+            <span class="lever" aria-hidden="true"><span class="pipe"></span><span class="body"></span><span class="stem"></span><span class="handle"></span></span>
+            <span class="service-code">${escapeHtml(service.code ?? '')}</span>
+            <span class="service-copy"><strong>${escapeHtml(service.title)}</strong><span>${escapeHtml(service.description ?? '')}</span></span>
+            <span class="rate">${escapeHtml(priceModeLabel(service))}</span>
+            <span class="row-price"><strong>${lineRubles !== undefined ? formatRubles(lineRubles) : isSelected ? '-' : 'выкл.'} Br</strong><span>${line ? `~${formatUsd(line.totalUsdCents)} $` : 'не в сумме'}</span></span>
+          </button>
+        `
+      })
+      .join('')
+
+    serviceList.querySelectorAll<HTMLButtonElement>('[data-service-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const serviceId = button.dataset.serviceId
+        if (!serviceId) return
+        if (selectedServiceIds.has(serviceId)) {
+          selectedServiceIds.delete(serviceId)
+        } else {
+          selectedServiceIds.add(serviceId)
+        }
+        render(serviceId)
+      })
+    })
+
+    if (focusServiceId) {
+      const focusTarget = [...serviceList.querySelectorAll<HTMLButtonElement>('[data-service-id]')].find(
+        (button) => button.dataset.serviceId === focusServiceId,
+      )
+      focusTarget?.focus()
+    }
+  }
+
+  function renderTotals(calculation: CalculationResult | null) {
+    if (totalByn) {
+      totalByn.innerHTML = calculation
+        ? `${formatRubles(calculation.totals.totalBynRoundedRubles)} <span>Br</span>`
+        : `- <span>Br</span>`
+    }
+
+    if (totalUsd) {
+      totalUsd.textContent = calculation
+        ? `~${formatUsd(calculation.totals.totalUsdCents)} $ за выбранный состав`
+        : 'Укажите корректную площадь и выберите услуги'
+    }
+  }
+
+  function renderSummary(calculation: CalculationResult | null) {
+    if (!summaryList) return
+
+    if (!calculation || calculation.lineItems.length === 0) {
+      summaryList.innerHTML = '<div class="summary-row muted"><span>Разделы не выбраны</span><strong>0 Br</strong></div>'
+      return
+    }
+
+    const displayRubles = allocateDisplayBynRubles(calculation)
+
+    summaryList.innerHTML = calculation.lineItems
+      .map(
+        (lineItem) => `
+          <div class="summary-row" data-summary-service-id="${escapeHtml(lineItem.serviceId)}">
+            <span>${escapeHtml(lineItem.serviceSnapshot.title)}</span>
+            <strong>${formatRubles(displayRubles.get(lineItem.serviceId) ?? 0)} Br</strong>
+          </div>
+        `,
+      )
+      .join('')
+  }
+
+  function parseArea(value: string) {
+    const canonical = value.trim().replace(',', '.')
+
+    if (!/^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(canonical)) {
+      return { valid: false, canonical: data.defaultAreaSqm }
+    }
+
+    if (Number(canonical) <= 0) {
+      return { valid: false, canonical: data.defaultAreaSqm }
+    }
+
+    return { valid: true, canonical }
+  }
+
+  function setSourceMessage(message: string) {
+    if (serviceSource) serviceSource.textContent = message
+  }
+
+  function priceModeLabel(service: CalculatorService) {
+    return service.pricingType === 'fixed'
+      ? `${formatUsd(service.priceUsdCents)} $`
+      : `${formatUsdUnit(service.priceUsdCents)} $/м²`
+  }
+
+  function formatRubles(value: number) {
+    return numberFormatter.format(value)
+  }
+
+  function formatUsd(cents: number) {
+    return usdFormatter.format(Math.round(cents / 100))
+  }
+
+  function formatUsdUnit(cents: number) {
+    return usdUnitFormatter.format(cents / 100)
+  }
+
+  function allocateDisplayBynRubles(calculation: CalculationResult) {
+    const floorRows = calculation.lineItems.map((lineItem, index) => ({
+      serviceId: lineItem.serviceId,
+      rubles: Math.floor(lineItem.totalBynCents / 100),
+      remainder: lineItem.totalBynCents % 100,
+      index,
+    }))
+    const floorTotal = floorRows.reduce((total, row) => total + row.rubles, 0)
+    const remainingRubles = calculation.totals.totalBynRoundedRubles - floorTotal
+    const rowsByRemainder = [...floorRows].sort(
+      (first, second) => second.remainder - first.remainder || first.index - second.index,
+    )
+
+    for (const row of rowsByRemainder.slice(0, Math.max(0, remainingRubles))) {
+      row.rubles += 1
+    }
+
+    return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
+  }
+
+  function makeServiceCode(title: string, index: number) {
+    const letters = title
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase()
+
+    return letters || `Р${index + 1}`
+  }
+
+  function escapeHtml(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+</script>
+
+<style is:global>
+  @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Montserrat:wght@600;700;800;900&display=swap");
+
+  :root {
+    color-scheme: light;
+    --navy: #0b2239;
+    --navy-2: #123452;
+    --navy-3: #071827;
+    --paper: #f9f7f4;
+    --surface: #ffffff;
+    --surface-2: #f0ebe4;
+    --ink: #15191d;
+    --body: #40484f;
+    --muted: #6c757d;
+    --line: #ded7cc;
+    --line-soft: #ece5da;
+    --steel: #2f5f7f;
+    --steel-soft: #e6edf3;
+    --steel-light: #a4b4d4;
+    --orange: #ff6b35;
+    --orange-2: #d95625;
+    --orange-soft: #fff0e8;
+    --graphite: #4a4a48;
+    --shadow: 0 32px 82px rgba(11, 34, 57, 0.18);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  body,
+  button,
+  input {
+    font-variant-numeric: tabular-nums;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  dl,
+  dd {
+    margin: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  .brand-mark,
+  .total {
+    font-family: "Montserrat", "IBM Plex Sans", sans-serif;
+    letter-spacing: 0;
+  }
+
+  .container {
+    width: min(100% - 40px, 1248px);
+    margin: 0 auto;
+  }
+
+  .top {
+    position: relative;
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      var(--navy);
+    background-size: 72px 72px;
+    color: #ffffff;
+  }
+
+  .nav {
+    min-height: 82px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .brand-mark {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    background: #ffffff;
+    color: var(--navy);
+    font-weight: 900;
+  }
+
+  .brand strong,
+  .brand small {
+    display: block;
+  }
+
+  .brand small {
+    margin-top: 1px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .nav-links a:hover {
+    color: #ffffff;
+  }
+
+  .hero {
+    padding: 68px 0 112px;
+  }
+
+  .eyebrow,
+  .section-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--steel-light);
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .eyebrow::before,
+  .section-kicker::before {
+    content: "";
+    width: 38px;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--orange);
+  }
+
+  h1 {
+    max-width: 980px;
+    margin-top: 22px;
+    font-size: clamp(40px, 7vw, 76px);
+    font-weight: 800;
+    line-height: 1.04;
+  }
+
+  .suboffer {
+    max-width: 760px;
+    margin-top: 22px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: clamp(18px, 2.1vw, 22px);
+    line-height: 1.45;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 30px;
+  }
+
+  .button {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0 22px;
+    font-weight: 800;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .button.primary {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: #ffffff;
+  }
+
+  .button.primary:hover {
+    background: var(--orange-2);
+    border-color: var(--orange-2);
+  }
+
+  .button.secondary {
+    border-color: rgba(255, 255, 255, 0.24);
+    color: #ffffff;
+  }
+
+  .button.light {
+    border-color: var(--line);
+    background: #ffffff;
+    color: var(--ink);
+  }
+
+  .button.small {
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .hero-bullets {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 38px;
+  }
+
+  .hero-bullet {
+    min-height: 132px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.075);
+    padding: 18px;
+  }
+
+  .symbol {
+    width: 44px;
+    height: 34px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font-family: "Montserrat", sans-serif;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .symbol.light {
+    background: var(--steel-soft);
+    color: var(--steel);
+  }
+
+  .hero-bullet strong,
+  .hero-bullet span {
+    display: block;
+  }
+
+  .hero-bullet strong {
+    margin-top: 14px;
+  }
+
+  .hero-bullet span {
+    margin-top: 6px;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 14px;
+    line-height: 1.42;
+  }
+
+  .calculator-shell {
+    position: relative;
+    z-index: 2;
+    margin-top: -72px;
+    padding-bottom: 56px;
+  }
+
+  .calculator {
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .calc-head {
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .calc-head .section-kicker {
+    color: var(--steel);
+    margin-bottom: 4px;
+  }
+
+  .calc-head h2,
+  .section-head h2,
+  .contact-layout h2 {
+    font-size: clamp(31px, 4vw, 44px);
+    font-weight: 800;
+    line-height: 1.12;
+  }
+
+  .calc-head p:not(.section-kicker),
+  .section-head p,
+  .contact-layout p {
+    max-width: 740px;
+    color: var(--muted);
+    font-size: 17px;
+  }
+
+  .calc-status {
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 107, 53, 0.32);
+    border-radius: 999px;
+    background: var(--orange-soft);
+    padding: 9px 13px;
+    color: #8f3519;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .calc-grid {
+    display: grid;
+    grid-template-columns: minmax(240px, 286px) minmax(420px, 1fr) minmax(292px, 332px);
+    min-height: 648px;
+  }
+
+  .calc-panel {
+    padding: 24px;
+    border-right: 1px solid var(--line);
+  }
+
+  .calc-panel:last-child {
+    border-right: 0;
+  }
+
+  .panel-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 15px;
+    font-weight: 800;
+  }
+
+  .panel-title small {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .area-field {
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 19px;
+    background: var(--paper);
+    padding: 15px;
+  }
+
+  .area-field span {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .area-field input {
+    width: 100%;
+    margin-top: 4px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--ink);
+    font-family: "Montserrat", sans-serif;
+    font-size: 46px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .area-field input[aria-invalid] {
+    color: #b6401a;
+  }
+
+  .area-range {
+    width: 100%;
+    accent-color: var(--orange);
+    margin-top: 16px;
+  }
+
+  .field-help,
+  .field-error {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .field-error {
+    color: #b6401a;
+    font-weight: 700;
+  }
+
+  .area-presets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .area-presets button {
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #ffffff;
+    color: var(--body);
+    font-weight: 800;
+  }
+
+  .terms-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .terms-list div {
+    border-top: 1px solid var(--line-soft);
+    padding-top: 12px;
+  }
+
+  .terms-list dt {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .terms-list dd {
+    margin-top: 3px;
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  .services {
+    display: grid;
+    gap: 10px;
+  }
+
+  .service-row {
+    width: 100%;
+    min-height: 66px;
+    display: grid;
+    grid-template-columns: 90px 58px minmax(0, 1fr) 92px 104px;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #ffffff;
+    padding: 10px;
+    color: inherit;
+    text-align: left;
+  }
+
+  .service-row.selected {
+    border-color: rgba(255, 107, 53, 0.42);
+    background: #fffaf7;
+  }
+
+  .service-row:focus-visible,
+  .area-presets button:focus-visible,
+  .button:focus-visible,
+  input:focus-visible,
+  summary:focus-visible {
+    outline: 3px solid rgba(255, 107, 53, 0.5);
+    outline-offset: 2px;
+  }
+
+  .lever {
+    position: relative;
+    width: 88px;
+    height: 44px;
+  }
+
+  .lever .pipe,
+  .lever .body,
+  .lever .stem,
+  .lever .handle {
+    position: absolute;
+    display: block;
+  }
+
+  .lever .pipe {
+    left: 4px;
+    right: 4px;
+    top: 24px;
+    height: 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #c7d0d8, #f1f4f6);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
+  }
+
+  .lever .body {
+    left: 33px;
+    top: 14px;
+    width: 28px;
+    height: 25px;
+    border: 2px solid #aeb9c2;
+    border-radius: 7px;
+    background: #d8dee3;
+  }
+
+  .lever .stem {
+    left: 44px;
+    top: 7px;
+    width: 6px;
+    height: 16px;
+    border-radius: 999px;
+    background: #9ba7af;
+  }
+
+  .lever .handle {
+    left: 42px;
+    top: 2px;
+    width: 44px;
+    height: 12px;
+    border-radius: 999px 6px 6px 999px;
+    background: #9ba7af;
+    transform: rotate(82deg);
+    transform-origin: 6px 50%;
+    transition: transform 160ms ease, background 160ms ease;
+  }
+
+  .selected .lever .body {
+    border-color: var(--orange);
+    background: #fff0e8;
+  }
+
+  .selected .lever .stem,
+  .selected .lever .handle {
+    background: var(--orange);
+  }
+
+  .selected .lever .handle {
+    transform: rotate(0deg);
+  }
+
+  .service-code {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 30px;
+    border-radius: 10px;
+    background: var(--steel-soft);
+    color: var(--steel);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .selected .service-code {
+    background: var(--orange-soft);
+    color: #8f3519;
+  }
+
+  .service-copy {
+    min-width: 0;
+  }
+
+  .service-copy strong,
+  .service-copy span {
+    display: block;
+  }
+
+  .service-copy strong {
+    font-weight: 800;
+  }
+
+  .service-copy span {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .rate,
+  .row-price {
+    color: var(--body);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .row-price {
+    text-align: right;
+  }
+
+  .row-price strong,
+  .row-price span {
+    display: block;
+  }
+
+  .row-price strong {
+    color: var(--ink);
+    font-family: "Montserrat", sans-serif;
+    font-size: 16px;
+  }
+
+  .row-price span {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .service-empty {
+    border: 1px dashed var(--line);
+    border-radius: 18px;
+    background: var(--paper);
+    padding: 18px;
+    color: var(--body);
+    font-weight: 700;
+  }
+
+  .result-card {
+    border-radius: 22px;
+    background: var(--navy);
+    color: #ffffff;
+    padding: 20px;
+  }
+
+  .result-label {
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .total {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: clamp(44px, 5vw, 58px);
+    line-height: 1;
+    font-weight: 800;
+  }
+
+  .total span {
+    font-size: 0.5em;
+  }
+
+  .usd-line {
+    margin-top: 8px;
+    color: rgba(255, 255, 255, 0.72);
+    font-weight: 600;
+  }
+
+  .summary-list,
+  .calc-note,
+  .lead-shell {
+    display: grid;
+    gap: 9px;
+    margin-top: 18px;
+  }
+
+  .summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border-bottom: 1px solid var(--line-soft);
+    padding-bottom: 8px;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .summary-row strong {
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .summary-row.muted {
+    color: var(--muted);
+  }
+
+  .calc-note div {
+    border-radius: 15px;
+    background: var(--paper);
+    padding: 11px 12px;
+    color: var(--body);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .lead-shell label {
+    display: grid;
+    gap: 5px;
+  }
+
+  .lead-shell label span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .lead-shell input {
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #ffffff;
+    padding: 0 14px;
+  }
+
+  .lead-shell .button {
+    width: 100%;
+    padding-inline: 10px;
+  }
+
+  .lead-shell p {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .lead-shell p.is-ready {
+    color: #8f3519;
+  }
+
+  .section {
+    padding: 76px 0;
+  }
+
+  .section.white {
+    background: #ffffff;
+  }
+
+  .section.dark {
+    background: var(--navy);
+    color: #ffffff;
+  }
+
+  .section-head {
+    display: grid;
+    grid-template-columns: minmax(220px, 390px) minmax(0, 1fr);
+    gap: 58px;
+    margin-bottom: 30px;
+  }
+
+  .section-head .section-kicker {
+    color: var(--steel);
+    grid-column: 1 / -1;
+    margin-bottom: -12px;
+  }
+
+  .dark .section-kicker,
+  .dark .section-head p,
+  .dark .contact-layout p {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .deliverables {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .tile,
+  .object-card,
+  .step,
+  details,
+  .contact-card {
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.88);
+  }
+
+  .tile {
+    min-height: 190px;
+    padding: 20px;
+  }
+
+  .tile h3,
+  .object-card h3,
+  .step h3 {
+    margin-top: 13px;
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .tile p,
+  .object-card p,
+  .step p,
+  details p {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .objects {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.12fr;
+    gap: 16px;
+  }
+
+  .object-card {
+    overflow: hidden;
+  }
+
+  .object-card.accent {
+    border-color: rgba(255, 107, 53, 0.36);
+  }
+
+  .blueprint {
+    position: relative;
+    height: 190px;
+    overflow: hidden;
+    background:
+      linear-gradient(rgba(47, 95, 127, 0.13) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(47, 95, 127, 0.13) 1px, transparent 1px),
+      #f7fbff;
+    background-size: 20px 20px;
+  }
+
+  .blueprint::before {
+    content: attr(data-title);
+    position: absolute;
+    left: 18px;
+    top: 15px;
+    color: var(--steel);
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .room,
+  .pipe-line,
+  .node {
+    position: absolute;
+  }
+
+  .room {
+    border: 2px solid var(--steel);
+    border-radius: 6px;
+  }
+
+  .room.r1 {
+    left: 38px;
+    top: 55px;
+    width: 146px;
+    height: 84px;
+  }
+
+  .room.r2 {
+    right: 42px;
+    top: 70px;
+    width: 116px;
+    height: 72px;
+    border-left-width: 8px;
+  }
+
+  .pipe-line {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--steel);
+  }
+
+  .pipe-line.l1 {
+    left: 64px;
+    top: 124px;
+    width: 260px;
+  }
+
+  .pipe-line.l2 {
+    left: 112px;
+    top: 100px;
+    width: 216px;
+    transform: rotate(-14deg);
+    transform-origin: left center;
+  }
+
+  .node {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 2px solid var(--orange);
+    border-radius: 999px;
+    background: #ffffff;
+    color: #8f3519;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .node.n1 {
+    left: 188px;
+    top: 108px;
+  }
+
+  .node.n2 {
+    right: 86px;
+    top: 118px;
+  }
+
+  .object-body {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .step {
+    min-height: 180px;
+    padding: 20px;
+  }
+
+  .step span {
+    color: var(--steel);
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .faq-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  details {
+    padding: 20px;
+  }
+
+  summary {
+    cursor: pointer;
+    color: var(--ink);
+    font-weight: 800;
+  }
+
+  .contact-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 420px;
+    gap: 48px;
+    align-items: start;
+  }
+
+  .contact-layout .section-kicker {
+    margin-bottom: 16px;
+  }
+
+  .contact-layout h2 {
+    max-width: 620px;
+  }
+
+  .contact-layout p {
+    max-width: 680px;
+    margin-top: 16px;
+  }
+
+  .contact-card {
+    padding: 22px;
+    color: var(--ink);
+  }
+
+  .contact-card dl {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .contact-card dt {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .contact-card dd {
+    margin-top: 3px;
+    font-weight: 800;
+  }
+
+  @media (max-width: 1080px) {
+    .nav-links {
+      display: none;
+    }
+
+    .hero-bullets,
+    .deliverables,
+    .steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .calc-head {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .calc-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .calc-panel {
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .result-panel {
+      order: -1;
+    }
+
+    .objects,
+    .contact-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .section-head {
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .container {
+      width: min(100% - 28px, 1248px);
+    }
+
+    .nav {
+      min-height: 74px;
+    }
+
+    .brand small {
+      display: none;
+    }
+
+    .hero {
+      padding: 44px 0 96px;
+    }
+
+    .hero-actions .button {
+      width: 100%;
+    }
+
+    .hero-bullets,
+    .deliverables,
+    .steps,
+    .faq-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .calculator-shell {
+      margin-top: -58px;
+    }
+
+    .calc-head,
+    .calc-panel {
+      padding: 18px;
+    }
+
+    .calc-status {
+      border-radius: 14px;
+    }
+
+    .service-row {
+      grid-template-columns: 88px minmax(0, 1fr);
+      grid-template-areas:
+        "lever copy"
+        "code rate"
+        "code price";
+      min-height: 120px;
+      gap: 8px 12px;
+    }
+
+    .service-row .lever {
+      grid-area: lever;
+    }
+
+    .service-code {
+      grid-area: code;
+    }
+
+    .service-copy {
+      grid-area: copy;
+    }
+
+    .rate {
+      grid-area: rate;
+    }
+
+    .row-price {
+      grid-area: price;
+      text-align: left;
+    }
+
+    .section {
+      padding: 56px 0;
+    }
+  }
 </style>

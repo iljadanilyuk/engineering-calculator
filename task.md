@@ -560,7 +560,7 @@ Verification:
 
 ### PZK-004 - Public Calculator MVP
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -574,6 +574,26 @@ Acceptance criteria:
 - Sections exist: offer, examples, included work, stages, FAQ, contacts.
 - Visual style matches strict engineering bureau direction.
 - Browser verification checks public calculator load, service toggles, total updates, and mobile layout.
+
+Completion notes:
+
+- Replaced the placeholder public `website` index with the PZK-DESIGN-001 v4 direction: dark navy engineering first screen, `ИП Позняк` identity, strict grid, `Montserrat` headings, `IBM Plex Sans` UI/body text, orange lever/switch signature, BYN primary totals, and USD secondary references.
+- Added a working browser calculator for area input, service toggles, `fixed` services, and `per_sqm` services.
+- Added `@poznyak-engineering-calculator/contracts` to the website workspace and uses the shared `calculateEngineeringOffer` domain in both the prerendered initial state and the client-side interactive recalculation path.
+- Added fallback public services from the approved v4 pricing fixture and an optional `PUBLIC_API_URL` path that can read `GET /api/public/services`; unsupported/inactive/formula services are filtered from the public selector.
+- Kept PZK-004 inside scope: no real lead submission, no `POST /api/public/calculations`, no PDF generation, no Telegram notification, no cloud/DigitalOcean changes, and no Bella/ads file changes.
+- Added sections for offer/calculator, included work, examples/projects, stages, FAQ, and contacts.
+- Displayed row BYN rubles are allocated from shared-domain BYN cents so visible breakdown rows reconcile with the shared-domain headline total.
+- Service switch focus is restored after row re-render so keyboard users do not lose focus after toggling.
+
+Verification:
+
+- `bun run typecheck` passed.
+- `bun run test:contracts` passed: 16/16.
+- `bun run typecheck:website` passed.
+- `bun run build:website` passed; non-blocking inherited local warning: `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+- Browser verification passed against local Astro preview on `http://127.0.0.1:49321/` with `node .scratch\verify-public-calculator.mjs http://127.0.0.1:49321/`.
+- Browser verification covered page load, desktop calculator rendering, area change from `180` to `200`, fixed-service price stability, per-square-meter price update, service toggle total update, no request to `/api/public/calculations`, lead shell non-submission status, visible BYN breakdown reconciliation with headline total, keyboard toggle focus restore, mobile `390px` layout without horizontal overflow, and desktop/mobile screenshots in `.scratch`.
 
 ### PZK-005 - Lead Capture And Calculation Save
 
@@ -852,3 +872,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Banach: 8.8/10; required the same hidden-service fix and review-log bookkeeping. Changes incorporated. Non-blocking recommendations included tightening weak response schemas and adding admin-auth/DB-constraint negative tests; these were also incorporated before round 2.
 - 2026-07-08 PZK-003 post-task review round 2:
   - Reviewer Galileo: 9.6/10; confirmed hidden-service fix, server-side recalculation trust boundary, immutable snapshots, BigInt/scaled storage, exchange-rate snapshots, DB constraints, and PZK-003 scope. No required changes remained.
+- 2026-07-09 PZK-004 pre-task review:
+  - Reviewer Dirac: `gpt-5.5 xhigh`; warned not to call the save endpoint, noted the lack of public exchange-rate endpoint, required an intentional website dependency on shared contracts, flagged fixed/per_sqm rounding drift, responsive rebuild risks from the fixed-width concept, mobile service-row width, hidden/formula service handling, and local `file://`/PDF/Telegram scope traps. Recommendations incorporated.
+- 2026-07-09 PZK-004 post-task review round 1:
+  - Reviewer Harvey: 9.3/10; required visible BYN breakdown reconciliation with the headline total and a regression check. Changes incorporated.
+  - Reviewer Meitner: 9.2/10; required the same BYN reconciliation plus service-switch focus restoration after row re-render; recommended explicit `aria-invalid` handling. Changes incorporated.
+- 2026-07-09 PZK-004 focused post-task review round 2:
+  - Reviewer Carver: 9.6/10; confirmed BYN row allocation reconciles to the shared-domain headline total, service switch focus is restored after toggling, and `aria-invalid` is set explicitly. No remaining required changes; PZK-004 gate cleared.
