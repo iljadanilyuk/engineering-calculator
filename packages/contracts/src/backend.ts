@@ -30,6 +30,7 @@ const optionalUrlTextSchema = z.preprocess((value) => {
 
 const pricingRuleSchema = z.record(z.string(), z.unknown()).nullable().optional()
 const sortOrderSchema = z.number().int().min(-1_000_000).max(1_000_000)
+const workingServicePricingTypeSchema = z.enum(['fixed', 'per_sqm'])
 const proposalArtifactReferenceSchema = z.object({
   id: uuidSchema,
   publicToken: publicTokenSchema,
@@ -58,6 +59,14 @@ export const serviceCreateRequestSchema = z.object({
   isActive: z.boolean().default(true),
   isPublic: z.boolean().default(true),
   sortOrder: sortOrderSchema.default(0),
+}).superRefine((value, context) => {
+  if (workingServicePricingTypeSchema.safeParse(value.pricingType).success && value.priceUsdCents <= 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['priceUsdCents'],
+      message: 'Fixed and per-square-meter services require a positive USD price',
+    })
+  }
 })
 
 export const serviceUpdateRequestSchema = z.object({
@@ -71,6 +80,28 @@ export const serviceUpdateRequestSchema = z.object({
   isPublic: z.boolean().optional(),
   sortOrder: sortOrderSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, 'At least one field is required')
+
+export const serviceReorderRequestSchema = z.object({
+  services: z.array(z.object({
+    id: uuidSchema,
+    sortOrder: sortOrderSchema,
+  })).min(1).max(500),
+}).superRefine((value, context) => {
+  const seen = new Set<string>()
+
+  for (const [index, service] of value.services.entries()) {
+    if (!seen.has(service.id)) {
+      seen.add(service.id)
+      continue
+    }
+
+    context.addIssue({
+      code: 'custom',
+      path: ['services', index, 'id'],
+      message: 'Service ids must be unique in one reorder request',
+    })
+  }
+})
 
 export const serviceRecordSchema = engineeringServiceSchema.extend({
   id: uuidSchema,
@@ -235,9 +266,13 @@ export const projectExampleResponseSchema = z.object({
 
 export type ServiceCreateRequest = z.infer<typeof serviceCreateRequestSchema>
 export type ServiceUpdateRequest = z.infer<typeof serviceUpdateRequestSchema>
+export type ServiceReorderRequest = z.infer<typeof serviceReorderRequestSchema>
 export type ServiceRecord = z.infer<typeof serviceRecordSchema>
+export type ServiceListResponse = z.infer<typeof serviceListResponseSchema>
+export type ServiceResponse = z.infer<typeof serviceResponseSchema>
 export type PublicCalculatorConfigResponse = z.infer<typeof publicCalculatorConfigResponseSchema>
 export type ExchangeRateSettingRequest = z.infer<typeof exchangeRateSettingRequestSchema>
+export type ExchangeRateSettingResponse = z.infer<typeof exchangeRateSettingResponseSchema>
 export type CalculationStatus = z.infer<typeof calculationStatusSchema>
 export type CalculationSaveRequest = z.infer<typeof calculationSaveRequestSchema>
 export type CalculationRecord = z.infer<typeof calculationRecordSchema>

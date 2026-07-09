@@ -733,7 +733,7 @@ Verification:
 
 ### PZK-008 - Admin Services Management
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -746,6 +746,28 @@ Acceptance criteria:
 - Prices are entered in USD and previewed in BYN.
 - Archive is preferred over hard delete for services used in previous calculations.
 - Verification covers create, edit, archive, reorder, and public visibility changes.
+
+Completion notes:
+
+- Added admin service management in the protected React admin shell with service list, add/edit dialog, archive/restore action, public visibility switch, sort up/down controls, fixed/per-square-meter pricing, USD entry, and BYN preview from the configured exchange rate.
+- Extended the webapp API client and React Query layer for service listing, creation, update/archive/visibility changes, transactional reorder, and exchange-rate reads.
+- Added `PATCH /api/admin/services/reorder` with a shared contract and transactional backend implementation.
+- Service archive remains soft: no hard delete was added. Archived/inactive services are forced to `isPublic = false`, including direct API create/update paths.
+- Public service/config responses now return only active, public, supported `fixed`/`per_sqm` services. Formula services remain future scope: admin can see/archive/reorder them, but UI edit/public toggles are disabled and direct API pricing-type transitions into/out of `formula` are rejected.
+- Fixed/per-square-meter services require positive USD cents at contract/API layer.
+- Old calculations and PDFs remain immutable because existing calculation/proposal flows continue to read stored snapshots rather than current service rows.
+
+Verification:
+
+- `bun run typecheck` passed.
+- `bun run --cwd webapp lint` passed.
+- `bun run test:contracts` passed: 17/17.
+- `bun run test:backend:unit` passed: 30/30.
+- `bun run test:webapp` passed: 38/38.
+- `bun run build:webapp` passed; non-blocking inherited Vite chunk-size warning remains.
+- `docker info` passed before Docker-backed verification.
+- `bun run test:backend:integration` passed: 28/28, including create service, edit service, archive service, archived republish prevention, inactive create normalization, reorder service, toggle public visibility, invalid price/type rejection, formula transition rejection, and public services excluding inactive/non-public/unsupported services.
+- `bun run e2e:webapp` passed: 3/3, including protected admin login, create service, edit title/price, BYN preview, public visibility toggle, archive, reorder, formula row disabled state, and public calculator config reflecting active public supported services only.
 
 ### PZK-009 - Admin Leads Mini-CRM
 
@@ -980,3 +1002,13 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Fermat: 8.0/10; required splitting public CORS from credentialed admin/auth CORS, hardening login client buckets against spoofed headers/User-Agent rotation, atomic limiter increments, and no-store auth error headers. Changes incorporated.
 - 2026-07-09 PZK-007 focused post-task review round 3:
   - Reviewer Pasteur: 9.6/10; confirmed credentialed CORS is limited to `AUTH_CORS_ORIGINS`, public website origins cannot refresh admin cookies into readable access tokens, admin routes are protected, the raw SQL limiter is atomic, and docs/templates are consistent. No required changes remained; PZK-007 gate cleared. Non-blocking hardening noted: consider stripping `refreshToken` from JSON responses whenever an `Origin` header is present or cookie-backed auth is used.
+- 2026-07-09 PZK-008 pre-task review:
+  - Reviewer Hypatia: `gpt-5.5 xhigh`; flagged service CRUD pitfalls around archive vs hard delete, `isActive`/`isPublic` invariants, transactional reorder, formula/future-service scope, USD cent parsing, missing exchange-rate preview state, and preserving calculation/PDF snapshots. Recommendations incorporated.
+- 2026-07-09 PZK-008 post-task review round 1:
+  - Reviewer Confucius: 8/10; required deriving `isPublic=false` whenever a service is inactive, including direct API create/update paths, adding regression coverage, and preventing formula rows from being edited/coerced in the admin UI. Changes incorporated.
+  - Reviewer Volta: 8/10; found no required blockers for completion but recommended the same formula-row and inactive-create hardening, plus noting DB-level positive-price hardening as future work. Recommended changes incorporated.
+- 2026-07-09 PZK-008 focused post-task review round 2:
+  - Reviewer Mill: 9/10; confirmed archived service re-publication, inactive create, and formula UI controls were fixed. No required changes remained, but noted direct authenticated API could still convert formula rows into ordinary pricing types. Additional hardening was added.
+  - Reviewer Pasteur: 9/10; confirmed admin CRUD, archive/restore, reorder, USD entry with BYN preview, public filtering, formula exclusion, and snapshot immutability. No required changes remained, but the 9.5 review gate was not yet cleared.
+- 2026-07-09 PZK-008 final post-task review round 3:
+  - Reviewer Hubble: 9.6/10; confirmed PZK-008 meets the task gate after direct API formula transition hardening. No required changes remained; PZK-008 gate cleared.

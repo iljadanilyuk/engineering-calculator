@@ -247,7 +247,7 @@ maybeDescribe('engineering API integration', () => {
     expect(publicProposalPdfAfterEditsBytes).toEqual(publicProposalPdfBytes)
   })
 
-  test('rejects inactive, missing, and unsupported formula services before persistence', async () => {
+  test('rejects archived, missing, and unsupported formula services before persistence', async () => {
     const accessToken = await loginAdmin('unavailable@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const inactiveService = await createService(accessToken, {
@@ -283,9 +283,9 @@ maybeDescribe('engineering API integration', () => {
     })
     const inactiveBody = await inactive.json()
     expect(inactive.status).toBe(409)
-    expect(inactiveBody.error.details[0]).toMatchObject({
+    expect(inactiveBody.error.details[0]).toEqual({
       serviceId: inactiveService.id,
-      reason: 'inactive',
+      reason: 'not_found',
     })
 
     const missing = await saveCalculation({
@@ -684,6 +684,195 @@ maybeDescribe('engineering API integration', () => {
     expect(body.error.code).toBe('UNAUTHORIZED')
   })
 
+  test('manages admin services with create, edit, archive, reorder, visibility, and validation', async () => {
+    const accessToken = await loginAdmin('services-admin@example.com')
+    const invalidType = await app.request('/api/admin/services', {
+      method: 'POST',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        title: 'Invalid pricing',
+        pricingType: 'hourly',
+        priceUsdCents: 10_000,
+      }),
+    })
+    const negativePrice = await app.request('/api/admin/services', {
+      method: 'POST',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        title: 'Negative price',
+        pricingType: 'fixed',
+        priceUsdCents: -1,
+      }),
+    })
+    const zeroFixedPrice = await app.request('/api/admin/services', {
+      method: 'POST',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        title: 'Zero fixed price',
+        pricingType: 'fixed',
+        priceUsdCents: 0,
+      }),
+    })
+
+    expect(invalidType.status).toBe(400)
+    expect(negativePrice.status).toBe(400)
+    expect(zeroFixedPrice.status).toBe(400)
+
+    const first = await createService(accessToken, {
+      title: 'Heating design',
+      description: 'Initial description',
+      pricingType: 'per_sqm',
+      priceUsdCents: 250,
+      sortOrder: 10,
+    })
+    const second = await createService(accessToken, {
+      title: 'Boiler room',
+      pricingType: 'fixed',
+      priceUsdCents: 20_000,
+      sortOrder: 20,
+    })
+    const hidden = await createService(accessToken, {
+      title: 'Private audit',
+      pricingType: 'fixed',
+      priceUsdCents: 30_000,
+      isPublic: false,
+      sortOrder: 30,
+    })
+    const inactiveDraft = await createService(accessToken, {
+      title: 'Inactive draft',
+      pricingType: 'fixed',
+      priceUsdCents: 40_000,
+      isActive: false,
+      isPublic: true,
+      sortOrder: 35,
+    })
+    const formula = await createService(accessToken, {
+      title: 'Future formula',
+      pricingType: 'formula',
+      priceUsdCents: 0,
+      pricingRule: { kind: 'future' },
+      formulaVersion: 'future-v1',
+      sortOrder: 40,
+    })
+    const formulaConversion = await app.request(`/api/admin/services/${formula.id}`, {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        pricingType: 'fixed',
+        priceUsdCents: 10_000,
+      }),
+    })
+    const nonFormulaConversion = await app.request(`/api/admin/services/${first.id}`, {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        pricingType: 'formula',
+        priceUsdCents: 0,
+      }),
+    })
+    const archivedFormula = await patchService(accessToken, formula.id, {
+      isActive: false,
+    })
+
+    expect(inactiveDraft.isActive).toBe(false)
+    expect(inactiveDraft.isPublic).toBe(false)
+    expect(formulaConversion.status).toBe(400)
+    expect(nonFormulaConversion.status).toBe(400)
+    expect(archivedFormula.isActive).toBe(false)
+    expect(archivedFormula.isPublic).toBe(false)
+
+    const edited = await patchService(accessToken, first.id, {
+      title: 'Heating and warm floors',
+      description: '',
+      priceUsdCents: 275,
+      pricingType: 'per_sqm',
+      isPublic: false,
+    })
+    const invalidUpdate = await app.request(`/api/admin/services/${first.id}`, {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        priceUsdCents: 0,
+      }),
+    })
+    const visibilityEnabled = await patchService(accessToken, first.id, {
+      isPublic: true,
+    })
+    const archived = await patchService(accessToken, second.id, {
+      isActive: false,
+    })
+    const attemptedRepublish = await patchService(accessToken, second.id, {
+      isPublic: true,
+    })
+
+    expect(edited.title).toBe('Heating and warm floors')
+    expect(edited.description).toBeNull()
+    expect(edited.priceUsdCents).toBe(275)
+    expect(edited.isPublic).toBe(false)
+    expect(invalidUpdate.status).toBe(400)
+    expect(visibilityEnabled.isPublic).toBe(true)
+    expect(archived.isActive).toBe(false)
+    expect(archived.isPublic).toBe(false)
+    expect(attemptedRepublish.isActive).toBe(false)
+    expect(attemptedRepublish.isPublic).toBe(false)
+
+    const reorder = await app.request('/api/admin/services/reorder', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        services: [
+          { id: hidden.id, sortOrder: 1 },
+          { id: first.id, sortOrder: 2 },
+          { id: second.id, sortOrder: 3 },
+        ],
+      }),
+    })
+    const reorderBody = await reorder.json()
+    const duplicateReorder = await app.request('/api/admin/services/reorder', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        services: [
+          { id: first.id, sortOrder: 1 },
+          { id: first.id, sortOrder: 2 },
+        ],
+      }),
+    })
+    const missingReorder = await app.request('/api/admin/services/reorder', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        services: [
+          { id: '00000000-0000-7000-8000-000000000001', sortOrder: 1 },
+        ],
+      }),
+    })
+
+    expect(reorder.status).toBe(200)
+    expect(reorderBody.services.map((service: { title: string }) => service.title)).toEqual([
+      'Private audit',
+      'Heating and warm floors',
+      'Boiler room',
+      'Inactive draft',
+      'Future formula',
+    ])
+    expect(duplicateReorder.status).toBe(400)
+    expect(missingReorder.status).toBe(404)
+
+    const publicServices = await app.request('/api/public/services')
+    const publicServicesBody = await publicServices.json()
+    const adminServices = await app.request('/api/admin/services', {
+      headers: authHeaders(accessToken),
+    })
+    const adminServicesBody = await adminServices.json()
+
+    expect(publicServices.status).toBe(200)
+    expect(publicServicesBody.services.map((service: { title: string }) => service.title)).toEqual([
+      'Heating and warm floors',
+    ])
+    expect(adminServicesBody.services).toHaveLength(5)
+  })
+
   test('keeps project examples public listing separate from admin records', async () => {
     const accessToken = await loginAdmin('examples@example.com')
     const publicExample = await createProjectExample(accessToken, {
@@ -876,8 +1065,10 @@ maybeDescribe('engineering API integration', () => {
       },
       body: JSON.stringify(payload),
     })
+    const body = await response.json()
 
     expect(response.status).toBe(200)
+    return body.service
   }
 
   async function createProjectExample(accessToken: string, payload: Record<string, unknown>) {
@@ -915,6 +1106,13 @@ maybeDescribe('engineering API integration', () => {
 function authHeaders(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
+  }
+}
+
+function jsonAuthHeaders(accessToken: string) {
+  return {
+    ...authHeaders(accessToken),
+    'Content-Type': 'application/json',
   }
 }
 

@@ -14,6 +14,7 @@ import {
   type PublicCalculationRecord,
   type ServiceCreateRequest,
   type ServiceRecord,
+  type ServiceReorderRequest,
   type ServiceUpdateRequest,
 } from '@poznyak-engineering-calculator/contracts'
 import { createHash, randomBytes } from 'node:crypto'
@@ -67,6 +68,9 @@ export class EngineeringDataService {
       where: {
         isActive: true,
         isPublic: true,
+        pricingType: {
+          in: ['fixed', 'per_sqm'],
+        },
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     })
@@ -83,6 +87,7 @@ export class EngineeringDataService {
   }
 
   async createService(input: ServiceCreateRequest) {
+    assertServicePriceAllowed(input.pricingType, input.priceUsdCents)
     const service = await this.db.service.create({
       data: serviceCreateData(input),
     })
@@ -91,10 +96,27 @@ export class EngineeringDataService {
   }
 
   async updateService(id: string, input: ServiceUpdateRequest) {
+    const existing = await this.db.service
+      .findUniqueOrThrow({
+        where: { id },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Service not found')
+        }
+        throw error
+      })
+    const nextPricingType = input.pricingType ?? existing.pricingType
+    const nextPriceUsdCents =
+      input.priceUsdCents ?? safeNumberFromBigInt(existing.priceUsdCents, 'service price USD cents')
+
+    assertFormulaPricingTypeTransitionAllowed(existing.pricingType, nextPricingType)
+    assertServicePriceAllowed(nextPricingType, nextPriceUsdCents)
+
     const service = await this.db.service
       .update({
         where: { id },
-        data: serviceUpdateData(input),
+        data: serviceUpdateData(input, existing),
       })
       .catch((error: unknown) => {
         if (isPrismaNotFound(error)) {
@@ -104,6 +126,37 @@ export class EngineeringDataService {
       })
 
     return serviceToRecord(service)
+  }
+
+  async reorderServices(input: ServiceReorderRequest) {
+    const serviceIds = input.services.map((service) => service.id)
+    const existing = await this.db.service.findMany({
+      where: {
+        id: {
+          in: serviceIds,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+    const existingIds = new Set(existing.map((service) => service.id))
+    const missingIds = serviceIds.filter((id) => !existingIds.has(id))
+
+    if (missingIds.length > 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Service not found', { missingIds })
+    }
+
+    await this.db.$transaction(
+      input.services.map((service) =>
+        this.db.service.update({
+          where: { id: service.id },
+          data: { sortOrder: service.sortOrder },
+        }),
+      ),
+    )
+
+    return this.listAdminServices()
   }
 
   async setExchangeRate(input: ExchangeRateInput) {
@@ -501,12 +554,14 @@ function serviceCreateData(input: ServiceCreateRequest) {
     pricingRule: input.pricingRule === undefined ? undefined : toJson(input.pricingRule),
     formulaVersion: input.formulaVersion ?? null,
     isActive: input.isActive,
-    isPublic: input.isPublic,
+    isPublic: input.isActive ? input.isPublic : false,
     sortOrder: input.sortOrder,
   }
 }
 
-function serviceUpdateData(input: ServiceUpdateRequest) {
+function serviceUpdateData(input: ServiceUpdateRequest, existing: ServiceRow) {
+  const nextIsActive = input.isActive ?? existing.isActive
+
   return {
     title: input.title,
     description: input.description,
@@ -515,7 +570,7 @@ function serviceUpdateData(input: ServiceUpdateRequest) {
     pricingRule: input.pricingRule === undefined ? undefined : toJson(input.pricingRule),
     formulaVersion: input.formulaVersion,
     isActive: input.isActive,
-    isPublic: input.isPublic,
+    isPublic: nextIsActive ? input.isPublic : false,
     sortOrder: input.sortOrder,
   }
 }
@@ -724,6 +779,32 @@ function safeNumberFromBigInt(value: bigint, label: string) {
   }
 
   return Number(value)
+}
+
+function assertServicePriceAllowed(pricingType: ServiceRow['pricingType'], priceUsdCents: number) {
+  if ((pricingType === 'fixed' || pricingType === 'per_sqm') && priceUsdCents <= 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Fixed and per-square-meter services require a positive USD price', [
+      {
+        path: ['priceUsdCents'],
+        message: 'Fixed and per-square-meter services require a positive USD price',
+      },
+    ])
+  }
+}
+
+function assertFormulaPricingTypeTransitionAllowed(
+  currentPricingType: ServiceRow['pricingType'],
+  nextPricingType: ServiceRow['pricingType'],
+) {
+  if (currentPricingType === nextPricingType) return
+  if (currentPricingType !== 'formula' && nextPricingType !== 'formula') return
+
+  throw new AppError(400, 'VALIDATION_ERROR', 'Formula service editing is future scope', [
+    {
+      path: ['pricingType'],
+      message: 'Formula service editing is future scope',
+    },
+  ])
 }
 
 function normalizeLeadPhone(rawPhone: string) {

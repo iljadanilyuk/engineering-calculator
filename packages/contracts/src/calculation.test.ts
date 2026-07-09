@@ -10,6 +10,8 @@ import {
   leadSubmissionSchema,
   proposalShapeSchema,
   roundBynCentsToRubles,
+  serviceCreateRequestSchema,
+  serviceReorderRequestSchema,
 } from './index'
 
 const activeFixedService = {
@@ -573,5 +575,53 @@ describe('engineering calculation domain', () => {
       id: 'proposal_2',
       htmlSnapshot: '<main>Immutable offer</main>',
     })
+  })
+
+  test('validates admin service management contract shapes', () => {
+    expect(
+      serviceCreateRequestSchema.parse({
+        title: '  Boiler room  ',
+        pricingType: 'fixed',
+        priceUsdCents: 20_000,
+      }),
+    ).toMatchObject({
+      title: 'Boiler room',
+      pricingType: 'fixed',
+      priceUsdCents: 20_000,
+      isActive: true,
+      isPublic: true,
+      sortOrder: 0,
+    })
+
+    expect(() =>
+      serviceCreateRequestSchema.parse({
+        title: 'Zero price',
+        pricingType: 'per_sqm',
+        priceUsdCents: 0,
+      }),
+    ).toThrow()
+
+    expect(
+      serviceReorderRequestSchema.parse({
+        services: [
+          { id: '00000000-0000-7000-8000-000000000001', sortOrder: 20 },
+          { id: '00000000-0000-7000-8000-000000000002', sortOrder: 10 },
+        ],
+      }),
+    ).toEqual({
+      services: [
+        { id: '00000000-0000-7000-8000-000000000001', sortOrder: 20 },
+        { id: '00000000-0000-7000-8000-000000000002', sortOrder: 10 },
+      ],
+    })
+
+    expect(() =>
+      serviceReorderRequestSchema.parse({
+        services: [
+          { id: '00000000-0000-7000-8000-000000000001', sortOrder: 20 },
+          { id: '00000000-0000-7000-8000-000000000001', sortOrder: 10 },
+        ],
+      }),
+    ).toThrow()
   })
 })

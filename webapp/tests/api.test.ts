@@ -207,6 +207,103 @@ test('ApiClient preserves backend error status, code, and message', async () => 
   })
 })
 
+test('ApiClient sends authenticated service management requests', async () => {
+  const calls: Array<{
+    path: string
+    method: string | undefined
+    authorization: string | null
+    body: unknown
+  }> = []
+  const service = serviceRecord({
+    id: '00000000-0000-7000-8000-000000000001',
+    title: 'Heating design',
+    sortOrder: 10,
+  })
+
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname
+    const headers = new Headers(init?.headers)
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {}
+    calls.push({
+      path,
+      method: init?.method,
+      authorization: headers.get('Authorization'),
+      body: init?.body ? body : null,
+    })
+
+    if (path === '/api/admin/services' && init?.method === 'GET') {
+      return json({ services: [service] }, 200)
+    }
+
+    if (path === '/api/admin/services' && init.method === 'POST') {
+      return json({ service: serviceRecord({ ...body, id: service.id }) }, 201)
+    }
+
+    if (path === `/api/admin/services/${service.id}` && init.method === 'PATCH') {
+      return json({ service: serviceRecord({ ...service, ...body }) }, 200)
+    }
+
+    if (path === '/api/admin/services/reorder' && init.method === 'PATCH') {
+      const reorderBody = body as { services: Array<{ sortOrder: number }> }
+      return json({ services: [serviceRecord({ ...service, sortOrder: reorderBody.services[0].sortOrder })] }, 200)
+    }
+
+    if (path === '/api/admin/settings/exchange-rate') {
+      return json(
+        {
+          exchangeRate: {
+            source: 'manual',
+            usdToBynRate: '3.2000',
+            asOf: '2026-07-09T00:00:00.000Z',
+            usdToBynRateScale: 10000,
+            usdToBynRateScaled: 32000,
+          },
+          updatedAt: '2026-07-09T00:00:00.000Z',
+        },
+        200,
+      )
+    }
+
+    return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
+  }
+
+  const client = new ApiClient({
+    getAccessToken: () => 'admin-access-token',
+    setAccessToken: () => undefined,
+  })
+
+  await client.listServices()
+  await client.createService({
+    title: 'Heating design',
+    pricingType: 'per_sqm',
+    priceUsdCents: 250,
+    isPublic: true,
+    isActive: true,
+    sortOrder: 10,
+  })
+  await client.updateService(service.id, {
+    title: 'Heating and warm floors',
+    priceUsdCents: 275,
+  })
+  await client.reorderServices({
+    services: [{ id: service.id, sortOrder: 20 }],
+  })
+  await client.getExchangeRate()
+
+  expect(calls.map((call) => [call.path, call.method ?? 'GET'])).toEqual([
+    ['/api/admin/services', 'GET'],
+    ['/api/admin/services', 'POST'],
+    [`/api/admin/services/${service.id}`, 'PATCH'],
+    ['/api/admin/services/reorder', 'PATCH'],
+    ['/api/admin/settings/exchange-rate', 'GET'],
+  ])
+  expect(calls.every((call) => call.authorization === 'Bearer admin-access-token')).toBe(true)
+  expect(calls[2]?.body).toMatchObject({
+    title: 'Heating and warm floors',
+    priceUsdCents: 275,
+  })
+})
+
 test('ApiClient expireSession clears stale web session cookie through logout', async () => {
   let accessToken: string | null = 'stale-access-token'
   let authExpiredCalls = 0
@@ -296,4 +393,22 @@ function json(body: unknown, status: number) {
       'Content-Type': 'application/json',
     },
   })
+}
+
+function serviceRecord(overrides: Record<string, unknown>) {
+  return {
+    id: '00000000-0000-7000-8000-000000000001',
+    title: 'Service',
+    description: null,
+    pricingType: 'fixed',
+    priceUsdCents: 10_000,
+    pricingRule: null,
+    formulaVersion: null,
+    isActive: true,
+    isPublic: true,
+    sortOrder: 0,
+    createdAt: '2026-07-09T00:00:00.000Z',
+    updatedAt: '2026-07-09T00:00:00.000Z',
+    ...overrides,
+  }
 }

@@ -1,17 +1,29 @@
 import {
   apiErrorSchema,
   authResponseSchema,
+  exchangeRateSettingResponseSchema,
   loginRequestSchema,
   logoutRequestSchema,
   meResponseSchema,
   refreshRequestSchema,
   refreshResponseSchema,
+  serviceCreateRequestSchema,
+  serviceListResponseSchema,
+  serviceReorderRequestSchema,
+  serviceResponseSchema,
+  serviceUpdateRequestSchema,
   type AuthResponse,
+  type ExchangeRateSettingResponse,
   type LoginRequest,
   type LogoutRequest,
   type MeResponse,
   type RefreshRequest,
   type RefreshResponse,
+  type ServiceCreateRequest,
+  type ServiceListResponse,
+  type ServiceReorderRequest,
+  type ServiceResponse,
+  type ServiceUpdateRequest,
 } from '@poznyak-engineering-calculator/contracts'
 import type { z } from 'zod'
 
@@ -24,7 +36,7 @@ type ApiClientOptions = {
 }
 
 type RequestOptions = {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PATCH'
   body?: unknown
   auth?: boolean
   retryOnUnauthorized?: boolean
@@ -71,6 +83,45 @@ export class ApiClient {
 
   me(): Promise<MeResponse> {
     return this.request('/api/auth/me', meResponseSchema, {
+      auth: true,
+    })
+  }
+
+  listServices(): Promise<ServiceListResponse> {
+    return this.request('/api/admin/services', serviceListResponseSchema, {
+      auth: true,
+    })
+  }
+
+  createService(input: ServiceCreateRequest): Promise<ServiceResponse> {
+    const payload = serviceCreateRequestSchema.parse(input)
+    return this.request('/api/admin/services', serviceResponseSchema, {
+      method: 'POST',
+      body: payload,
+      auth: true,
+    })
+  }
+
+  updateService(id: string, input: ServiceUpdateRequest): Promise<ServiceResponse> {
+    const payload = serviceUpdateRequestSchema.parse(input)
+    return this.request(`/api/admin/services/${id}`, serviceResponseSchema, {
+      method: 'PATCH',
+      body: payload,
+      auth: true,
+    })
+  }
+
+  reorderServices(input: ServiceReorderRequest): Promise<ServiceListResponse> {
+    const payload = serviceReorderRequestSchema.parse(input)
+    return this.request('/api/admin/services/reorder', serviceListResponseSchema, {
+      method: 'PATCH',
+      body: payload,
+      auth: true,
+    })
+  }
+
+  getExchangeRate(): Promise<ExchangeRateSettingResponse> {
+    return this.request('/api/admin/settings/exchange-rate', exchangeRateSettingResponseSchema, {
       auth: true,
     })
   }

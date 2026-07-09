@@ -31,9 +31,8 @@ test('logs in to the protected admin shell and logs out', async ({ page }) => {
   await page.getByLabel('Password').fill(e2ePassword)
   await page.getByRole('button', { name: 'Login' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Web E2E Admin' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Services management' })).toBeVisible()
   await expect(page.getByText(e2eAdminEmail)).toBeVisible()
-  await expect(page.getByText('Admin shell')).toBeVisible()
   await expect
     .poll(async () =>
       (await page.context().cookies()).some(
@@ -54,7 +53,7 @@ test('logs in to the protected admin shell and logs out', async ({ page }) => {
 
   await expect((await refreshAfterReload).status()).toBe(200)
   await expect((await meAfterReload).status()).toBe(200)
-  await expect(page.getByRole('heading', { name: 'Web E2E Admin' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Services management' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
   await expect(

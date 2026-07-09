@@ -1,15 +1,10 @@
 import { Link, Outlet } from '@tanstack/react-router'
 
 import { AuthForm } from '@/components/AuthForm'
+import { ServicesManager } from '@/components/ServicesManager'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
@@ -129,38 +124,23 @@ function AdminShell() {
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
-      <div className="grid gap-3">
-        <Badge variant="outline" className="w-fit">
-          Admin shell
-        </Badge>
-        <Typography variant="h1">
-          {user.displayName ?? user.email}
-        </Typography>
-        <Typography tone="muted">{user.email}</Typography>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="grid gap-3">
+          <Badge variant="outline" className="w-fit">
+            Admin cabinet
+          </Badge>
+          <Typography variant="h1">
+            Services management
+          </Typography>
+          <Typography tone="muted">
+            Signed in as {user.displayName ?? user.email} · {user.email}
+          </Typography>
+        </div>
       </div>
 
       <Separator />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Services</CardTitle>
-            <CardDescription>Pricing and visibility controls are next.</CardDescription>
-          </CardHeader>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Leads</CardTitle>
-            <CardDescription>Submitted calculations will appear here.</CardDescription>
-          </CardHeader>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Settings</CardTitle>
-            <CardDescription>Exchange rate and contact settings.</CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
+      <ServicesManager />
     </section>
   )
 }

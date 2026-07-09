@@ -12,6 +12,7 @@ import {
   publicCalculationSaveResponseSchema,
   serviceCreateRequestSchema,
   serviceListResponseSchema,
+  serviceReorderRequestSchema,
   serviceResponseSchema,
   serviceUpdateRequestSchema,
 } from '@poznyak-engineering-calculator/contracts'
@@ -266,6 +267,40 @@ const updateServiceRoute = createRoute({
   },
 })
 
+const reorderServicesRoute = createRoute({
+  method: 'patch',
+  path: '/admin/services/reorder',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: serviceReorderRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: serviceListResponseSchema,
+        },
+      },
+      description: 'Reordered engineering services',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+    404: {
+      content: errorResponseContent,
+      description: 'Service not found',
+    },
+  },
+})
+
 const getCalculationRoute = createRoute({
   method: 'get',
   path: '/admin/calculations/{id}',
@@ -504,6 +539,12 @@ export function createEngineeringRoutes() {
     const engineering = c.get('engineeringDataService')
     const service = await engineering.createService(c.req.valid('json'))
     return c.json({ service }, 201)
+  })
+
+  protectedRoutes.openapi(reorderServicesRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const services = await engineering.reorderServices(c.req.valid('json'))
+    return c.json({ services }, 200)
   })
 
   protectedRoutes.openapi(updateServiceRoute, async (c) => {
