@@ -5,6 +5,8 @@ import { portFromUrl } from './url'
 
 export const repositoryRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 export const repositoryHash = createHash('sha256').update(repositoryRoot).digest('hex').slice(0, 12)
+export const e2eAdminEmail = 'web-e2e-admin@example.com'
+export const e2ePassword = 'password123'
 export const preferredPostgresTestPort =
   30000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 20000)
 export const preferredBackendPort =

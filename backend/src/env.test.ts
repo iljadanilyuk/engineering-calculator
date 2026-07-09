@@ -7,13 +7,16 @@ describe('loadEnv', () => {
     const env = loadEnv({
       DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/poznyak_engineering_calculator',
       JWT_SECRET: '12345678901234567890123456789012',
-      CORS_ORIGINS: 'http://localhost:5173, http://localhost:8081',
+      CORS_ORIGINS: 'http://localhost:4321',
+      AUTH_CORS_ORIGINS: 'http://localhost:5173, http://localhost:8081',
     })
 
     expect(env.PORT).toBe(3000)
     expect(env.ACCESS_TOKEN_TTL_SECONDS).toBe(900)
     expect(env.COOKIE_SECURE).toBe(false)
-    expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8081'])
+    expect(env.TRUST_PROXY_HEADERS).toBe(false)
+    expect(env.CORS_ORIGINS).toEqual(['http://localhost:4321'])
+    expect(env.AUTH_CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8081'])
     expect(env.SPACES_REGION).toBeUndefined()
     expect(env.SPACES_UPLOAD_MAX_BYTES).toBe(10 * 1024 * 1024)
     expect(env.SPACES_UPLOAD_URL_TTL_SECONDS).toBe(900)
@@ -68,8 +71,22 @@ describe('loadEnv', () => {
         JWT_SECRET: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         COOKIE_SECURE: 'true',
         CORS_ORIGINS: 'https://web.example.com',
+        AUTH_CORS_ORIGINS: 'https://admin.example.com',
       }),
     ).toThrow('JWT_SECRET')
+  })
+
+  test('requires secure cookies in production', () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/poznyak_engineering_calculator',
+        JWT_SECRET: '12345678901234567890123456789012',
+        COOKIE_SECURE: 'false',
+        CORS_ORIGINS: 'https://web.example.com',
+        AUTH_CORS_ORIGINS: 'https://admin.example.com',
+      }),
+    ).toThrow('COOKIE_SECURE')
   })
 
   test('rejects unsafe production CORS origins', () => {
@@ -104,7 +121,17 @@ describe('loadEnv', () => {
         ...baseEnv,
         COOKIE_SECURE: 'true',
         CORS_ORIGINS: 'http://web.example.com',
+        AUTH_CORS_ORIGINS: 'https://admin.example.com',
       }),
     ).toThrow('CORS_ORIGINS')
+
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        COOKIE_SECURE: 'true',
+        CORS_ORIGINS: 'https://web.example.com',
+        AUTH_CORS_ORIGINS: 'http://admin.example.com',
+      }),
+    ).toThrow('AUTH_CORS_ORIGINS')
   })
 })

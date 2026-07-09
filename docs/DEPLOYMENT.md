@@ -35,13 +35,15 @@ Do not store secrets in the repository. Minimum backend production env:
 ```bash
 DATABASE_URL=postgresql://...
 JWT_SECRET=<at-least-32-random-characters>
-CORS_ORIGINS=https://webapp.example.com,https://website.example.com
+CORS_ORIGINS=https://website.example.com
+AUTH_CORS_ORIGINS=https://webapp.example.com
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SECURE=true
+TRUST_PROXY_HEADERS=true
 ```
 
-`CORS_ORIGINS` must include every browser origin that calls the API with credentials. Use exact origins only, for example `https://webapp.example.com`; do not use wildcards, empty values, or paths.
+`CORS_ORIGINS` must include public browser origins that call non-credentialed API routes, for example the public website. `AUTH_CORS_ORIGINS` must include only admin webapp origins that are allowed to use credentialed auth/admin CORS and cookie refresh/logout. Use exact origins only; do not use wildcards, empty values, or paths.
 
 `JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
 
@@ -172,7 +174,8 @@ Backend service requirements:
 - Use `instance_size_slug: apps-s-1vcpu-1gb` and `instance_count: 1` as the default production API starter shape. This is one shared 1 vCPU / 1 GiB App Platform container, which is the $12/month single-container option as of May 2026.
 - Configure health checks to hit `/health`.
 - Set `COOKIE_SECURE=true` for HTTPS production traffic.
-- Set `CORS_ORIGINS` to the exact deployed browser origins. Do not use `*`, empty values, or URLs with paths.
+- Set `TRUST_PROXY_HEADERS=true` only when the backend is behind DigitalOcean App Platform or another trusted proxy; login throttling uses the proxy-normalized `X-Forwarded-For` client IP only in that mode.
+- Set `CORS_ORIGINS` to the exact public browser origins, and `AUTH_CORS_ORIGINS` to the exact admin webapp origins. Do not use `*`, empty values, or URLs with paths.
 - Attach DigitalOcean Managed PostgreSQL or provide its connection string as `DATABASE_URL`.
 - Add Spaces env only when the product uses storage. Leave Spaces env blank for projects without uploads.
 
@@ -185,6 +188,14 @@ bun run --cwd backend prisma:deploy
 ```
 
 Do not run `prisma migrate dev` in production and do not hand-write migration SQL.
+
+Create the first production admin from a protected one-off console/job after migrations by setting `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and optional `ADMIN_DISPLAY_NAME`, then running:
+
+```bash
+bun run --cwd backend admin:create
+```
+
+Do not expose a public signup path for admin creation. Remove the one-off `ADMIN_PASSWORD` value from the runtime environment after the admin is created.
 
 ## Backend Worker And Cron
 
@@ -285,12 +296,14 @@ DigitalOcean Managed PostgreSQL uses TLS. The backend normalizes `sslmode=requir
 Production browser auth runs cross-origin when backend and webapp use different `*.ondigitalocean.app` domains or custom domains. The required shape is:
 
 - backend cookies: `HttpOnly`, `Secure`, `SameSite=None`, scoped to `/api/auth`;
-- backend CORS: exact HTTPS origins only, `credentials: true`, no wildcard fallback;
-- cookie-based `refresh` and `logout`: require an `Origin` header that exactly matches `CORS_ORIGINS`;
+- backend public CORS: exact HTTPS `CORS_ORIGINS`, no credentials, no wildcard fallback;
+- backend auth/admin CORS: exact HTTPS `AUTH_CORS_ORIGINS`, `credentials: true`, no wildcard fallback;
+- cookie-based `refresh` and `logout`: require an `Origin` header that exactly matches `AUTH_CORS_ORIGINS`;
 - webapp API client: `credentials: include`;
 - webapp static build: concrete `VITE_API_URL` pointing at the backend origin.
 
-The backend env validator rejects empty/wildcard/path-bearing `CORS_ORIGINS`, rejects HTTP origins when `COOKIE_SECURE=true`, and rejects placeholder or obviously weak `JWT_SECRET` values in production-like runtimes.
+The backend env validator rejects empty/wildcard/path-bearing `CORS_ORIGINS` and `AUTH_CORS_ORIGINS`, rejects HTTP origins when `COOKIE_SECURE=true`, and rejects placeholder or obviously weak `JWT_SECRET` values in production-like runtimes.
+It also rejects `NODE_ENV=production` unless `COOKIE_SECURE=true`.
 
 ## Spaces Storage
 
@@ -339,7 +352,7 @@ After deployment:
 
 - verify `doctl apps spec validate <generated-spec.yaml>` passes for every generated spec before create/update;
 - verify `/health` on the backend public URL;
-- verify browser auth only from allowed `CORS_ORIGINS`;
+- verify public API CORS only from allowed `CORS_ORIGINS` and browser auth/admin CORS only from allowed `AUTH_CORS_ORIGINS`;
 - verify `webapp` route refreshes hit the React catch-all instead of a static 404;
 - verify `website` loads static assets from the deployed domain;
 - verify public media loads through the Spaces CDN domain when storage is active;
@@ -349,17 +362,17 @@ After deployment:
 ## Failure Modes This Template Guards Against
 
 - `GitHub user not authenticated`: App Platform GitHub integration was not connected or did not have repository access before `doctl apps create`.
-- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEBAPP_URL` must be concrete before deployment.
+- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `AUTH_CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEBAPP_URL` must be concrete before deployment.
 - Dirty or ambiguous release source: deployment tooling must stop when the worktree has uncommitted/untracked files, the checkout branch differs from `DO_GIT_BRANCH`, or the branch is not pushed and in sync.
 - Backend crash on startup: empty, placeholder, or obviously weak `JWT_SECRET` is rejected by env validation, so the spec generator must fail before App Platform deploys it.
-- Broken browser auth CORS: production CORS must use exact HTTPS origins, not wildcard or empty values.
+- Broken browser auth CORS: production public and auth CORS lists must use exact HTTPS origins, not wildcard or empty values; public website origins must not be auth-cookie origins unless they are also an admin webapp.
 - Webapp calling its own `/api/*`: missing `VITE_API_URL` at static build time makes the bundle use the wrong origin.
 - Empty website links: missing `PUBLIC_WEBAPP_URL` at build time can bake invalid public links into website output.
 - Stale remote build dependencies: static site build commands run `bun install --frozen-lockfile` before `bun run build:*`.
 - Frozen backend install failures: `backend/Dockerfile` copies all workspace manifests before `bun install --frozen-lockfile`.
 - Wrong App Platform port: backend specs set both `http_port: 8080` and `PORT=8080`.
 - Managed PostgreSQL TLS errors: `sslmode=require` URLs are normalized with `uselibpqcompat=true` for the Prisma PostgreSQL adapter.
-- Cross-origin cookie failures: production cookies use `Secure` and `SameSite=None`; webapp requests include credentials.
+- Cross-origin cookie failures: production cookies use `Secure` and `SameSite=None`; webapp requests include credentials and the webapp origin must be in `AUTH_CORS_ORIGINS`.
 - Missing monorepo files in Git: App Platform Static Sites build from the connected Git branch, not from local `dist`.
 
 ## Current Upstream Documentation

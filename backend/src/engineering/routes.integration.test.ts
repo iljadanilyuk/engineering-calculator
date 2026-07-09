@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 
 import { createApp } from '../app'
+import { hashPassword } from '../auth/passwords'
 import { createPrisma } from '../db'
 import type { AppEnv } from '../env'
 import {
@@ -20,9 +21,11 @@ maybeDescribe('engineering API integration', () => {
     DATABASE_URL: databaseUrl!,
     JWT_SECRET: '12345678901234567890123456789012',
     CORS_ORIGINS: ['http://localhost:5173'],
+    AUTH_CORS_ORIGINS: ['http://localhost:5173'],
     ACCESS_TOKEN_TTL_SECONDS: 60,
     REFRESH_TOKEN_TTL_DAYS: 30,
     COOKIE_SECURE: false,
+    TRUST_PROXY_HEADERS: true,
     SPACES_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
     SPACES_UPLOAD_URL_TTL_SECONDS: 900,
     SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
@@ -39,6 +42,7 @@ maybeDescribe('engineering API integration', () => {
     await prisma.service.deleteMany()
     await prisma.appSetting.deleteMany()
     await prisma.authSession.deleteMany()
+    await prisma.authRateLimitBucket.deleteMany()
     await prisma.user.deleteMany()
   })
 
@@ -47,7 +51,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('saves a normal fixed and per-square-meter calculation using backend totals only', async () => {
-    const accessToken = await registerAdmin()
+    const accessToken = await loginAdmin()
     await setExchangeRate(accessToken, '3.0000')
     const fixedService = await createService(accessToken, {
       title: 'Boiler room fixed package',
@@ -92,7 +96,7 @@ maybeDescribe('engineering API integration', () => {
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'pzk-happy-path-test',
-        'X-Real-IP': '203.0.113.10',
+        'X-Forwarded-For': '203.0.113.10',
       },
       body: JSON.stringify({
         idempotencyKey,
@@ -244,7 +248,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('rejects inactive, missing, and unsupported formula services before persistence', async () => {
-    const accessToken = await registerAdmin('unavailable@example.com')
+    const accessToken = await loginAdmin('unavailable@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const inactiveService = await createService(accessToken, {
       title: 'Inactive service',
@@ -336,7 +340,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('rejects invalid public lead fields before persistence', async () => {
-    const accessToken = await registerAdmin('invalid-lead@example.com')
+    const accessToken = await loginAdmin('invalid-lead@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Valid public service',
@@ -389,7 +393,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('returns existing calculation for idempotent and recent duplicate submissions', async () => {
-    const accessToken = await registerAdmin('duplicates@example.com')
+    const accessToken = await loginAdmin('duplicates@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Duplicate-safe service',
@@ -430,7 +434,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('does not expose a PDF link for legacy HTML-only proposal artifacts', async () => {
-    const accessToken = await registerAdmin('legacy-html-proposal@example.com')
+    const accessToken = await loginAdmin('legacy-html-proposal@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Legacy-safe service',
@@ -485,7 +489,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('rejects idempotency key replay with a different payload', async () => {
-    const accessToken = await registerAdmin('idempotency-mismatch@example.com')
+    const accessToken = await loginAdmin('idempotency-mismatch@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Idempotency service',
@@ -524,7 +528,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('keeps exact idempotent retries safe after the public throttle threshold', async () => {
-    const accessToken = await registerAdmin('idempotency-throttle@example.com')
+    const accessToken = await loginAdmin('idempotency-throttle@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Retry-safe service',
@@ -567,7 +571,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('rate limits mismatched idempotency-key replays instead of exempting them', async () => {
-    const accessToken = await registerAdmin('idempotency-mismatch-rate@example.com')
+    const accessToken = await loginAdmin('idempotency-mismatch-rate@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Mismatch limited service',
@@ -636,7 +640,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('protects public proposal and PDF routes with unguessable tokens', async () => {
-    const accessToken = await registerAdmin('proposal-token-access@example.com')
+    const accessToken = await loginAdmin('proposal-token-access@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Token gated service',
@@ -681,7 +685,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('keeps project examples public listing separate from admin records', async () => {
-    const accessToken = await registerAdmin('examples@example.com')
+    const accessToken = await loginAdmin('examples@example.com')
     const publicExample = await createProjectExample(accessToken, {
       title: 'ОВ example',
       fileUrl: 'https://example.com/ov.pdf',
@@ -708,7 +712,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('database migration constraints reject invalid statuses and incomplete proposal artifacts', async () => {
-    const accessToken = await registerAdmin('constraints@example.com')
+    const accessToken = await loginAdmin('constraints@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Constraint service',
@@ -770,7 +774,7 @@ maybeDescribe('engineering API integration', () => {
   })
 
   test('rate limits repeated public calculation submissions by client bucket', async () => {
-    const accessToken = await registerAdmin('rate-limit@example.com')
+    const accessToken = await loginAdmin('rate-limit@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
       title: 'Rate limited service',
@@ -805,8 +809,16 @@ maybeDescribe('engineering API integration', () => {
     expect(await prisma.calculation.count()).toBe(1)
   })
 
-  async function registerAdmin(email = 'admin@example.com') {
-    const register = await app.request('/api/auth/register', {
+  async function loginAdmin(email = 'admin@example.com') {
+    await prisma.user.create({
+      data: {
+        email,
+        passwordHash: await hashPassword('password123'),
+        role: 'admin',
+      },
+    })
+
+    const login = await app.request('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -817,9 +829,9 @@ maybeDescribe('engineering API integration', () => {
         password: 'password123',
       }),
     })
-    const body = await register.json()
+    const body = await login.json()
 
-    expect(register.status).toBe(201)
+    expect(login.status).toBe(200)
     return body.accessToken as string
   }
 

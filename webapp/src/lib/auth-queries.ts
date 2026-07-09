@@ -8,7 +8,6 @@ import type {
   AuthResponse,
   LoginRequest,
   MeResponse,
-  RegisterRequest,
 } from '@poznyak-engineering-calculator/contracts'
 
 import type { ApiClient } from './api'
@@ -24,7 +23,7 @@ type CurrentUserQueryOptions = {
 }
 
 type AuthMutationOptions = {
-  api: Pick<ApiClient, 'login' | 'logout' | 'register'>
+  api: Pick<ApiClient, 'login' | 'logout'>
   setAccessToken: (accessToken: string | null) => void
 }
 
@@ -33,17 +32,6 @@ export function useCurrentUserQuery({ api, enabled }: CurrentUserQueryOptions) {
     queryKey: authQueryKeys.me(),
     enabled,
     queryFn: () => api.me(),
-  })
-}
-
-export function useRegisterMutation({ api, setAccessToken }: AuthMutationOptions) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (input: RegisterRequest) => api.register(input),
-    onSuccess: (response) => {
-      applyAuthenticatedSession(queryClient, setAccessToken, response)
-    },
   })
 }
 

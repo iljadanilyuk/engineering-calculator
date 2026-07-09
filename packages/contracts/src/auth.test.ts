@@ -8,42 +8,18 @@ import {
   meResponseSchema,
   refreshRequestSchema,
   refreshResponseSchema,
-  registerRequestSchema,
 } from './index'
 
 const validUser = {
   id: 'user_1',
   email: 'user@example.com',
   displayName: null,
+  role: 'admin',
   createdAt: '2026-05-11T00:00:00.000Z',
-}
+} as const
 
 describe('auth contracts', () => {
-  test('normalizes registration and login input', () => {
-    expect(
-      registerRequestSchema.parse({
-        email: ' USER@Example.COM ',
-        password: 'password123',
-        displayName: ' Jane ',
-      }),
-    ).toEqual({
-      email: 'user@example.com',
-      password: 'password123',
-      displayName: 'Jane',
-    })
-
-    expect(
-      registerRequestSchema.parse({
-        email: 'user@example.com',
-        password: 'password123',
-        displayName: '',
-      }),
-    ).toEqual({
-      email: 'user@example.com',
-      password: 'password123',
-      displayName: undefined,
-    })
-
+  test('normalizes login input', () => {
     expect(
       loginRequestSchema.parse({
         email: ' USER@Example.COM ',
@@ -56,14 +32,6 @@ describe('auth contracts', () => {
   })
 
   test('rejects invalid auth request payloads', () => {
-    expect(() =>
-      registerRequestSchema.parse({
-        email: 'not-an-email',
-        password: 'short',
-        displayName: 'A',
-      }),
-    ).toThrow()
-
     expect(() =>
       loginRequestSchema.parse({
         email: 'user@example.com',

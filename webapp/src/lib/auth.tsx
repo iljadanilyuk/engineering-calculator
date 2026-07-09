@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import type { LoginRequest, RegisterRequest } from '@poznyak-engineering-calculator/contracts'
+import type { LoginRequest } from '@poznyak-engineering-calculator/contracts'
 import {
   type PropsWithChildren,
   useCallback,
@@ -14,7 +14,6 @@ import {
   useCurrentUserQuery,
   useLoginMutation,
   useLogoutMutation,
-  useRegisterMutation,
 } from './auth-queries'
 import { AuthContext, type AuthContextValue } from './auth-context'
 import { bootstrapAuthSession } from './bootstrap-auth'
@@ -72,16 +71,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     api,
     enabled: !isBootstrapping && Boolean(accessToken),
   })
-  const { mutateAsync: registerAsync } = useRegisterMutation({ api, setAccessToken })
   const { mutateAsync: loginAsync } = useLoginMutation({ api, setAccessToken })
   const { mutateAsync: logoutAsync } = useLogoutMutation({ api, setAccessToken })
-
-  const register = useCallback(
-    async (input: RegisterRequest) => {
-      await registerAsync(input)
-    },
-    [registerAsync],
-  )
 
   const login = useCallback(
     async (input: LoginRequest) => {
@@ -99,11 +90,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       user: meQuery.data?.user ?? null,
       isBootstrapping,
       isAuthenticated: Boolean(meQuery.data?.user),
-      register,
       login,
       logout,
     }),
-    [isBootstrapping, login, logout, meQuery.data?.user, register],
+    [isBootstrapping, login, logout, meQuery.data?.user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -36,6 +36,7 @@ test('ApiClient refreshes and retries authenticated requests with the new access
             id: 'user_1',
             email: 'user@example.com',
             displayName: null,
+            role: 'admin',
             createdAt: '2026-05-11T00:00:00.000Z',
           },
         },
@@ -85,6 +86,7 @@ test('ApiClient shares one refresh across concurrent unauthorized requests', asy
             id: 'user_1',
             email: 'user@example.com',
             displayName: null,
+            role: 'admin',
             createdAt: '2026-05-11T00:00:00.000Z',
           },
         },
@@ -173,15 +175,15 @@ test('ApiClient preserves backend error status, code, and message', async () => 
   globalThis.fetch = async (input) => {
     const path = new URL(String(input)).pathname
 
-    if (path === '/api/auth/register') {
+    if (path === '/api/auth/login') {
       return json(
         {
           error: {
-            code: 'CONFLICT',
-            message: 'User with this email already exists',
+            code: 'UNAUTHORIZED',
+            message: 'Invalid email or password',
           },
         },
-        409,
+        401,
       )
     }
 
@@ -194,14 +196,14 @@ test('ApiClient preserves backend error status, code, and message', async () => 
   })
 
   await expect(
-    client.register({
-      email: 'dupe@example.com',
-      password: 'password123',
+    client.login({
+      email: 'admin@example.com',
+      password: 'wrong-password',
     }),
   ).rejects.toMatchObject({
-    status: 409,
-    code: 'CONFLICT',
-    message: 'User with this email already exists',
+    status: 401,
+    code: 'UNAUTHORIZED',
+    message: 'Invalid email or password',
   })
 })
 

@@ -692,7 +692,7 @@ Verification:
 
 ### PZK-007 - Admin Auth
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -707,6 +707,29 @@ Acceptance criteria:
 - Session/cookie settings are safe behind the DigitalOcean HTTPS/proxy setup.
 - Logout and 401/403 states are implemented.
 - Verification covers login, logout, unauthorized access, and protected API access.
+
+Completion notes:
+
+- Added admin-only auth semantics with `UserRole` and default `member` users; admin login requires `role = admin`, and authenticated non-admin users receive `403` on admin-only surfaces.
+- Removed public browser self-registration. First admin setup is a one-off `bun run --cwd backend admin:create` command that hashes the password with Argon2id, refuses unsafe duplicate/admin creation by default, and is documented in README/deployment notes.
+- Protected existing `/api/admin/*` engineering routes with `requireAdmin` while keeping public calculator, lead submission, proposal HTML, and PDF routes public/token-protected as before.
+- Added DB-backed login brute-force protection with hashed email/client buckets and atomic PostgreSQL `INSERT ... ON CONFLICT DO UPDATE` increments for concurrent failures.
+- Split public CORS and credentialed admin/auth CORS: `CORS_ORIGINS` is public/non-credentialed, `AUTH_CORS_ORIGINS` is admin webapp only, and secure cookie refresh/logout trusts only `AUTH_CORS_ORIGINS`.
+- Added production safety validation for `COOKIE_SECURE=true`, proxy-header trust via `TRUST_PROXY_HEADERS`, secure auth no-store headers, logout, and clear 401/403/429 states.
+- Added a login-only webapp admin entry shell, session bootstrap, logout behavior, forbidden state, and Playwright coverage for anonymous, invalid, valid, reload, logout, and anonymous protected API behavior.
+
+Verification:
+
+- `bun run typecheck` passed.
+- `bun run test:contracts` passed: 16/16.
+- `bun run test:deploy` passed: 16/16.
+- `bun run test:backend:unit` passed: 30/30.
+- `bun run test:backend:integration` passed: 27/27 using Docker PostgreSQL test DB.
+- `bun run test:webapp` passed: 37/37.
+- `bun run build:webapp` passed; non-blocking Vite chunk-size warning only.
+- `bun run e2e:webapp` passed: 2/2, including protected admin shell/login/logout browser flow.
+- `bun run smoke:backend:docker` passed with production-like secure cookie, `AUTH_CORS_ORIGINS`, proxy headers, migrations, first-admin setup, `/health`, and DB-backed admin login smoke.
+- `git diff --check` passed; only expected Windows LF/CRLF warnings were printed.
 
 ### PZK-008 - Admin Services Management
 
@@ -947,3 +970,13 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Kant: 9.2/10; required PDF BYN line totals to reconcile with the headline total and automated coverage for that allocation. Changes incorporated.
 - 2026-07-09 PZK-006 focused post-task review round 2:
   - Reviewer Dirac: 9.6/10; confirmed legacy HTML-only handling, no-store proposal HTML headers, PDF BYN row allocation, and regression tests. No required changes remained; PZK-006 gate cleared.
+- 2026-07-09 PZK-007 pre-task review:
+  - Reviewer Copernicus: `gpt-5.5 xhigh`; flagged public template registration as the main admin-takeover risk, recommended a one-off first-admin script instead of browser bootstrap, role-backed admin authorization, preserving public calculator routes, and updating tests that relied on registration. Recommendations incorporated.
+- 2026-07-09 PZK-007 post-task review round 1:
+  - Reviewer Ramanujan: 8.8/10; required shared/trusted production login rate limiting, explicit proxy-header trust boundary, and `403` OpenAPI responses for admin routes. Changes incorporated.
+  - Reviewer Godel: 8.8/10; required production `COOKIE_SECURE=true` enforcement, direct `admin:create` safeguard tests, and `403` OpenAPI responses; recommended adding `ADMIN_CREATE_ALLOW_ADDITIONAL` to env examples. Changes incorporated.
+- 2026-07-09 PZK-007 focused post-task review round 2:
+  - Reviewer Averroes: 9.3/10; required atomic DB increments for login rate-limit buckets under concurrent failed-login bursts. Changes incorporated with PostgreSQL upsert and concurrent integration coverage.
+  - Reviewer Fermat: 8.0/10; required splitting public CORS from credentialed admin/auth CORS, hardening login client buckets against spoofed headers/User-Agent rotation, atomic limiter increments, and no-store auth error headers. Changes incorporated.
+- 2026-07-09 PZK-007 focused post-task review round 3:
+  - Reviewer Pasteur: 9.6/10; confirmed credentialed CORS is limited to `AUTH_CORS_ORIGINS`, public website origins cannot refresh admin cookies into readable access tokens, admin routes are protected, the raw SQL limiter is atomic, and docs/templates are consistent. No required changes remained; PZK-007 gate cleared. Non-blocking hardening noted: consider stripping `refreshToken` from JSON responses whenever an `Origin` header is present or cookie-backed auth is used.

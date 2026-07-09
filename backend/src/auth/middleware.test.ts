@@ -6,16 +6,18 @@ import { AppError, handleError } from '../http/errors'
 import type { AuthenticatedHonoEnv } from '../http/context'
 import type { StorageService } from '../storage/service'
 import type { AuthService } from './service'
-import { requireAuth } from './middleware'
+import { requireAdmin, requireAuth } from './middleware'
 
 const env: AppEnv = {
   PORT: 3000,
   DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/poznyak_engineering_calculator',
   JWT_SECRET: 'test-route-secret-at-least-thirty-two-chars-123',
   CORS_ORIGINS: ['https://web.example.com'],
+  AUTH_CORS_ORIGINS: ['https://web.example.com'],
   ACCESS_TOKEN_TTL_SECONDS: 60,
   REFRESH_TOKEN_TTL_DAYS: 30,
   COOKIE_SECURE: true,
+  TRUST_PROXY_HEADERS: true,
   SPACES_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
   SPACES_UPLOAD_URL_TTL_SECONDS: 900,
   SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
@@ -67,6 +69,7 @@ function createProtectedTestApp() {
         id: 'user-1',
         email: 'user@example.com',
         displayName: null,
+        role: 'admin',
         createdAt: '2026-01-01T00:00:00.000Z',
         sessionId: 'session-1',
       }
@@ -89,6 +92,66 @@ function createProtectedTestApp() {
       userId: user.id,
     })
   })
+  app.onError(handleError)
+
+  return app
+}
+
+describe('requireAdmin middleware', () => {
+  test('rejects authenticated non-admin users with forbidden', async () => {
+    const app = createAdminTestApp('member')
+
+    const response = await app.request('/protected', {
+      headers: {
+        Authorization: 'Bearer valid-token',
+      },
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.error.code).toBe('FORBIDDEN')
+  })
+
+  test('allows authenticated admin users', async () => {
+    const app = createAdminTestApp('admin')
+
+    const response = await app.request('/protected', {
+      headers: {
+        Authorization: 'Bearer valid-token',
+      },
+    })
+
+    expect(response.status).toBe(200)
+  })
+})
+
+function createAdminTestApp(role: 'admin' | 'member') {
+  const app = new Hono<AuthenticatedHonoEnv>()
+  const authService = {
+    async authenticateAccessToken(accessToken: string | undefined) {
+      if (accessToken !== 'valid-token') {
+        throw new AppError(401, 'UNAUTHORIZED', 'Access token is invalid or expired')
+      }
+
+      return {
+        id: 'user-1',
+        email: 'user@example.com',
+        displayName: null,
+        role,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        sessionId: 'session-1',
+      }
+    },
+  } as AuthService
+
+  app.use('*', async (c, next) => {
+    c.set('authService', authService)
+    c.set('env', env)
+    c.set('storageService', null as StorageService | null)
+    await next()
+  })
+  app.use('*', requireAdmin)
+  app.get('/protected', (c) => c.json({ ok: true, role: c.var.user.role }))
   app.onError(handleError)
 
   return app

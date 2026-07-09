@@ -26,23 +26,28 @@ const stringWithDefault = (defaultValue: string) =>
     return trimmed === '' ? undefined : trimmed
   }, z.string().min(1).default(defaultValue))
 
-const envSchema = z.object({
-  NODE_ENV: z.string().optional(),
-  PORT: z.coerce.number().int().positive().default(3000),
-  DATABASE_URL: z.string().min(1),
-  JWT_SECRET: z.string().min(32),
-  CORS_ORIGINS: z
+const originListSchema = (defaultValue: string) =>
+  z
     .string()
-    .default('http://localhost:5173,http://localhost:8081,http://localhost:19006')
+    .default(defaultValue)
     .transform((value) =>
       value
         .split(',')
         .map((origin) => origin.trim())
         .filter(Boolean),
-    ),
+    )
+
+const envSchema = z.object({
+  NODE_ENV: z.string().optional(),
+  PORT: z.coerce.number().int().positive().default(3000),
+  DATABASE_URL: z.string().min(1),
+  JWT_SECRET: z.string().min(32),
+  CORS_ORIGINS: originListSchema('http://localhost:4321'),
+  AUTH_CORS_ORIGINS: originListSchema('http://localhost:5173,http://localhost:8081,http://localhost:19006'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   COOKIE_SECURE: booleanStringSchema,
+  TRUST_PROXY_HEADERS: booleanStringSchema,
   SPACES_REGION: optionalStringSchema,
   SPACES_BUCKET: optionalStringSchema,
   SPACES_ENDPOINT: optionalUrlSchema,
@@ -56,6 +61,7 @@ const envSchema = z.object({
   PDF_CHROMIUM_EXECUTABLE_PATH: optionalStringSchema,
 }).superRefine((env, ctx) => {
   validateJwtSecret(env, ctx)
+  validateProductionCookieSecurity(env, ctx)
   validateCorsOrigins(env, ctx)
   validateStorageEnv(env, ctx)
 })
@@ -91,22 +97,42 @@ function isWeakJwtSecret(secret: string) {
   )
 }
 
+function validateProductionCookieSecurity(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  if (env.NODE_ENV !== 'production' || env.COOKIE_SECURE) return
+
+  ctx.addIssue({
+    code: 'custom',
+    path: ['COOKIE_SECURE'],
+    message: 'COOKIE_SECURE must be true when NODE_ENV=production',
+  })
+}
+
 function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
-  if (env.CORS_ORIGINS.length === 0) {
+  validateOriginList('CORS_ORIGINS', env.CORS_ORIGINS, env, ctx)
+  validateOriginList('AUTH_CORS_ORIGINS', env.AUTH_CORS_ORIGINS, env, ctx)
+}
+
+function validateOriginList(
+  key: 'CORS_ORIGINS' | 'AUTH_CORS_ORIGINS',
+  origins: string[],
+  env: z.infer<typeof envSchema>,
+  ctx: z.RefinementCtx,
+) {
+  if (origins.length === 0) {
     ctx.addIssue({
       code: 'custom',
-      path: ['CORS_ORIGINS'],
-      message: 'CORS_ORIGINS must contain at least one allowed browser origin',
+      path: [key],
+      message: `${key} must contain at least one allowed browser origin`,
     })
     return
   }
 
-  for (const origin of env.CORS_ORIGINS) {
+  for (const origin of origins) {
     if (origin === '*') {
       ctx.addIssue({
         code: 'custom',
-        path: ['CORS_ORIGINS'],
-        message: 'CORS_ORIGINS must not use wildcard origins when credentials are enabled',
+        path: [key],
+        message: `${key} must not use wildcard origins`,
       })
       continue
     }
@@ -117,8 +143,8 @@ function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCt
     } catch {
       ctx.addIssue({
         code: 'custom',
-        path: ['CORS_ORIGINS'],
-        message: `CORS_ORIGINS contains an invalid URL: ${origin}`,
+        path: [key],
+        message: `${key} contains an invalid URL: ${origin}`,
       })
       continue
     }
@@ -126,24 +152,24 @@ function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCt
     if (!['http:', 'https:'].includes(url.protocol)) {
       ctx.addIssue({
         code: 'custom',
-        path: ['CORS_ORIGINS'],
-        message: `CORS_ORIGINS must use http or https origins: ${origin}`,
+        path: [key],
+        message: `${key} must use http or https origins: ${origin}`,
       })
     }
 
     if (url.origin !== origin) {
       ctx.addIssue({
         code: 'custom',
-        path: ['CORS_ORIGINS'],
-        message: `CORS_ORIGINS must contain origins only, not paths: ${origin}`,
+        path: [key],
+        message: `${key} must contain origins only, not paths: ${origin}`,
       })
     }
 
     if (env.COOKIE_SECURE && url.protocol !== 'https:') {
       ctx.addIssue({
         code: 'custom',
-        path: ['CORS_ORIGINS'],
-        message: `CORS_ORIGINS must use HTTPS when COOKIE_SECURE=true: ${origin}`,
+        path: [key],
+        message: `${key} must use HTTPS when COOKIE_SECURE=true: ${origin}`,
       })
     }
   }

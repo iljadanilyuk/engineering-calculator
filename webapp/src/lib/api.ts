@@ -6,14 +6,12 @@ import {
   meResponseSchema,
   refreshRequestSchema,
   refreshResponseSchema,
-  registerRequestSchema,
   type AuthResponse,
   type LoginRequest,
   type LogoutRequest,
   type MeResponse,
   type RefreshRequest,
   type RefreshResponse,
-  type RegisterRequest,
 } from '@poznyak-engineering-calculator/contracts'
 import type { z } from 'zod'
 
@@ -50,15 +48,6 @@ export class ApiClient {
 
   constructor(options: ApiClientOptions) {
     this.options = options
-  }
-
-  register(input: RegisterRequest): Promise<AuthResponse> {
-    const payload = registerRequestSchema.parse(input)
-    return this.request('/api/auth/register', authResponseSchema, {
-      method: 'POST',
-      body: payload,
-      auth: false,
-    })
   }
 
   login(input: LoginRequest): Promise<AuthResponse> {

@@ -291,9 +291,11 @@ function assertSafeProductionEnv(outputName, contents) {
     assertStrongJwtSecret(jwtSecret)
   }
 
-  const corsOrigins = findEnvValue(contents, 'CORS_ORIGINS')
-  if (corsOrigins !== undefined) {
-    assertCorsOrigins(outputName, corsOrigins)
+  for (const key of ['CORS_ORIGINS', 'AUTH_CORS_ORIGINS']) {
+    const corsOrigins = findEnvValue(contents, key)
+    if (corsOrigins !== undefined) {
+      assertCorsOrigins(outputName, key, corsOrigins)
+    }
   }
 
   for (const key of ['VITE_API_URL', 'PUBLIC_API_URL', 'PUBLIC_WEBAPP_URL']) {
@@ -320,24 +322,24 @@ function findEnvValue(contents, key) {
   return undefined
 }
 
-function assertCorsOrigins(outputName, value) {
+function assertCorsOrigins(outputName, key, value) {
   const origins = value
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean)
 
   if (origins.length === 0) {
-    throw new Error(`${outputName} has empty CORS_ORIGINS`)
+    throw new Error(`${outputName} has empty ${key}`)
   }
 
   for (const origin of origins) {
     if (origin === '*') {
-      throw new Error(`${outputName} must not use wildcard CORS_ORIGINS in production`)
+      throw new Error(`${outputName} must not use wildcard ${key} in production`)
     }
 
-    const normalized = normalizeHttpsUrl('CORS_ORIGINS', origin)
+    const normalized = normalizeHttpsUrl(key, origin)
     if (normalized !== new URL(normalized).origin) {
-      throw new Error(`${outputName} CORS_ORIGINS must contain origins only, not paths: ${origin}`)
+      throw new Error(`${outputName} ${key} must contain origins only, not paths: ${origin}`)
     }
   }
 }

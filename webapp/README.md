@@ -53,7 +53,7 @@ Production deployment for the browser app uses DigitalOcean App Platform Static 
 
 ## Practice
 
-Use TanStack Query for server state, TanStack Mutation for API writes, TanStack Form for forms, and shared Zod schemas from `packages/contracts` for validation. The access token lives only in browser memory; refresh uses the HttpOnly cookie set by the backend. `src/lib/auth-queries.ts`, `src/lib/auth.tsx`, and `src/components/AuthForm.tsx` are the baseline pattern: query `/api/auth/me`, mutate register/login/logout, keep the current-user cache in sync, and validate form submissions with shared contracts before calling the API client.
+Use TanStack Query for server state, TanStack Mutation for API writes, TanStack Form for forms, and shared Zod schemas from `packages/contracts` for validation. The access token lives only in browser memory; refresh uses the HttpOnly cookie set by the backend. `src/lib/auth-queries.ts`, `src/lib/auth.tsx`, and `src/components/AuthForm.tsx` are the baseline pattern: query `/api/auth/me`, mutate login/logout, keep the current-user cache in sync, and validate form submissions with shared contracts before calling the API client. First-admin creation is a backend one-off command, not a browser registration flow.
 
 Keep the API client responsible for base URLs, auth headers, refresh/retry, and error parsing. Do not duplicate API shapes or auth state in page components.
 
@@ -74,9 +74,9 @@ Use the local `shadcn` devDependency pinned in `webapp/package.json` and `bun.lo
 
 ## E2E
 
-The Playwright smoke test lives in `e2e/specs/auth.spec.ts` and verifies client-side auth validation visibility, register/login mode switching, register, refresh after reload, protected UI, logout, invalid login error rendering, and a successful login after logout.
+The Playwright smoke test lives in `e2e/specs/auth.spec.ts` and verifies an anonymous admin route showing login, anonymous protected API rejection, client-side login validation visibility, invalid login error rendering, successful admin login, refresh after reload, protected admin shell, and logout returning to login.
 
-The run starts Docker Compose `postgres_test`, applies migrations to `poznyak_engineering_calculator_test`, starts the backend with `TEST_DATABASE_URL` as its `DATABASE_URL`, starts Vite, and removes the test database volume after the run by default.
+The run starts Docker Compose `postgres_test`, applies migrations to `poznyak_engineering_calculator_test`, creates a test admin through `bun run --cwd backend admin:create`, starts the backend with `TEST_DATABASE_URL` as its `DATABASE_URL`, starts Vite, and removes the test database volume after the run by default.
 
 First run:
 

@@ -84,7 +84,12 @@ describe('prepare-do-specs', () => {
 
     const spec = normalizeNewlines(readFileSync(backendSpecPath, 'utf8'));
     expect(spec).toContain('workers:');
-    expect(spec).toContain('value: "https://webapp.example.com,https://website.example.com"');
+    expect(spec).toContain('key: CORS_ORIGINS');
+    expect(spec).toContain('value: "https://website.example.com"');
+    expect(spec).toContain('key: AUTH_CORS_ORIGINS');
+    expect(spec).toContain('value: "https://webapp.example.com"');
+    expect(spec).toContain('key: TRUST_PROXY_HEADERS');
+    expect(spec).toContain('value: "true"');
     expect(spec).toContain('  - name: notifications');
     expect(spec).toContain('run_command: "bun run start:worker:notifications"');
     expect(spec).toContain('kind: SCHEDULED');

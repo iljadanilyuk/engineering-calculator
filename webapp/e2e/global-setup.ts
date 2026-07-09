@@ -3,6 +3,8 @@ import {
   composeEnv,
   composeProjectName,
   defaultDatabaseUrl,
+  e2eAdminEmail,
+  e2ePassword,
   repositoryRoot,
 } from './env'
 
@@ -66,4 +68,16 @@ export default async function globalSetup() {
   }
 
   run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], env)
+  run('bun', ['run', '--cwd', 'backend', 'admin:create'], {
+    ...env,
+    JWT_SECRET: 'web-e2e-secret-at-least-thirty-two-characters',
+    CORS_ORIGINS: process.env.E2E_WEB_URL ?? 'http://localhost:5173',
+    AUTH_CORS_ORIGINS: process.env.E2E_WEB_URL ?? 'http://localhost:5173',
+    COOKIE_SECURE: 'false',
+    ADMIN_EMAIL: e2eAdminEmail,
+    ADMIN_PASSWORD: e2ePassword,
+    ADMIN_DISPLAY_NAME: 'Web E2E Admin',
+    ADMIN_CREATE_SKIP_IF_EXISTS: 'true',
+    ADMIN_CREATE_ALLOW_ADDITIONAL: 'true',
+  })
 }

@@ -30,6 +30,7 @@ bun run --cwd backend test:integration
 bun run --cwd backend start:api
 bun run --cwd backend start:worker
 bun run --cwd backend start:cron -- noop
+bun run --cwd backend admin:create
 bun run --cwd backend smoke:docker
 bun run --cwd backend prisma:validate
 bun run --cwd backend prisma:generate
@@ -53,7 +54,19 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `JWT_SECRET` must be at least 32 characters. For production, generate it with `openssl rand -hex 32`; this creates 32 random bytes encoded as 64 hex characters. Do not use the `.env.example` placeholder, repeated characters, or human phrases.
 
-`COOKIE_SECURE=false` is appropriate for local HTTP; production should use `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, or path-bearing CORS origins are invalid. Cookie-backed `refresh` and `logout` requests also require a trusted `Origin` in production cookie mode.
+`COOKIE_SECURE=false` is appropriate for local HTTP; production must use `COOKIE_SECURE=true` with exact HTTPS origins. `CORS_ORIGINS` is for public, non-credentialed browser API origins such as the public website. `AUTH_CORS_ORIGINS` is for admin webapp origins that may use credentialed auth/admin CORS and cookie-backed refresh/logout. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, or path-bearing origins are invalid. Cookie-backed `refresh` and `logout` requests also require a trusted `Origin` in `AUTH_CORS_ORIGINS` in production cookie mode. Set `TRUST_PROXY_HEADERS=true` only when the backend is behind a trusted proxy such as DigitalOcean App Platform so login throttling can use the proxy-normalized `X-Forwarded-For` client IP; leave it `false` for direct local backend access.
+
+Create the first administrator with a one-off command after migrations:
+
+```powershell
+$env:ADMIN_EMAIL="owner@example.com"
+$env:ADMIN_PASSWORD="<strong local password>"
+$env:ADMIN_DISPLAY_NAME="Owner"
+bun run --cwd backend admin:create
+Remove-Item Env:ADMIN_PASSWORD
+```
+
+The command hashes the password with Argon2id before saving it, creates the user with role `admin`, and refuses to create or overwrite another admin by default. Use `ADMIN_CREATE_SKIP_IF_EXISTS=true` and `ADMIN_CREATE_ALLOW_ADDITIONAL=true` only for local/test automation that reruns against the same `_test` database. Public browser self-registration is disabled; ordinary users default to role `member` and cannot access `/api/admin/*`.
 
 DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete Spaces group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
@@ -75,7 +88,6 @@ Production deployment for the backend uses DigitalOcean App Platform with Digita
 
 ## Auth API
 
-- `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `GET /api/auth/me`
@@ -83,7 +95,7 @@ Production deployment for the backend uses DigitalOcean App Platform with Digita
 - `GET /openapi.json`
 - `GET /health`
 
-Passwords are hashed through `Bun.password` with Argon2id. Access tokens are short-lived JWTs through `jose`. Refresh tokens are opaque random tokens; only a SHA-256 hash is stored in the database. Refresh rotates the token and revokes the previous session.
+Passwords are hashed through `Bun.password` with Argon2id. Admin login accepts email/password only for users with role `admin`; authenticated non-admin users receive `403` on admin-only surfaces. Login applies DB-backed brute-force protection by normalized email and proxy-normalized client IP bucket; the bucket keys are SHA-256 hashes, not plaintext email/IP values. Access tokens are short-lived JWTs through `jose`. Refresh tokens are opaque random tokens; only a SHA-256 hash is stored in the database. Refresh rotates the token and revokes the previous session.
 
 ## Architecture
 

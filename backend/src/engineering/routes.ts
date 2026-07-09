@@ -18,7 +18,8 @@ import {
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import { z } from 'zod'
 
-import { requireAuth } from '../auth/middleware'
+import { requireAdmin } from '../auth/middleware'
+import type { AppEnv } from '../env'
 import type { AppHonoEnv, AuthenticatedHonoEnv } from '../http/context'
 import { AppError, validationErrorHook } from '../http/errors'
 
@@ -26,6 +27,16 @@ const errorResponseContent = {
   'application/json': {
     schema: apiErrorSchema,
   },
+}
+
+const unauthorizedResponse = {
+  content: errorResponseContent,
+  description: 'Unauthorized',
+}
+
+const forbiddenResponse = {
+  content: errorResponseContent,
+  description: 'Admin access is required',
 }
 
 const idParamsSchema = z.object({
@@ -185,10 +196,8 @@ const adminServicesRoute = createRoute({
       },
       description: 'All engineering services',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
   },
 })
 
@@ -217,10 +226,8 @@ const createServiceRoute = createRoute({
       content: errorResponseContent,
       description: 'Invalid payload',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
   },
 })
 
@@ -250,10 +257,8 @@ const updateServiceRoute = createRoute({
       content: errorResponseContent,
       description: 'Invalid payload',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
     404: {
       content: errorResponseContent,
       description: 'Service not found',
@@ -276,10 +281,8 @@ const getCalculationRoute = createRoute({
       },
       description: 'Saved calculation with immutable snapshots',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
     404: {
       content: errorResponseContent,
       description: 'Calculation not found',
@@ -299,10 +302,8 @@ const getExchangeRateRoute = createRoute({
       },
       description: 'Current USD/BYN exchange-rate setting',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
     409: {
       content: errorResponseContent,
       description: 'Exchange rate is not configured',
@@ -335,10 +336,8 @@ const setExchangeRateRoute = createRoute({
       content: errorResponseContent,
       description: 'Invalid payload',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
   },
 })
 
@@ -354,10 +353,8 @@ const adminProjectExamplesRoute = createRoute({
       },
       description: 'All project examples',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
   },
 })
 
@@ -386,10 +383,8 @@ const createProjectExampleRoute = createRoute({
       content: errorResponseContent,
       description: 'Invalid payload',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
   },
 })
 
@@ -419,10 +414,8 @@ const updateProjectExampleRoute = createRoute({
       content: errorResponseContent,
       description: 'Invalid payload',
     },
-    401: {
-      content: errorResponseContent,
-      description: 'Unauthorized',
-    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
     404: {
       content: errorResponseContent,
       description: 'Project example not found',
@@ -466,14 +459,15 @@ export function createEngineeringRoutes() {
   routes.openapi(saveCalculationRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
     const payload = c.req.valid('json')
+    const env = c.get('env')
     const metadata = {
       referrer: c.req.header('referer'),
-      ipAddress: publicSubmitIpAddress(c),
+      ipAddress: publicSubmitIpAddress(c, env),
       userAgent: c.req.header('user-agent'),
     }
 
     if (!(await engineering.isExactIdempotencyReplay(payload, metadata))) {
-      enforcePublicSubmitRateLimit(c)
+      enforcePublicSubmitRateLimit(c, env)
     }
 
     const result = await engineering.saveCalculation(payload, metadata)
@@ -499,7 +493,7 @@ export function createEngineeringRoutes() {
     return c.body(proposal.bytes, 200)
   })
 
-  protectedRoutes.use('/admin/*', requireAuth)
+  protectedRoutes.use('/admin/*', requireAdmin)
 
   protectedRoutes.openapi(adminServicesRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
@@ -567,10 +561,10 @@ function createPublicSubmitRateLimiter() {
   const maxSubmissionsPerWindow = 20
   const maxBuckets = 10_000
 
-  return (c: { req: { header: (name: string) => string | undefined } }) => {
+  return (c: { req: { header: (name: string) => string | undefined } }, env: AppEnv) => {
     const now = Date.now()
     cleanupRateLimitBuckets(buckets, now, windowMs, maxBuckets)
-    const key = publicSubmitClientKey(c)
+    const key = publicSubmitClientKey(c, env)
     const existing = buckets.get(key)
     const bucket =
       existing && now - existing.windowStartedAt < windowMs
@@ -586,19 +580,27 @@ function createPublicSubmitRateLimiter() {
   }
 }
 
-function publicSubmitClientKey(c: { req: { header: (name: string) => string | undefined } }) {
-  const ipAddress = publicSubmitIpAddress(c)
+function publicSubmitClientKey(
+  c: { req: { header: (name: string) => string | undefined } },
+  env: AppEnv,
+) {
+  const ipAddress = publicSubmitIpAddress(c, env)
   const userAgent = c.req.header('user-agent')?.slice(0, 120) ?? 'unknown-agent'
   return `${ipAddress || 'anonymous'}:${userAgent}`
 }
 
-function publicSubmitIpAddress(c: { req: { header: (name: string) => string | undefined } }) {
-  return (
-    c.req.header('cf-connecting-ip')?.trim() ||
-    c.req.header('x-real-ip')?.trim() ||
-    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-    undefined
-  )
+function publicSubmitIpAddress(
+  c: { req: { header: (name: string) => string | undefined } },
+  env: AppEnv,
+) {
+  if (!env.TRUST_PROXY_HEADERS) return undefined
+
+  const forwardedFor = c.req.header('x-forwarded-for')
+    ?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  return forwardedFor?.at(-1)
 }
 
 function cleanupRateLimitBuckets(

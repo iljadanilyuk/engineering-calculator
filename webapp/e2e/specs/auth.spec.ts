@@ -1,33 +1,39 @@
-import { e2ePassword, expect, test, uniqueEmail } from '../helpers/test'
+import { e2eAdminEmail, e2ePassword, expect, test } from '../helpers/test'
 
-test('registers, restores the session, opens protected UI, and logs out', async ({ page }) => {
-  const email = uniqueEmail()
-  const displayName = 'Web E2E User'
+test('logs in to the protected admin shell and logs out', async ({ page }) => {
+  const backendUrl = process.env.E2E_BACKEND_URL
+  if (!backendUrl) throw new Error('E2E_BACKEND_URL is required')
 
-  await page.goto('/')
+  await page.goto('/app')
 
   await expect(
     page.getByRole('heading', { name: 'Login for calculator administration.' }),
   ).toBeVisible()
-  await page.getByRole('button', { name: 'Create account' }).click()
+
+  const anonymousAdminApiStatus = await page.evaluate(async (backendUrl) => {
+    const response = await fetch(`${backendUrl}/api/admin/services`, {
+      credentials: 'include',
+    })
+
+    return response.status
+  }, backendUrl)
+  expect(anonymousAdminApiStatus).toBe(401)
+
+  await page.getByRole('button', { name: 'Login' }).click()
   await expect(page.getByText('Invalid email address')).toBeVisible()
   await expect(page.getByText('Password must be at least 8 characters')).toBeVisible()
 
-  await page.getByLabel('Name').fill('A')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill(e2ePassword)
-  await page.getByRole('tab', { name: 'Login' }).click()
-  await expect(page.getByLabel('Name')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Login' })).toBeEnabled()
+  await page.getByLabel('Email').fill(e2eAdminEmail)
+  await page.getByLabel('Password').fill('wrong-password')
+  await page.getByRole('button', { name: 'Login' }).click()
+  await expect(page.getByText('Invalid email or password')).toBeVisible()
 
-  await page.getByRole('tab', { name: 'Register' }).click()
-  await page.getByLabel('Name').fill(displayName)
-  await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(e2ePassword)
-  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByRole('button', { name: 'Login' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Session is active' })).toBeVisible()
-  await expect(page.getByText(email)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Web E2E Admin' })).toBeVisible()
+  await expect(page.getByText(e2eAdminEmail)).toBeVisible()
+  await expect(page.getByText('Admin shell')).toBeVisible()
   await expect
     .poll(async () =>
       (await page.context().cookies()).some(
@@ -48,25 +54,10 @@ test('registers, restores the session, opens protected UI, and logs out', async 
 
   await expect((await refreshAfterReload).status()).toBe(200)
   await expect((await meAfterReload).status()).toBe(200)
-  await expect(page.getByRole('heading', { name: 'Session is active' })).toBeVisible()
-
-  await page.getByRole('link', { name: 'Open app' }).click()
-  await expect(page.getByRole('heading', { name: displayName })).toBeVisible()
-  await expect(page.getByText(email)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Web E2E Admin' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
-  await expect(page.getByRole('heading', { name: 'Login required' })).toBeVisible()
-
-  await page.getByRole('link', { name: 'Go to auth' }).click()
-  await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
-
-  await page.getByRole('tab', { name: 'Login' }).click()
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill('wrong-password')
-  await page.getByRole('button', { name: 'Login' }).click()
-  await expect(page.getByText('Invalid email or password')).toBeVisible()
-
-  await page.getByLabel('Password').fill(e2ePassword)
-  await page.getByRole('button', { name: 'Login' }).click()
-  await expect(page.getByRole('heading', { name: 'Session is active' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Login for calculator administration.' }),
+  ).toBeVisible()
 })

@@ -10,6 +10,7 @@
     "start:worker": "bun run prisma:generate && bun src/worker.ts",
     "start:cron": "bun run prisma:generate && bun src/cron.ts",
     "start:raw": "bun src/index.ts",
+    "admin:create": "bun run prisma:generate && bun scripts/create-admin.ts",
     "build": "bun run prisma:generate && tsc --noEmit",
     "typecheck": "bun run prisma:generate && tsc --noEmit",
     "test": "bun run test:unit && bun run test:integration",

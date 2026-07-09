@@ -48,6 +48,7 @@ const backendEnv = normalizeEnv({
   JWT_SECRET:
     process.env.JWT_SECRET ?? 'web-e2e-secret-at-least-thirty-two-characters',
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
+  AUTH_CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
   COOKIE_SECURE: 'false',
 })
 

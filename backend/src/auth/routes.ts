@@ -6,11 +6,11 @@ import {
   meResponseSchema,
   refreshRequestSchema,
   refreshResponseSchema,
-  registerRequestSchema,
 } from '@poznyak-engineering-calculator/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { createHash } from 'node:crypto'
 
 import type { AppEnv } from '../env'
 import type { AppHonoEnv, AuthenticatedHonoEnv } from '../http/context'
@@ -44,34 +44,6 @@ const errorResponseContent = {
   },
 }
 
-const registerRoute = createRoute({
-  method: 'post',
-  path: '/register',
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: registerRequestSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    201: {
-      content: authResponseContent,
-      description: 'Created user and session',
-    },
-    400: {
-      content: errorResponseContent,
-      description: 'Invalid payload',
-    },
-    409: {
-      content: errorResponseContent,
-      description: 'Email already exists',
-    },
-  },
-})
-
 const loginRoute = createRoute({
   method: 'post',
   path: '/login',
@@ -96,6 +68,14 @@ const loginRoute = createRoute({
     401: {
       content: errorResponseContent,
       description: 'Invalid credentials',
+    },
+    403: {
+      content: errorResponseContent,
+      description: 'User is authenticated but is not allowed to access the admin cabinet',
+    },
+    429: {
+      content: errorResponseContent,
+      description: 'Too many failed login attempts',
     },
   },
 })
@@ -182,21 +162,32 @@ export function createAuthRoutes() {
     defaultHook: validationErrorHook,
   })
 
-  routes.openapi(registerRoute, async (c) => {
-    const auth = c.get('authService')
-    const env = c.get('env')
-    const result = await auth.register(c.req.valid('json'), requestMetadata(c))
-    setRefreshCookie(c, result.refreshToken, env)
-
-    return c.json(responseForClient(c, result), 201)
+  routes.use('*', async (c, next) => {
+    setAuthNoStoreHeaders(c)
+    await next()
   })
 
   routes.openapi(loginRoute, async (c) => {
     const auth = c.get('authService')
     const env = c.get('env')
-    const result = await auth.login(c.req.valid('json'), requestMetadata(c))
-    setRefreshCookie(c, result.refreshToken, env)
+    const body = c.req.valid('json')
+    const loginRateLimitKeys = loginRateLimitKeysForRequest(c, env, body.email)
 
+    await auth.assertLoginAllowed(loginRateLimitKeys)
+
+    let result: Awaited<ReturnType<typeof auth.login>>
+    try {
+      result = await auth.login(body, requestMetadata(c))
+    } catch (error) {
+      if (isAuthFailure(error)) {
+        await auth.recordLoginFailure(loginRateLimitKeys)
+      }
+      throw error
+    }
+
+    await auth.recordLoginSuccess(loginRateLimitKeys)
+    setAuthNoStoreHeaders(c)
+    setRefreshCookie(c, result.refreshToken, env)
     return c.json(responseForClient(c, result), 200)
   })
 
@@ -207,6 +198,7 @@ export function createAuthRoutes() {
     const cookieRefreshToken = getRefreshCookie(c)
     assertTrustedCookieRequest(c, env, body.refreshToken, cookieRefreshToken)
     const result = await auth.refresh(body.refreshToken ?? cookieRefreshToken, requestMetadata(c))
+    setAuthNoStoreHeaders(c)
     setRefreshCookie(c, result.refreshToken, env)
 
     return c.json(responseForClient(c, result), 200)
@@ -214,6 +206,7 @@ export function createAuthRoutes() {
 
   protectedRoutes.use('/me', requireAuth)
   protectedRoutes.openapi(meRoute, async (c) => {
+    setAuthNoStoreHeaders(c)
     return c.json({ user: userDtoFromAuthenticatedUser(c.var.user) }, 200)
   })
   routes.route('/', protectedRoutes)
@@ -225,6 +218,7 @@ export function createAuthRoutes() {
     const cookieRefreshToken = getRefreshCookie(c)
     assertTrustedCookieRequest(c, env, body.refreshToken, cookieRefreshToken)
     await auth.logout(body.refreshToken ?? cookieRefreshToken)
+    setAuthNoStoreHeaders(c)
     deleteCookie(c, refreshCookieName, {
       path: '/api/auth',
       secure: env.COOKIE_SECURE,
@@ -238,10 +232,10 @@ export function createAuthRoutes() {
 }
 
 function requestMetadata(c: Context): { userAgent?: string; ipAddress?: string } {
-  const forwardedFor = c.req.header('x-forwarded-for')
+  const env = c.get('env')
   return {
     userAgent: c.req.header('user-agent'),
-    ipAddress: forwardedFor?.split(',')[0]?.trim(),
+    ipAddress: clientIpAddress(c, env),
   }
 }
 
@@ -260,7 +254,7 @@ function assertTrustedCookieRequest(
   }
 
   const origin = c.req.header('origin')
-  if (origin && env.CORS_ORIGINS.includes(origin)) {
+  if (origin && env.AUTH_CORS_ORIGINS.includes(origin)) {
     return
   }
 
@@ -288,4 +282,35 @@ function responseForClient<T extends { refreshToken: string }>(c: Context, respo
 
   const { refreshToken: _refreshToken, ...webResponse } = response
   return webResponse
+}
+
+function setAuthNoStoreHeaders(c: Context) {
+  c.header('Cache-Control', 'no-store')
+  c.header('Pragma', 'no-cache')
+}
+
+function loginRateLimitKeysForRequest(c: Context, env: AppEnv, email: string) {
+  return {
+    emailKey: sha256Hex(email.trim().toLowerCase()),
+    clientKey: sha256Hex(clientIpAddress(c, env) ?? 'anonymous'),
+  }
+}
+
+function clientIpAddress(c: Context, env: AppEnv) {
+  if (!env.TRUST_PROXY_HEADERS) return undefined
+
+  const forwardedFor = c.req.header('x-forwarded-for')
+    ?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  return forwardedFor?.at(-1)
+}
+
+function sha256Hex(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function isAuthFailure(error: unknown) {
+  return error instanceof AppError && (error.status === 401 || error.status === 403)
 }

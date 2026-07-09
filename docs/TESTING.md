@@ -5,7 +5,7 @@ The goal of this template's tests is to show future agents where behavior should
 ## Pyramid
 
 - Contracts/unit: shared Zod schema matrices, env parsing, JWTs, password hashing, client API refresh/retry behavior, and token cleanup.
-- Backend integration: refresh-token rotation, auth guards, duplicate registration, concurrency, and stable error shapes through real routes and PostgreSQL.
+- Backend integration: admin login, refresh-token rotation, auth guards, rate limiting, 401/403 states, concurrency, and stable error shapes through real routes and PostgreSQL.
 - Webapp Playwright: valuable browser flows through a real backend and Vite UI.
 - Mobile Maestro: lives on the `mobile` branch with the runnable Expo app.
 
@@ -41,7 +41,7 @@ bun run smoke:backend:docker
 
 Contract tests live in `packages/contracts/src/*.test.ts` and protect shared request/response/error schemas used by backend and webapp. Webapp unit tests live in `webapp/tests` and cover API refresh/retry behavior that would be too expensive and brittle to fully exercise in E2E. The `mobile` branch extends this same contract/testing model for Expo.
 
-Backend tests live next to backend code and verify auth behavior through services and routes. The integration runner starts `postgres_test`, applies migrations, and runs register/login/refresh/logout/guard/error-shape scenarios. By default, the test database port is derived from the absolute repository path so parallel checkouts do not collide, and `TEST_DATABASE_URL` is derived from that port. Set `POSTGRES_TEST_PORT` and `TEST_DATABASE_URL` only when a fixed test database is required. Local database startup, credentials, and reset behavior are documented in [LOCAL_DATABASE.md](LOCAL_DATABASE.md).
+Backend tests live next to backend code and verify auth behavior through services and routes. The integration runner starts `postgres_test`, applies migrations, and runs admin login/refresh/logout/rate-limit/401/403 guard/error-shape scenarios. By default, the test database port is derived from the absolute repository path so parallel checkouts do not collide, and `TEST_DATABASE_URL` is derived from that port. Set `POSTGRES_TEST_PORT` and `TEST_DATABASE_URL` only when a fixed test database is required. Local database startup, credentials, and reset behavior are documented in [LOCAL_DATABASE.md](LOCAL_DATABASE.md).
 
 The integration and Docker smoke runners refuse database names that do not end with `_test` unless an override is set intentionally. This protects `poznyak_engineering_calculator` development data from test writes.
 
@@ -74,7 +74,7 @@ The webapp E2E flow:
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
 - stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
-- runs the auth smoke path: client validation visibility -> register/login mode switching -> register -> cookie refresh after reload -> protected route -> logout -> invalid login error -> successful login.
+- runs the auth smoke path: anonymous protected route shows login -> anonymous protected API returns 401 -> client validation visibility -> invalid login error -> successful admin login -> cookie refresh after reload -> protected admin shell -> logout returns to login.
 
 Useful env:
 

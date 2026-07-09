@@ -23,6 +23,8 @@ const databaseUrlForHost =
 const databaseUrlForContainer =
   process.env.BACKEND_DOCKER_SMOKE_DATABASE_URL ??
   'postgresql://superuser:superpassword@postgres_test:5432/poznyak_engineering_calculator_test?schema=public'
+const smokeAdminEmail = 'docker-smoke-admin@example.com'
+const smokeAdminPassword = 'password123'
 assertTestDatabaseUrl(databaseUrlForHost)
 assertTestDatabaseUrl(databaseUrlForContainer, {
   allowEnvName: 'BACKEND_DOCKER_SMOKE_ALLOW_NON_TEST_DATABASE',
@@ -116,33 +118,30 @@ async function waitForHealth() {
 }
 
 async function smokeAuthApi() {
-  const email = `docker-smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
-
-  const register = await httpRequest('/api/auth/register', {
+  const login = await httpRequest('/api/auth/login', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Client-Platform': 'mobile',
     },
     body: JSON.stringify({
-      email,
-      password: 'password123',
-      displayName: 'Docker Smoke',
+      email: smokeAdminEmail,
+      password: smokeAdminPassword,
     }),
   })
 
-  if (register.statusCode !== 201) {
-    throw new Error(`Register failed with HTTP ${register.statusCode}: ${register.body}`)
+  if (login.statusCode !== 200) {
+    throw new Error(`Login failed with HTTP ${login.statusCode}: ${login.body}`)
   }
 
-  const registerBody = JSON.parse(register.body)
-  if (!registerBody.accessToken || !registerBody.refreshToken) {
-    throw new Error('Register response did not include mobile auth tokens')
+  const loginBody = JSON.parse(login.body)
+  if (!loginBody.accessToken || !loginBody.refreshToken || loginBody.user.role !== 'admin') {
+    throw new Error('Login response did not include mobile admin auth tokens')
   }
 
   const me = await httpRequest('/api/auth/me', {
     headers: {
-      Authorization: `Bearer ${registerBody.accessToken}`,
+      Authorization: `Bearer ${loginBody.accessToken}`,
     },
   })
 
@@ -203,6 +202,22 @@ run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], {
   },
 })
 
+run('bun', ['run', '--cwd', 'backend', 'admin:create'], {
+  env: {
+    ...process.env,
+    DATABASE_URL: databaseUrlForHost,
+    JWT_SECRET: 'docker-smoke-secret-at-least-thirty-two-characters',
+    CORS_ORIGINS: 'http://localhost:45174',
+    AUTH_CORS_ORIGINS: 'http://localhost:45174',
+    COOKIE_SECURE: 'false',
+    ADMIN_EMAIL: smokeAdminEmail,
+    ADMIN_PASSWORD: smokeAdminPassword,
+    ADMIN_DISPLAY_NAME: 'Docker Smoke',
+    ADMIN_CREATE_SKIP_IF_EXISTS: 'true',
+    ADMIN_CREATE_ALLOW_ADDITIONAL: 'true',
+  },
+})
+
 run('docker', ['build', '-f', 'backend/Dockerfile', '-t', imageName, '.'])
 spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })
 
@@ -224,9 +239,13 @@ try {
     '-e',
     'JWT_SECRET=docker-smoke-secret-at-least-thirty-two-characters',
     '-e',
-    'CORS_ORIGINS=http://localhost:45174',
+    'CORS_ORIGINS=https://website.example.test',
     '-e',
-    'COOKIE_SECURE=false',
+    'AUTH_CORS_ORIGINS=https://app.example.test',
+    '-e',
+    'COOKIE_SECURE=true',
+    '-e',
+    'TRUST_PROXY_HEADERS=true',
     imageName,
   ])
 

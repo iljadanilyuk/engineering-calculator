@@ -15,11 +15,19 @@ enum ServicePricingType {
   @@map("service_pricing_type")
 }
 
+enum UserRole {
+  admin
+  member
+
+  @@map("user_role")
+}
+
 model User {
   id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
   email        String        @unique
   passwordHash String        @map("password_hash")
   displayName  String?       @map("display_name")
+  role         UserRole      @default(member)
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
   sessions     AuthSession[]
@@ -150,4 +158,18 @@ model AuthSession {
   @@index([userId], map: "auth_sessions_user_id_idx")
   @@index([expiresAt], map: "auth_sessions_expires_at_idx")
   @@map("auth_sessions")
+}
+
+model AuthRateLimitBucket {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  scope           String
+  bucketKey       String   @map("bucket_key")
+  failedCount     Int      @default(0) @map("failed_count")
+  windowStartedAt DateTime @map("window_started_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, bucketKey], map: "auth_rate_limit_buckets_scope_bucket_key_key")
+  @@index([windowStartedAt], map: "auth_rate_limit_buckets_window_started_at_idx")
+  @@map("auth_rate_limit_buckets")
 }

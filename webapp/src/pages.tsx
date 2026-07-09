@@ -18,7 +18,7 @@ import { useAuth } from '@/lib/use-auth'
 
 const navLinkClass = cn(
   buttonVariants({ variant: 'ghost', size: 'sm' }),
-  'text-muted-foreground data-[status=active]:bg-secondary data-[status=active]:text-secondary-foreground data-[status=active]:hover:bg-secondary/80 data-[status=active]:hover:text-secondary-foreground'
+  'text-muted-foreground data-[status=active]:bg-secondary data-[status=active]:text-secondary-foreground data-[status=active]:hover:bg-secondary/80 data-[status=active]:hover:text-secondary-foreground',
 )
 
 export function RootLayout() {
@@ -34,12 +34,12 @@ export function RootLayout() {
           <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
             <Typography asChild variant="control" tone="muted">
               <Link to="/" className={navLinkClass}>
-                Auth
+                Login
               </Link>
             </Typography>
             <Typography asChild variant="control" tone="muted">
               <Link to="/app" className={navLinkClass}>
-                App
+                Admin
               </Link>
             </Typography>
           </nav>
@@ -56,39 +56,34 @@ export function RootLayout() {
 }
 
 export function HomePage() {
+  return <AdminEntry />
+}
+
+export function AppPage() {
+  return <AdminEntry />
+}
+
+function AdminEntry() {
   const auth = useAuth()
 
   if (auth.isBootstrapping) {
     return <LoadingState />
   }
 
-  if (auth.user) {
-    return (
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
-        <Badge variant="outline" className="w-fit">
-          Admin session
-        </Badge>
-        <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">Session is active</Typography>
-          <Typography className="max-w-2xl" tone="muted">
-            Logged in as{' '}
-            <Typography as="strong" variant="emphasis" tone="default">
-              {auth.user.email}
-            </Typography>
-            .
-            The protected admin cabinet will use this authenticated surface for leads,
-            services, and settings.
-          </Typography>
-        </div>
-        <Button asChild size="lg" className="w-fit">
-          <Link to="/app">Open app</Link>
-        </Button>
-      </section>
-    )
+  if (!auth.user) {
+    return <LoginScreen />
   }
 
+  if (auth.user.role !== 'admin') {
+    return <ForbiddenState />
+  }
+
+  return <AdminShell />
+}
+
+function LoginScreen() {
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
+    <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
       <div className="grid gap-5">
         <Badge variant="outline" className="w-fit">
           Admin cabinet
@@ -97,8 +92,7 @@ export function HomePage() {
           Login for calculator administration.
         </Typography>
         <Typography className="max-w-2xl" tone="muted">
-          This React workspace will manage services, prices, lead statuses, proposal links, and
-          calculator settings.
+          Manage services, exchange-rate settings, submitted calculations, and proposal records.
         </Typography>
       </div>
       <AuthForm />
@@ -106,57 +100,64 @@ export function HomePage() {
   )
 }
 
-export function AppPage() {
+function ForbiddenState() {
   const auth = useAuth()
 
-  if (auth.isBootstrapping) {
-    return <LoadingState />
-  }
+  return (
+    <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
+      <Badge variant="outline" className="w-fit">
+        Forbidden
+      </Badge>
+      <div className="grid max-w-3xl gap-4">
+        <Typography variant="h1">Admin access required</Typography>
+        <Typography className="max-w-2xl" tone="muted">
+          The current account is signed in but is not allowed to use the admin cabinet.
+        </Typography>
+      </div>
+      <Button type="button" size="lg" className="w-fit" onClick={() => void auth.logout()}>
+        Logout
+      </Button>
+    </section>
+  )
+}
 
-  if (!auth.user) {
-    return (
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
-        <Badge variant="outline" className="w-fit">
-          Protected area
-        </Badge>
-        <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">Login required</Typography>
-          <Typography className="max-w-2xl" tone="muted">
-            Sign in to manage calculator services, submitted leads, proposal links, and settings.
-          </Typography>
-        </div>
-        <Button asChild size="lg" className="w-fit">
-          <Link to="/">Go to auth</Link>
-        </Button>
-      </section>
-    )
-  }
+function AdminShell() {
+  const auth = useAuth()
+  const user = auth.user
+
+  if (!user) return null
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
       <div className="grid gap-3">
         <Badge variant="outline" className="w-fit">
-          Current user
+          Admin shell
         </Badge>
         <Typography variant="h1">
-          {auth.user.displayName ?? auth.user.email}
+          {user.displayName ?? user.email}
         </Typography>
-        <Typography tone="muted">{auth.user.email}</Typography>
+        <Typography tone="muted">{user.email}</Typography>
       </div>
 
       <Separator />
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Card size="sm">
           <CardHeader>
-            <CardTitle>User ID</CardTitle>
-            <CardDescription wrap="break">{auth.user.id}</CardDescription>
+            <CardTitle>Services</CardTitle>
+            <CardDescription>Pricing and visibility controls are next.</CardDescription>
           </CardHeader>
         </Card>
         <Card size="sm">
           <CardHeader>
-            <CardTitle>Created</CardTitle>
-            <CardDescription>{new Date(auth.user.createdAt).toLocaleString()}</CardDescription>
+            <CardTitle>Leads</CardTitle>
+            <CardDescription>Submitted calculations will appear here.</CardDescription>
+          </CardHeader>
+        </Card>
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>Settings</CardTitle>
+            <CardDescription>Exchange rate and contact settings.</CardDescription>
           </CardHeader>
         </Card>
       </div>

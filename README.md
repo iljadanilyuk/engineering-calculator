@@ -56,6 +56,18 @@ Apply Prisma migrations:
 bun run --cwd backend prisma:migrate
 ```
 
+Create the first admin account locally after migrations:
+
+```powershell
+$env:ADMIN_EMAIL="owner@example.com"
+$env:ADMIN_PASSWORD="<strong local password>"
+$env:ADMIN_DISPLAY_NAME="Owner"
+bun run --cwd backend admin:create
+Remove-Item Env:ADMIN_PASSWORD
+```
+
+`admin:create` hashes the password before writing to PostgreSQL and refuses to create a second admin by default. Public self-registration is disabled; admin login uses `POST /api/auth/login`.
+
 Run active surfaces in separate terminals:
 
 ```bash
@@ -93,8 +105,9 @@ No production secrets should be committed. Real values belong in local `.env` fi
 Planned v1 env areas:
 
 - PostgreSQL: `DATABASE_URL`, `TEST_DATABASE_URL`
-- Auth/session: `JWT_SECRET`, token TTLs, cookie flags
-- Public URLs/CORS: `CORS_ORIGINS`, later proposal/admin/public URLs
+- Auth/session: `JWT_SECRET`, token TTLs, `COOKIE_SECURE`, `TRUST_PROXY_HEADERS`
+- First admin setup: one-off `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_DISPLAY_NAME`
+- Public URLs/CORS: `CORS_ORIGINS` for public browser API origins, `AUTH_CORS_ORIGINS` for admin webapp cookie/auth origins, later proposal/admin/public URLs
 - Telegram notifications: bot token and approved internal chat ID
 - PDF/proposal storage: persistent local volume, object storage, or another approved durable store
 - Public contacts: phone/email/Telegram shown on the public page and PDF

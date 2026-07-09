@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
+import type { Context } from 'hono'
 
 import type { DbClient } from './db'
 import type { AppEnv } from './env'
@@ -36,19 +36,7 @@ export function createApp({ env, prisma, proposalGenerator }: CreateAppOptions) 
   })
 
   app.use(secureHeaders())
-  app.use(
-    '*',
-    cors({
-      origin: (origin) => {
-        if (!origin) return env.CORS_ORIGINS[0] ?? null
-        return env.CORS_ORIGINS.includes(origin) ? origin : null
-      },
-      allowHeaders: ['Content-Type', 'Authorization', 'X-Client-Platform'],
-      allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
-      credentials: true,
-      maxAge: 600,
-    }),
-  )
+  app.use('*', createCorsMiddleware(env))
   app.use('*', async (c, next) => {
     c.set('authService', authService)
     c.set('engineeringDataService', engineeringDataService)
@@ -88,3 +76,59 @@ export function createApp({ env, prisma, proposalGenerator }: CreateAppOptions) 
 }
 
 export type AppType = ReturnType<typeof createApp>
+
+const corsAllowHeaders = ['Content-Type', 'Authorization', 'X-Client-Platform']
+const corsAllowMethods = ['GET', 'POST', 'PATCH', 'OPTIONS']
+const corsMaxAgeSeconds = 600
+
+function createCorsMiddleware(env: AppEnv) {
+  const publicOrigins = new Set([...env.CORS_ORIGINS, ...env.AUTH_CORS_ORIGINS])
+  const authOrigins = new Set(env.AUTH_CORS_ORIGINS)
+
+  return async (c: Context, next: () => Promise<void>) => {
+    const origin = c.req.header('origin')
+    const isProtectedCorsPath = isCredentialedCorsPath(c.req.path)
+    const isAllowedOrigin = origin
+      ? isProtectedCorsPath ? authOrigins.has(origin) : publicOrigins.has(origin)
+      : false
+    const allowCredentials = isProtectedCorsPath
+
+    if (origin && isAllowedOrigin) {
+      setCorsHeaders(c, origin, allowCredentials)
+    }
+
+    if (c.req.method === 'OPTIONS') {
+      if (origin && isAllowedOrigin) {
+        setCorsPreflightHeaders(c)
+      }
+      c.res.headers.delete('Content-Length')
+      c.res.headers.delete('Content-Type')
+      return c.body(null, 204)
+    }
+
+    await next()
+  }
+}
+
+function isCredentialedCorsPath(path: string) {
+  return path === '/api/auth' ||
+    path.startsWith('/api/auth/') ||
+    path === '/api/admin' ||
+    path.startsWith('/api/admin/')
+}
+
+function setCorsHeaders(c: Context, origin: string, credentials: boolean) {
+  c.header('Access-Control-Allow-Origin', origin)
+  c.header('Vary', 'Origin', { append: true })
+
+  if (credentials) {
+    c.header('Access-Control-Allow-Credentials', 'true')
+  }
+}
+
+function setCorsPreflightHeaders(c: Context) {
+  c.header('Access-Control-Allow-Methods', corsAllowMethods.join(','))
+  c.header('Access-Control-Allow-Headers', corsAllowHeaders.join(','))
+  c.header('Access-Control-Max-Age', String(corsMaxAgeSeconds))
+  c.header('Vary', 'Access-Control-Request-Headers', { append: true })
+}

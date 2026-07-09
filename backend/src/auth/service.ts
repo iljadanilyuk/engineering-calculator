@@ -1,6 +1,6 @@
 import type {
   LoginRequest,
-  RegisterPayload,
+  UserRole,
   UserDto,
 } from '@poznyak-engineering-calculator/contracts'
 
@@ -9,7 +9,6 @@ import type { AppEnv } from '../env'
 import { AppError } from '../http/errors'
 import type { AuthenticatedUserContext } from '../http/context'
 import { userDtoFromAuthenticatedUser } from '../http/context'
-import { Prisma } from '../generated/prisma/client'
 import { signAccessToken, verifyAccessToken } from './access-tokens'
 import { hashPassword, verifyPassword } from './passwords'
 import { createRefreshToken, hashRefreshToken } from './refresh-tokens'
@@ -23,8 +22,21 @@ type UserRecord = {
   id: string
   email: string
   displayName: string | null
+  role: UserRole
   createdAt: Date
 }
+
+type LoginRateLimitKeys = {
+  emailKey: string
+  clientKey: string
+}
+
+const loginEmailScope = 'login_email'
+const loginClientScope = 'login_client'
+const loginRateLimitWindowMs = 15 * 60 * 1_000
+const maxLoginFailuresPerEmail = 5
+const maxLoginFailuresPerClient = 20
+const dummyPasswordHashPromise = hashPassword('not-a-real-user-password')
 
 export class AuthService {
   constructor(
@@ -32,52 +44,61 @@ export class AuthService {
     private readonly env: AppEnv,
   ) {}
 
-  async register(input: RegisterPayload, metadata: SessionMetadata) {
-    const existingUser = await this.db.user.findUnique({
-      where: { email: input.email },
-      select: { id: true },
-    })
-
-    if (existingUser) {
-      throw new AppError(409, 'CONFLICT', 'User with this email already exists')
-    }
-
-    const passwordHash = await hashPassword(input.password)
-
-    const user = await this.db.user
-      .create({
-        data: {
-          email: input.email,
-          passwordHash,
-          displayName: input.displayName,
-        },
-      })
-      .catch((error: unknown) => {
-        if (isUniqueConstraintError(error)) {
-          throw new AppError(409, 'CONFLICT', 'User with this email already exists')
-        }
-
-        throw error
-      })
-
-    return this.issueSession(user, metadata)
-  }
-
   async login(input: LoginRequest, metadata: SessionMetadata) {
     const user = await this.db.user.findUnique({
       where: { email: input.email },
     })
 
-    if (!user) {
+    const passwordHash = user?.passwordHash ?? await dummyPasswordHashPromise
+    const passwordMatches = await verifyPassword(input.password, passwordHash)
+    if (!user || !passwordMatches) {
       throw new AppError(401, 'UNAUTHORIZED', 'Invalid email or password')
     }
 
-    const passwordMatches = await verifyPassword(input.password, user.passwordHash)
-    if (!passwordMatches) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Invalid email or password')
+    if (user.role !== 'admin') {
+      throw new AppError(403, 'FORBIDDEN', 'Admin access is required')
     }
 
     return this.issueSession(user, metadata)
+  }
+
+  async assertLoginAllowed(keys: LoginRateLimitKeys) {
+    const now = new Date()
+    await this.cleanupExpiredLoginBuckets(now)
+    const buckets = await this.db.authRateLimitBucket.findMany({
+      where: {
+        OR: [
+          { scope: loginEmailScope, bucketKey: keys.emailKey },
+          { scope: loginClientScope, bucketKey: keys.clientKey },
+        ],
+      },
+    })
+
+    for (const bucket of buckets) {
+      assertLoginBucketIsNotLimited(bucket, now)
+    }
+  }
+
+  async recordLoginFailure(keys: LoginRateLimitKeys) {
+    const now = new Date()
+    const [emailBucket, clientBucket] = await Promise.all([
+      this.incrementLoginFailureBucket(loginEmailScope, keys.emailKey, now),
+      this.incrementLoginFailureBucket(loginClientScope, keys.clientKey, now),
+    ])
+
+    assertLoginBucketIsNotLimited(emailBucket, now)
+    assertLoginBucketIsNotLimited(clientBucket, now)
+  }
+
+  async recordLoginSuccess(keys: LoginRateLimitKeys) {
+    await this.db.authRateLimitBucket.deleteMany({
+      where: {
+        OR: [
+          { scope: loginEmailScope, bucketKey: keys.emailKey },
+          { scope: loginClientScope, bucketKey: keys.clientKey },
+        ],
+      },
+    })
   }
 
   async refresh(refreshToken: string | undefined, metadata: SessionMetadata) {
@@ -236,10 +257,67 @@ export class AuthService {
   private refreshExpiresAt() {
     return new Date(Date.now() + this.env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000)
   }
+
+  private async incrementLoginFailureBucket(scope: string, bucketKey: string, now: Date) {
+    const windowCutoff = new Date(now.getTime() - loginRateLimitWindowMs)
+    const [bucket] = await this.db.$queryRaw<
+      Array<{ scope: string; failedCount: number; windowStartedAt: Date }>
+    >`
+      INSERT INTO "auth_rate_limit_buckets" (
+        "scope",
+        "bucket_key",
+        "failed_count",
+        "window_started_at",
+        "updated_at"
+      )
+      VALUES (${scope}, ${bucketKey}, 1, ${now}, ${now})
+      ON CONFLICT ("scope", "bucket_key")
+      DO UPDATE SET
+        "failed_count" = CASE
+          WHEN "auth_rate_limit_buckets"."window_started_at" <= ${windowCutoff} THEN 1
+          ELSE "auth_rate_limit_buckets"."failed_count" + 1
+        END,
+        "window_started_at" = CASE
+          WHEN "auth_rate_limit_buckets"."window_started_at" <= ${windowCutoff} THEN ${now}
+          ELSE "auth_rate_limit_buckets"."window_started_at"
+        END,
+        "updated_at" = ${now}
+      RETURNING
+        "scope",
+        "failed_count" AS "failedCount",
+        "window_started_at" AS "windowStartedAt"
+    `
+
+    if (!bucket) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'Could not update login rate limit bucket')
+    }
+
+    return bucket
+  }
+
+  private cleanupExpiredLoginBuckets(now: Date) {
+    return this.db.authRateLimitBucket.deleteMany({
+      where: {
+        windowStartedAt: {
+          lt: new Date(now.getTime() - loginRateLimitWindowMs),
+        },
+      },
+    })
+  }
 }
 
-function isUniqueConstraintError(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+function assertLoginBucketIsNotLimited(
+  bucket: { scope: string; failedCount: number; windowStartedAt: Date },
+  now: Date,
+) {
+  if (now.getTime() - bucket.windowStartedAt.getTime() >= loginRateLimitWindowMs) return
+
+  const maxFailures =
+    bucket.scope === loginEmailScope ? maxLoginFailuresPerEmail : maxLoginFailuresPerClient
+
+  if (bucket.failedCount <= maxFailures) return
+
+  throw new AppError(429, 'RATE_LIMITED', 'Too many failed login attempts. Please try again later.')
 }
 
 export function toUserDto(user: UserRecord): UserDto {
@@ -247,6 +325,7 @@ export function toUserDto(user: UserRecord): UserDto {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    role: user.role,
     createdAt: user.createdAt.toISOString(),
   }
 }

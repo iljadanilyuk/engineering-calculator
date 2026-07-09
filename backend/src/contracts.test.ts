@@ -1,18 +1,16 @@
 import { describe, expect, test } from 'bun:test'
-import { registerRequestSchema } from '@poznyak-engineering-calculator/contracts'
+import { loginRequestSchema } from '@poznyak-engineering-calculator/contracts'
 
 describe('contracts', () => {
-  test('normalizes auth registration payloads', () => {
-    const result = registerRequestSchema.parse({
+  test('normalizes auth login payloads', () => {
+    const result = loginRequestSchema.parse({
       email: ' USER@Example.COM ',
       password: 'password123',
-      displayName: '',
     })
 
     expect(result).toEqual({
       email: 'user@example.com',
       password: 'password123',
-      displayName: undefined,
     })
   })
 })

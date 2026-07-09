@@ -1,9 +1,7 @@
 import { useForm } from '@tanstack/react-form'
 import {
   loginRequestSchema,
-  registerRequestSchema,
   type LoginRequest,
-  type RegisterRequest,
 } from '@poznyak-engineering-calculator/contracts'
 import type { z } from 'zod'
 import { useId, useState } from 'react'
@@ -24,222 +22,14 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ApiRequestError } from '@/lib/api'
 import { useAuth } from '@/lib/use-auth'
 
-type AuthMode = 'login' | 'register'
-type FieldName = 'displayName' | 'email' | 'password'
+type FieldName = 'email' | 'password'
 type FormError = { message?: string }
 type FieldErrors = Partial<Record<FieldName, FormError[]>>
-type AuthDraft = {
-  email: string
-  password: string
-  displayName: string
-}
-
-const emptyDraft: AuthDraft = {
-  email: '',
-  password: '',
-  displayName: '',
-}
 
 export function AuthForm() {
-  const [mode, setMode] = useState<AuthMode>('register')
-  const [draft, setDraft] = useState<AuthDraft>(emptyDraft)
-
-  function updateDraft(nextDraft: Partial<AuthDraft>) {
-    setDraft((currentDraft) => ({ ...currentDraft, ...nextDraft }))
-  }
-
-  return (
-    <Card className="w-full" aria-label="Authentication">
-      <CardHeader>
-        <CardTitle>Account access</CardTitle>
-        <CardDescription>
-          Create an account or continue with an existing session.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Tabs
-          value={mode}
-          onValueChange={(nextMode) => {
-            if (nextMode === 'login' || nextMode === 'register') {
-              setMode(nextMode)
-            }
-          }}
-          className="mb-6"
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="register">Register</TabsTrigger>
-            <TabsTrigger value="login">Login</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="register" forceMount hidden={mode !== 'register'} className="mt-6">
-            {mode === 'register' && <RegisterForm draft={draft} onDraftChange={updateDraft} />}
-          </TabsContent>
-          <TabsContent value="login" forceMount hidden={mode !== 'login'} className="mt-6">
-            {mode === 'login' && <LoginForm draft={draft} onDraftChange={updateDraft} />}
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
-  )
-}
-
-function RegisterForm({
-  draft,
-  onDraftChange,
-}: {
-  draft: AuthDraft
-  onDraftChange: (draft: Partial<AuthDraft>) => void
-}) {
-  const auth = useAuth()
-  const displayNameId = useId()
-  const displayNameErrorId = useId()
-  const emailId = useId()
-  const emailErrorId = useId()
-  const passwordId = useId()
-  const passwordErrorId = useId()
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
-  const [formError, setFormError] = useState<string | null>(null)
-
-  const form = useForm({
-    defaultValues: draft,
-    onSubmit: async ({ value }) => {
-      setFormError(null)
-
-      const result = registerRequestSchema.safeParse(value)
-      if (!result.success) {
-        setFieldErrors(toFieldErrors(result.error.issues))
-        return
-      }
-
-      setFieldErrors({})
-
-      try {
-        await auth.register(result.data as RegisterRequest)
-      } catch (caughtError) {
-        if (caughtError instanceof ApiRequestError) {
-          setFormError(caughtError.message)
-          return
-        }
-        setFormError('Unexpected auth error')
-      }
-    },
-  })
-
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        void form.handleSubmit()
-      }}
-    >
-      <FieldGroup className="gap-4">
-        <form.Field
-          name="displayName"
-          children={(field) => (
-            <Field data-invalid={hasErrors(fieldErrors.displayName)}>
-              <FieldLabel htmlFor={displayNameId}>Name</FieldLabel>
-              <Input
-                id={displayNameId}
-                name={field.name}
-                value={field.state.value ?? ''}
-                autoComplete="name"
-                aria-invalid={hasErrors(fieldErrors.displayName)}
-                aria-describedby={errorId(fieldErrors.displayName, displayNameErrorId)}
-                onBlur={field.handleBlur}
-                onChange={(event) => {
-                  const value = event.target.value
-                  field.handleChange(value)
-                  onDraftChange({ displayName: value })
-                  clearFieldError('displayName', setFieldErrors)
-                  setFormError(null)
-                }}
-              />
-              <FieldError id={displayNameErrorId} errors={fieldErrors.displayName} />
-            </Field>
-          )}
-        />
-
-        <form.Field
-          name="email"
-          children={(field) => (
-            <Field data-invalid={hasErrors(fieldErrors.email)}>
-              <FieldLabel htmlFor={emailId}>Email</FieldLabel>
-              <Input
-                id={emailId}
-                name={field.name}
-                value={field.state.value}
-                type="text"
-                inputMode="email"
-                autoComplete="email"
-                aria-invalid={hasErrors(fieldErrors.email)}
-                aria-describedby={errorId(fieldErrors.email, emailErrorId)}
-                onBlur={field.handleBlur}
-                onChange={(event) => {
-                  const value = event.target.value
-                  field.handleChange(value)
-                  onDraftChange({ email: value })
-                  clearFieldError('email', setFieldErrors)
-                  setFormError(null)
-                }}
-              />
-              <FieldError id={emailErrorId} errors={fieldErrors.email} />
-            </Field>
-          )}
-        />
-
-        <form.Field
-          name="password"
-          children={(field) => (
-            <Field data-invalid={hasErrors(fieldErrors.password)}>
-              <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
-              <Input
-                id={passwordId}
-                name={field.name}
-                value={field.state.value}
-                type="password"
-                autoComplete="new-password"
-                aria-invalid={hasErrors(fieldErrors.password)}
-                aria-describedby={errorId(fieldErrors.password, passwordErrorId)}
-                onBlur={field.handleBlur}
-                onChange={(event) => {
-                  const value = event.target.value
-                  field.handleChange(value)
-                  onDraftChange({ password: value })
-                  clearFieldError('password', setFieldErrors)
-                  setFormError(null)
-                }}
-              />
-              <FieldError id={passwordErrorId} errors={fieldErrors.password} />
-            </Field>
-          )}
-        />
-
-        <FormAlert message={formError} />
-
-        <form.Subscribe
-          selector={(state) => state.isSubmitting}
-          children={(isSubmitting) => (
-            <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Working...' : 'Create account'}
-            </Button>
-          )}
-        />
-      </FieldGroup>
-    </form>
-  )
-}
-
-function LoginForm({
-  draft,
-  onDraftChange,
-}: {
-  draft: AuthDraft
-  onDraftChange: (draft: Partial<AuthDraft>) => void
-}) {
   const auth = useAuth()
   const emailId = useId()
   const emailErrorId = useId()
@@ -250,8 +40,8 @@ function LoginForm({
 
   const form = useForm({
     defaultValues: {
-      email: draft.email,
-      password: draft.password,
+      email: '',
+      password: '',
     },
     onSubmit: async ({ value }) => {
       setFormError(null)
@@ -268,7 +58,7 @@ function LoginForm({
         await auth.login(result.data as LoginRequest)
       } catch (caughtError) {
         if (caughtError instanceof ApiRequestError) {
-          setFormError(caughtError.message)
+          setFormError(errorMessageForRequest(caughtError))
           return
         }
         setFormError('Unexpected auth error')
@@ -277,80 +67,86 @@ function LoginForm({
   })
 
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        void form.handleSubmit()
-      }}
-    >
-      <FieldGroup className="gap-4">
-        <form.Field
-          name="email"
-          children={(field) => (
-            <Field data-invalid={hasErrors(fieldErrors.email)}>
-              <FieldLabel htmlFor={emailId}>Email</FieldLabel>
-              <Input
-                id={emailId}
-                name={field.name}
-                value={field.state.value}
-                type="text"
-                inputMode="email"
-                autoComplete="email"
-                aria-invalid={hasErrors(fieldErrors.email)}
-                aria-describedby={errorId(fieldErrors.email, emailErrorId)}
-                onBlur={field.handleBlur}
-                onChange={(event) => {
-                  const value = event.target.value
-                  field.handleChange(value)
-                  onDraftChange({ email: value })
-                  clearFieldError('email', setFieldErrors)
-                  setFormError(null)
-                }}
-              />
-              <FieldError id={emailErrorId} errors={fieldErrors.email} />
-            </Field>
-          )}
-        />
+    <Card className="w-full" aria-label="Admin login">
+      <CardHeader>
+        <CardTitle>Admin login</CardTitle>
+        <CardDescription>
+          Use the administrator account created with the backend setup command.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            void form.handleSubmit()
+          }}
+        >
+          <FieldGroup className="gap-4">
+            <form.Field
+              name="email"
+              children={(field) => (
+                <Field data-invalid={hasErrors(fieldErrors.email)}>
+                  <FieldLabel htmlFor={emailId}>Email</FieldLabel>
+                  <Input
+                    id={emailId}
+                    name={field.name}
+                    value={field.state.value}
+                    type="text"
+                    inputMode="email"
+                    autoComplete="email"
+                    aria-invalid={hasErrors(fieldErrors.email)}
+                    aria-describedby={errorId(fieldErrors.email, emailErrorId)}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => {
+                      field.handleChange(event.target.value)
+                      clearFieldError('email', setFieldErrors)
+                      setFormError(null)
+                    }}
+                  />
+                  <FieldError id={emailErrorId} errors={fieldErrors.email} />
+                </Field>
+              )}
+            />
 
-        <form.Field
-          name="password"
-          children={(field) => (
-            <Field data-invalid={hasErrors(fieldErrors.password)}>
-              <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
-              <Input
-                id={passwordId}
-                name={field.name}
-                value={field.state.value}
-                type="password"
-                autoComplete="current-password"
-                aria-invalid={hasErrors(fieldErrors.password)}
-                aria-describedby={errorId(fieldErrors.password, passwordErrorId)}
-                onBlur={field.handleBlur}
-                onChange={(event) => {
-                  const value = event.target.value
-                  field.handleChange(value)
-                  onDraftChange({ password: value })
-                  clearFieldError('password', setFieldErrors)
-                  setFormError(null)
-                }}
-              />
-              <FieldError id={passwordErrorId} errors={fieldErrors.password} />
-            </Field>
-          )}
-        />
+            <form.Field
+              name="password"
+              children={(field) => (
+                <Field data-invalid={hasErrors(fieldErrors.password)}>
+                  <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+                  <Input
+                    id={passwordId}
+                    name={field.name}
+                    value={field.state.value}
+                    type="password"
+                    autoComplete="current-password"
+                    aria-invalid={hasErrors(fieldErrors.password)}
+                    aria-describedby={errorId(fieldErrors.password, passwordErrorId)}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => {
+                      field.handleChange(event.target.value)
+                      clearFieldError('password', setFieldErrors)
+                      setFormError(null)
+                    }}
+                  />
+                  <FieldError id={passwordErrorId} errors={fieldErrors.password} />
+                </Field>
+              )}
+            />
 
-        <FormAlert message={formError} />
+            <FormAlert message={formError} />
 
-        <form.Subscribe
-          selector={(state) => state.isSubmitting}
-          children={(isSubmitting) => (
-            <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Working...' : 'Login'}
-            </Button>
-          )}
-        />
-      </FieldGroup>
-    </form>
+            <form.Subscribe
+              selector={(state) => state.isSubmitting}
+              children={(isSubmitting) => (
+                <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? 'Signing in...' : 'Login'}
+                </Button>
+              )}
+            />
+          </FieldGroup>
+        </form>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -359,10 +155,22 @@ function FormAlert({ message }: { message: string | null }) {
 
   return (
     <Alert variant="destructive">
-      <AlertTitle>Authentication failed</AlertTitle>
+      <AlertTitle>Login failed</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   )
+}
+
+function errorMessageForRequest(error: ApiRequestError) {
+  if (error.status === 429) {
+    return 'Too many failed login attempts. Please try again later.'
+  }
+
+  if (error.status === 403) {
+    return 'This account is not allowed to access the admin cabinet.'
+  }
+
+  return error.message
 }
 
 function toFieldErrors(issues: z.ZodIssue[]): FieldErrors {
@@ -396,5 +204,5 @@ function errorId(errors: FormError[] | undefined, id: string) {
 }
 
 function isFieldName(field: unknown): field is FieldName {
-  return field === 'displayName' || field === 'email' || field === 'password'
+  return field === 'email' || field === 'password'
 }

@@ -1,11 +1,10 @@
 import { createContext } from 'react'
-import type { LoginRequest, RegisterRequest, UserDto } from '@poznyak-engineering-calculator/contracts'
+import type { LoginRequest, UserDto } from '@poznyak-engineering-calculator/contracts'
 
 export type AuthContextValue = {
   user: UserDto | null
   isBootstrapping: boolean
   isAuthenticated: boolean
-  register: (input: RegisterRequest) => Promise<void>
   login: (input: LoginRequest) => Promise<void>
   logout: () => Promise<void>
 }
