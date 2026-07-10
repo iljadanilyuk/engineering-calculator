@@ -9,11 +9,13 @@ The project is scaffolded from the Vibe template (`https://github.com/di-sukhare
 - `backend` - Hono API with Prisma/PostgreSQL, auth, proposal/PDF generation, Telegram notifications, and integrations.
 - `packages/contracts` - shared Zod contracts and API/domain types.
 
-Mobile is deferred. DigitalOcean deployment is deferred until the deployment decision gate is approved in `task.md`.
+Mobile is deferred. DigitalOcean deployment is deferred until the deployment preparation/provisioning gates are explicitly approved.
 
 DigitalOcean Project: `engineering-calculator` (`e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`) exists as an organizational container only. DigitalOcean billing is based on actual team/account resource usage, not the number of Projects. This Project currently contains no paid resources.
 
-Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app exists, add the required App Platform CNAME/A/AAAA/TXT records at the registrar to point the production domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless that decision changes explicitly. See `task.md` for the domain cutover checklist, including apex vs `www`, API/admin hostnames, CORS/public URL env updates, and preserving MX/SPF/DKIM/DMARC records.
+Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app exists, add the required App Platform CNAME/A/AAAA/TXT records at the registrar to point the production domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless that decision changes explicitly. See [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md) for the domain cutover checklist, including apex vs `www`, API/admin hostnames, CORS/public URL env updates, and preserving MX/SPF/DKIM/DMARC records.
+
+PZK-013 selected the production deployment shape: DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18, with `website` and `webapp` as static sites, `backend` as one App Platform service, and generated proposal/PDF artifacts stored in PostgreSQL for v1. See [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md). This is documentation only; no App Platform app, database, Spaces bucket, Droplet, DNS record, or other paid resource has been created.
 
 ## Product Direction
 
@@ -198,9 +200,9 @@ CI:
 
 ## Deployment Notes
 
-No DigitalOcean paid resources, apps, databases, Spaces buckets, or DNS records have been created for this product. Deployment remains behind PZK-013/PZK-014 approval gates.
+No DigitalOcean paid resources, apps, databases, Spaces buckets, or DNS records have been created for this product. PZK-013 is complete as a decision record only; provisioning remains behind PZK-014 and a separate explicit user approval.
 
-Use [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the DigitalOcean App Platform runbook, [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) for local PostgreSQL, [docs/TESTING.md](docs/TESTING.md) for verification details, and [docs/STORAGE.md](docs/STORAGE.md) when generated files or media need persistent storage.
+Use [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md) for the selected deployment shape and PZK-014 checklist, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the DigitalOcean App Platform runbook, [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) for local PostgreSQL, [docs/TESTING.md](docs/TESTING.md) for verification details, and [docs/STORAGE.md](docs/STORAGE.md) when generated files or media need persistent storage.
 
 ## Template Attribution
 

@@ -967,7 +967,7 @@ Verification:
 
 ### PZK-013 - DigitalOcean Deployment Decision Gate
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -980,7 +980,33 @@ Acceptance criteria:
 - Domain plan uses registrar-managed DNS with CNAME/A records pointing to the DigitalOcean app after it exists; nameserver migration to DigitalOcean is out of scope unless explicitly approved later.
 - Exact production hostnames are chosen for public website, admin/webapp, and API before DNS cutover.
 - Canonical `www` vs apex behavior is chosen and documented.
-- User explicitly approves paid cloud resource creation or changes.
+- Paid cloud resource creation remains blocked pending separate explicit user approval.
+
+Completion notes:
+
+- Added `docs/deployment/digitalocean-decision-gate.md` as the PZK-013 decision record.
+- Selected DigitalOcean App Platform over Droplet + Docker Compose for first production launch.
+- Selected DigitalOcean Managed PostgreSQL 18 for production data because the schema uses database-generated `uuidv7()`.
+- Selected PostgreSQL-backed immutable proposal/PDF storage for v1. `Proposal.htmlSnapshot`, `Proposal.pdfBytes`, checksum, storage key, and calculation snapshots remain the durable source until Spaces is explicitly approved later.
+- Deferred DigitalOcean Spaces to future media/file-volume needs; App Platform container filesystem remains temporary only.
+- Documented `prisma:deploy` migration flow, `/health` plus post-deploy smoke checks, required backend/frontend env vars, runtime/Chromium notes, HTTPS/proxy assumptions, backups, restore, rollback, monitoring/logging, and expected monthly cost.
+- Documented registrar-managed DNS with no nameserver migration: canonical `www.<production-domain>`, apex redirect to `www`, `admin.<production-domain>` for webapp, and `api.<production-domain>` for backend.
+- Documented DNS cutover safeguards for CAA, DNSSEC as a PZK-014 preflight blocker, TLS propagation, and preservation of MX/SPF/DKIM/DMARC/TXT records.
+- Updated `README.md` and `docs/DEPLOYMENT.md` to point to the decision gate, require `--project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3` for future App Platform creates, and align examples with the `www`/`admin`/`api` hostname pattern.
+- Added a PZK-014 checklist covering domain confirmation, paid-resource approval, `fra` region confirmation, PostgreSQL 18 spec pinning, exact Bun runtime pinning, final env values, spec validation, and no provisioning before approval.
+- No DigitalOcean App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, or paid resource was created or changed.
+
+Verification:
+
+- PZK-013 pre-task `gpt-5.5 xhigh` review completed and recommendations incorporated.
+- Post-task review round 1 rated 9.1/10; required DNSSEC blocker wording, project ID on all create examples, hostname example alignment, and README pointer cleanup. Changes incorporated.
+- Focused post-task review round 2 rated 8.5/10; confirmed prior content fixes but required final tracker/bookkeeping and inclusion of the new decision doc in the final commit. This tracker update resolves the bookkeeping gap.
+- Final focused post-task review round 3 rated 9.6/10; no required changes remained and PZK-013 gate cleared.
+- `git diff --check` passed after documentation edits; Windows LF/CRLF working-copy warnings were printed for edited markdown files.
+- Scoped no-secrets scan over changed docs/README found no secrets.
+- `bun run typecheck` was not run because only markdown documentation changed and no code, env examples, package scripts, Docker, or deploy generator scripts were modified.
+- Pricing was checked against DigitalOcean pricing pages on 2026-07-10 before documenting estimates.
+- No `doctl apps create`, database, Spaces, Droplet, DNS, or other provisioning command was run in this task.
 
 ### PZK-014 - DigitalOcean Deployment Prep
 
@@ -1024,6 +1050,8 @@ These do not block PZK-001, but should be resolved before final public launch:
 - Confirm privacy policy text and retention period for public lead data.
 - Confirm whether public PDF/proposal links should expire or remain permanently accessible by token.
 - Confirm the exact production domain/subdomain and registrar account access before attaching it to DigitalOcean.
+- Confirm the chosen production domain's DNSSEC state before App Platform domain attachment; current DigitalOcean docs say App Platform does not support adding DNSSEC-enabled domains to apps.
+- Confirm the exact monthly-cost approval threshold before PZK-014 provisioning. Current documented baseline is about `$27.15/mo` before taxes/overages, excluding optional Spaces.
 
 ## 12. Known Risks And Edge Cases
 
@@ -1031,7 +1059,7 @@ These do not block PZK-001, but should be resolved before final public launch:
 - Phone validation must accept Belarusian and common international formats without rejecting valid clients.
 - BYN rounding rules must be consistent between public UI, admin, backend, and PDF.
 - PDF generation may differ between local and server environments; verify font rendering, page breaks, and Cyrillic support.
-- Generated PDFs need a stable storage strategy for DigitalOcean.
+- Generated PDFs are DB-backed for v1; monitor PostgreSQL growth and move large future media or high-volume proposal files to Spaces only after explicit approval.
 - Telegram API errors, bad bot tokens, or blocked chats must not break lead creation.
 - Auth/session configuration must be safe behind DigitalOcean proxy/HTTPS.
 - Public calculator should not trust client-side totals; backend must recalculate before saving/PDF.
@@ -1158,3 +1186,11 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Aristotle: `gpt-5.5 xhigh`; flagged stale handoff docs, `master` vs actual `main` branch guidance, missing `webapp/.env` setup copy, missing `PUBLIC_WEBAPP_URL` in `website/.env.example`, already-present CI, no-secrets scan expectations, and the need to document accepted early non-task setup commits without rewriting published history. Recommendations incorporated.
 - 2026-07-10 PZK-012 post-task review round 1:
   - Reviewer Noether: 9.6/10; found no implementation-blocking changes. Confirmed README handoff coverage, `.gitignore` local artifact coverage, agent branch guidance alignment, frontend env example consistency, CI documentation, git remote/branch state, and full provided verification. PZK-012 gate cleared; only final tracker update, commit, and push remained.
+- 2026-07-10 PZK-013 pre-task review:
+  - Reviewer Dalton: `gpt-5.5 xhigh`; recommended App Platform + Managed PostgreSQL 18, future `--project-id` usage, no real leads on bootstrap `*.ondigitalocean.app` URLs, region/runtime tightening, DB-backed proposal PDFs for v1, and smoke checks beyond `/health`. Recommendations incorporated.
+- 2026-07-10 PZK-013 post-task review round 1:
+  - Reviewer Kuhn: 9.1/10; required making DNSSEC a PZK-014 preflight blocker, adding `--project-id` to all App Platform create examples, aligning hostname examples to `www`/`admin`/`api`, and replacing the README `task.md` DNS pointer with the decision-gate document. Changes incorporated.
+- 2026-07-10 PZK-013 focused post-task review round 2:
+  - Reviewer Noether: 8.5/10; confirmed prior content fixes but required tracker reconciliation and including the new decision document in the final commit before handoff. Changes incorporated.
+- 2026-07-10 PZK-013 final focused post-task review round 3:
+  - Reviewer Ptolemy: 9.6/10; confirmed the staged tree satisfies PZK-013, the decision document is included, `task.md` is reconciled, DNSSEC/project-ID/hostname/README blockers are resolved, and no cloud provisioning artifacts are present. No required changes remained; PZK-013 gate cleared.

@@ -1,6 +1,8 @@
 # Deployment
 
-Use this document only after the user has asked for deployment. Read the root [README.md](../README.md) and active surface READMEs first; they record the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
+Use this document only after the user has asked for deployment. Read the root [README.md](../README.md), [deployment decision gate](deployment/digitalocean-decision-gate.md), and active surface READMEs first; they record the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
+
+PZK-013 selected DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18 as the production deployment shape. This is a decision record only. No App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, or other paid resource has been created. Future provisioning must be separately approved by the user and must use DigitalOcean Project ID `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`.
 
 The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
 
@@ -35,15 +37,15 @@ Do not store secrets in the repository. Minimum backend production env:
 ```bash
 DATABASE_URL=postgresql://...
 JWT_SECRET=<at-least-32-random-characters>
-CORS_ORIGINS=https://website.example.com
-AUTH_CORS_ORIGINS=https://webapp.example.com
+CORS_ORIGINS=https://www.example.com
+AUTH_CORS_ORIGINS=https://admin.example.com
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SECURE=true
 TRUST_PROXY_HEADERS=true
 PUBLIC_API_URL=https://api.example.com
-PUBLIC_WEBSITE_URL=https://website.example.com
-PUBLIC_WEBAPP_URL=https://webapp.example.com
+PUBLIC_WEBSITE_URL=https://www.example.com
+PUBLIC_WEBAPP_URL=https://admin.example.com
 ```
 
 `CORS_ORIGINS` must include public browser origins that call non-credentialed API routes, for example the public website. `AUTH_CORS_ORIGINS` must include only admin webapp origins that are allowed to use credentialed auth/admin CORS and cookie refresh/logout. Use exact origins only; do not use wildcards, empty values, or paths.
@@ -94,10 +96,10 @@ doctl auth init
 7. DigitalOcean Managed Valkey only when horizontally scaled real-time features need Pub/Sub between backend instances.
 8. Production domains and DNS access when custom domains are in scope.
 
-Prefer an App Platform app spec so the backend service, static sites, env, domains, and database attachment stay reviewable. Create or update with:
+Prefer an App Platform app spec so the backend service, static sites, env, domains, and database attachment stay reviewable. Create or update only after paid provisioning is explicitly approved. Pass the project ID on create so resources do not land in the default project by accident:
 
 ```bash
-doctl apps create --spec <path-to-spec.yaml>
+doctl apps create --project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3 --spec <path-to-spec.yaml>
 doctl apps update <app-id> --spec <path-to-spec.yaml>
 ```
 
@@ -142,19 +144,19 @@ Typical first deploy order:
 # 1. Create backend with a temporary placeholder browser origin.
 bun run deploy:do:specs backend-initial
 doctl apps spec validate .scratch/deploy/backend-app.yaml
-doctl apps create --spec .scratch/deploy/backend-app.yaml
+doctl apps create --project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3 --spec .scratch/deploy/backend-app.yaml
 
 # 2. After the backend URL exists, create the webapp static app.
 export DO_BACKEND_URL=https://<api-default-ingress>
 bun run deploy:do:specs webapp
 doctl apps spec validate .scratch/deploy/webapp-static-app.yaml
-doctl apps create --spec .scratch/deploy/webapp-static-app.yaml
+doctl apps create --project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3 --spec .scratch/deploy/webapp-static-app.yaml
 
 # 3. After the webapp URL exists, create the website static app if active.
 export DO_WEBAPP_URL=https://<webapp-default-ingress>
 bun run deploy:do:specs website
 doctl apps spec validate .scratch/deploy/website-static-app.yaml
-doctl apps create --spec .scratch/deploy/website-static-app.yaml
+doctl apps create --project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3 --spec .scratch/deploy/website-static-app.yaml
 
 # 4. After the website URL exists, update backend CORS for both browser origins.
 export DO_WEBSITE_URL=https://<website-default-ingress>
@@ -162,6 +164,8 @@ bun run deploy:do:specs backend-final
 doctl apps spec validate .scratch/deploy/backend-app.yaml
 doctl apps update <backend-app-id> --spec .scratch/deploy/backend-app.yaml
 ```
+
+Do not accept real leads on temporary `*.ondigitalocean.app` URLs. Proposal snapshots embed `PUBLIC_API_URL`, `PUBLIC_WEBSITE_URL`, and `PUBLIC_WEBAPP_URL`; incorrect bootstrap URLs can become durable proposal artifacts. Attach final custom domains, update env vars, redeploy static sites, and run smoke checks before real traffic.
 
 Static Sites build from the connected Git branch, not from local `dist` folders. The branch must contain the full web/backend monorepo: root `package.json`, `bun.lock`, `backend`, `webapp`, `website`, and `packages/contracts`.
 
@@ -286,19 +290,20 @@ Required component shape (static build):
 - Build command: `bun install --frozen-lockfile && bun run build:website`.
 - Output directory: `website/dist`.
 - Index document: `index.html`.
-- Build-time env: `PUBLIC_API_URL=https://api.example.com` for public lead capture, plus `PUBLIC_WEBAPP_URL=https://webapp.example.com` when the website links to the admin/app surface.
+- Build-time env: `PUBLIC_API_URL=https://api.example.com` for public lead capture, plus `PUBLIC_WEBAPP_URL=https://admin.example.com` when the website links to the admin/app surface.
 
 Keep website independent from authenticated browser-app flows unless the product explicitly needs shared API data.
 
-The backend also needs runtime `PUBLIC_WEBSITE_URL=https://website.example.com` so newly generated proposal HTML/PDF snapshots can embed absolute links to public project example PDFs. `PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
+The backend also needs runtime `PUBLIC_WEBSITE_URL=https://www.example.com` so newly generated proposal HTML/PDF snapshots can embed absolute links to public project example PDFs. `PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
 
 ## Managed PostgreSQL
 
-Use DigitalOcean Managed PostgreSQL for production data. For a new low-cost production launch, start with the Basic Regular 1 GiB / 1 vCPU cluster with no standby nodes; it is $15.15/month as of May 2026. When attaching the database inside App Platform, prefer bindable variables such as the database component's `DATABASE_URL`/`DATABASE_PRIVATE_URL` rather than copying raw credentials into the spec.
+Use DigitalOcean Managed PostgreSQL 18 for production data. PostgreSQL 18 is required because the Prisma schema uses database-generated `uuidv7()` defaults. For a new low-cost production launch, start with the Basic Regular 1 GiB / 1 vCPU cluster with no standby nodes; it is $15.15/month as checked on 2026-07-10. When attaching the database inside App Platform, prefer bindable variables such as the database component's `DATABASE_URL`/`DATABASE_PRIVATE_URL` rather than copying raw credentials into the spec.
 
 Operational defaults:
 
 - Keep the database in the same region/VPC as the backend service when possible.
+- Pin `version: "18"` in App Platform database specs before provisioning and test the generator/spec output.
 - Enable trusted sources for the App Platform app when using managed database network restrictions.
 - Use a connection pool if the app starts hitting connection limits.
 - Take backups before destructive schema or data operations.
