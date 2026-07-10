@@ -7,11 +7,24 @@ build/
 coverage/
 .vite/
 .scratch/
+tmp/
+temp/
+.tmp/
 playwright-report/
 test-results/
 webapp/e2e/.artifacts/
 mobile/.expo/
 mobile/.maestro/reports/
+
+# Generated local downloads/exports. Intentional public example PDFs are tracked
+# under website/public, so keep one-off PDFs inside these ignored folders.
+downloads/
+exports/
+local-pdfs/
+tmp-pdfs/
+proposal-output/
+proposals-output/
+*.tmp
 
 # Local design source materials with filled client/questionnaire data
 docs/design/Опросный лист.xlsx

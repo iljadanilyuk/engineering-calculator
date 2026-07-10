@@ -62,7 +62,7 @@
 ## Git And Remote Policy
 
 - Inspect `git remote -v` before any branch, commit, push, or PR workflow.
-- Work on `master` unless explicitly told otherwise. Do not create, switch to, or suggest new branches without request.
+- Work on the checked-out tracking branch unless explicitly told otherwise; this repository's GitHub handoff branch is `main`. Do not create, switch to, or suggest new branches without request.
 - Treat this repository as the standalone Poznyak Engineering Calculator project, not as a pull request source for the template.
 - If `origin` ever points to the Vibe template repository, remove it with `git remote remove origin`.
 - Add the project GitHub repository as `origin` only when the user provides its exact URL or asks to create/publish the project.

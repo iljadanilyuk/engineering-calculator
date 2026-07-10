@@ -4,9 +4,9 @@ Full-stack calculator for engineering design commercial offers for `ИП Поз�
 
 The project is scaffolded from the Vibe template (`https://github.com/di-sukharev/vibe`) and keeps the template's monorepo shape:
 
-- `website` - public Astro surface for the landing page and calculator.
-- `webapp` - React/Vite admin cabinet for services, leads, and settings.
-- `backend` - Hono API with Prisma/PostgreSQL, auth, proposal generation, and integrations.
+- `website` - public Astro surface for the landing page, calculator, project examples, and public proposal links.
+- `webapp` - React/Vite admin cabinet for services, leads, statuses, notes, proposal links, and settings.
+- `backend` - Hono API with Prisma/PostgreSQL, auth, proposal/PDF generation, Telegram notifications, and integrations.
 - `packages/contracts` - shared Zod contracts and API/domain types.
 
 Mobile is deferred. DigitalOcean deployment is deferred until the deployment decision gate is approved in `task.md`.
@@ -23,10 +23,17 @@ Important project choices are tracked in [task.md](task.md). The current brand p
 
 ## Local Setup
 
+Prerequisites:
+
+- Bun, using the committed `bun.lock`.
+- Docker Desktop or Docker Engine with Compose v2 for local PostgreSQL and DB-backed tests.
+- Git.
+- Playwright Chromium for browser E2E, installed with `bun run --cwd webapp e2e:install` when needed.
+
 Install dependencies:
 
 ```bash
-bun install
+bun install --frozen-lockfile
 ```
 
 For backend/API work, Docker Compose provides local PostgreSQL. Check Docker before relying on the database:
@@ -47,6 +54,7 @@ Create local env files from examples:
 ```powershell
 Copy-Item .env.example .env
 Copy-Item backend/.env.example backend/.env
+Copy-Item webapp/.env.example webapp/.env
 Copy-Item website/.env.example website/.env
 ```
 
@@ -90,15 +98,20 @@ Default local URLs:
 - `bun run dev:website` - start the public Astro website.
 - `bun run typecheck` - run TypeScript checks across workspaces.
 - `bun run build` - build/check all workspaces.
+- `bun run test` - run deploy/script tests, contracts, backend tests, and webapp tests.
+- `bun run test:deploy` - run deployment/spec and repository env tests.
 - `bun run test:contracts` - run shared contract tests.
+- `bun run test:backend` - run backend unit and integration tests.
 - `bun run test:backend:unit` - run backend unit tests.
 - `bun run test:backend:integration` - run DB-backed backend integration tests.
 - `bun run test:webapp` - run webapp tests.
+- `bun run smoke:backend:docker` - build/smoke the backend Docker image against the test DB.
 - `bun run e2e:webapp` - run the Playwright webapp smoke flow.
+- `bun run deploy:do:specs` - generate validated DigitalOcean App Platform specs into `.scratch/deploy` only.
 
 ## Environment
 
-Root `.env.example` defines Docker Compose database settings. `backend/.env.example` defines API runtime settings and placeholders for future integrations.
+Root `.env.example` defines Docker Compose database settings. `backend/.env.example` defines API runtime settings and placeholders for future integrations. `webapp/.env.example` and `website/.env.example` define frontend build-time URLs.
 
 No production secrets should be committed. Real values belong in local `.env` files or the chosen deployment secret store.
 
@@ -112,32 +125,51 @@ Planned v1 env areas:
 - PDF/proposal storage: persistent local volume, object storage, or another approved durable store
 - Public contacts: phone/email/Telegram shown on the public page and PDF
 
-## Verification For PZK-001
+Frontend env files are build-time configuration:
 
-The scaffold task is considered healthy when these checks pass or are explicitly documented:
+- `webapp/.env`: `VITE_API_URL=http://localhost:3000`
+- `website/.env`: `PUBLIC_API_URL=http://localhost:3000`, `PUBLIC_WEBAPP_URL=http://localhost:5173`, and `PUBLIC_WEBSITE_URL=http://localhost:4321`
+
+Do not put backend secrets, Telegram tokens, database URLs, JWT secrets, or storage keys into frontend env files.
+
+## Verification
 
 ```bash
-bun install
+bun install --frozen-lockfile
 bun run typecheck
 bun run build
+bun run test:deploy
 bun run test:contracts
 bun run test:backend:unit
+bun run test:backend:integration
 bun run test:webapp
 ```
 
-For backend smoke checks:
+Database-backed and browser checks require Docker:
 
 ```bash
+docker compose version
 docker info
-docker compose up -d postgres
-bun run dev:backend
+bun run --cwd webapp e2e:install
+bun run e2e:webapp
+bun run smoke:backend:docker
 ```
 
-For browser surface smoke checks:
+Repository hygiene checks before handoff or deploy:
 
 ```bash
-bun run dev:webapp
-bun run dev:website
+git remote -v
+git status --short --branch
+git log --oneline --decorate -n 20
+git ls-files -o --exclude-standard
+git diff --check
+```
+
+Manual no-secrets check used for handoff:
+
+```bash
+rg --files -g ".env*" -g "!node_modules/**" -g "!.git/**" -g "!.scratch/**"
+rg -n --pcre2 "(ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]+PRIVATE KEY-----)" -g "!node_modules/**" -g "!.git/**" -g "!.scratch/**" -g "!bun.lock" -g "!*.svg"
 ```
 
 ## GitHub
@@ -148,7 +180,27 @@ Current local status:
 
 - `origin` is configured as `https://github.com/iljadanilyuk/engineering-calculator.git`.
 - `main` tracks `origin/main`.
+- Current handoff commit before PZK-012 was `c048c29 Complete PZK-011 project examples`.
 - The original Vibe template remote is not configured.
+
+Branch and commit convention:
+
+- `main` is the current handoff branch and the deployment source branch used by docs/spec generation unless a future task explicitly changes it.
+- Current task workflow commits completed work directly to `main` after the mandatory `task.md` review gate passes.
+- Use one final commit per PZK task when practical, named like `Complete PZK-012 GitHub preparation`.
+- If future work switches to PR branches, use `pzk-###-short-scope` from `main` and merge without rewriting published history.
+- Do not rewrite the existing pushed history. Early setup docs between PZK-001 and PZK-002 remain as accepted historical commits; PZK task commits from PZK-002 onward are kept task-oriented.
+
+CI:
+
+- `.github/workflows/ci.yml` runs on pull requests and pushes to `main`/`master`.
+- It installs dependencies with `bun install --frozen-lockfile`, then runs typecheck, build, deploy/script tests, contract tests, webapp tests, backend tests, Playwright browser install, and the webapp E2E smoke flow.
+
+## Deployment Notes
+
+No DigitalOcean paid resources, apps, databases, Spaces buckets, or DNS records have been created for this product. Deployment remains behind PZK-013/PZK-014 approval gates.
+
+Use [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the DigitalOcean App Platform runbook, [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) for local PostgreSQL, [docs/TESTING.md](docs/TESTING.md) for verification details, and [docs/STORAGE.md](docs/STORAGE.md) when generated files or media need persistent storage.
 
 ## Template Attribution
 

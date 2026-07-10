@@ -909,7 +909,7 @@ Verification:
 
 ### PZK-012 - GitHub Preparation
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -926,6 +926,44 @@ Acceptance criteria:
 - Secrets scan or manual no-secrets check is run/documented.
 - Final verification commands/manual checks are documented.
 - CI is added if practical; otherwise manual checks are explicit.
+
+Completion notes:
+
+- Prepared the repository for GitHub handoff without rewriting published history, touching DigitalOcean/cloud resources, Bella/ads files, or the Codex plugin layer.
+- Updated `README.md` into a current handoff guide covering prerequisites, local setup, workspace scripts, env files, verification, no-secrets checks, GitHub remote/branch status, branch and commit conventions, CI, and deferred deployment notes.
+- Documented the actual GitHub state: `origin` is `https://github.com/iljadanilyuk/engineering-calculator.git`, `main` tracks `origin/main`, the original Vibe template remote is not configured, and the PZK-012 starting commit was `c048c29 Complete PZK-011 project examples`.
+- Documented the branch/commit convention: current handoff work is on `main`; task workflow commits completed PZK work directly to `main` after the mandatory review gate; future PR branches, if adopted, should use `pzk-###-short-scope`; do not rewrite the existing pushed history.
+- Recorded the early history caveat instead of rewriting history: setup documentation commits between PZK-001 and PZK-002 remain accepted historical commits; PZK task commits from PZK-002 onward are task-oriented.
+- Confirmed CI already exists at `.github/workflows/ci.yml`; it runs frozen install, typecheck, build, deploy/script tests, contract tests, webapp tests, backend tests, Playwright browser install, and webapp E2E on pull requests and pushes to `main`/`master`. No new CI workflow was needed for PZK-012.
+- Aligned frontend env examples: `webapp/.env.example` now documents quoted `VITE_API_URL`, and `website/.env.example` includes `PUBLIC_API_URL`, `PUBLIC_WEBAPP_URL`, and `PUBLIC_WEBSITE_URL`.
+- Reviewed root `.env.example` and `backend/.env.example`; required local database, auth/session, admin bootstrap, Spaces, PDF, Telegram, public URL, and contact placeholders are present and contain placeholders/blank values rather than real secrets.
+- Updated `.gitignore` for generated local temp/download/export/proposal-output folders and `*.tmp` files while intentionally not ignoring all PDFs, because committed public example PDFs under `website/public/project-examples` are real project assets.
+- Aligned `AGENTS.md` and `CLAUDE.md` branch guidance with the current `main` handoff branch.
+
+Verification:
+
+- `git remote -v` confirmed `origin` fetch/push URL is `https://github.com/iljadanilyuk/engineering-calculator.git`.
+- `git status --short --branch` confirmed `main...origin/main`; before edits the tree was clean, and after verification only intended PZK-012 files were modified.
+- `git branch -vv` confirmed `main` tracks `origin/main` at `c048c29 Complete PZK-011 project examples`.
+- `git log --oneline --decorate -n 20` reviewed current history and confirmed no history rewrite was needed or performed.
+- `git ls-files -o --exclude-standard` returned no untracked files after the PZK-012 edits.
+- `rg --files -g ".env*" -g "!node_modules/**" -g "!.git/**" -g "!.scratch/**"` returned only tracked examples: `.env.example`, `backend/.env.example`, `webapp/.env.example`, and `website/.env.example`.
+- Strict manual no-secrets scan passed with no matches:
+  - `rg -n --pcre2 "(ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]+PRIVATE KEY-----)" -g "!node_modules/**" -g "!.git/**" -g "!.scratch/**" -g "!bun.lock" -g "!*.svg"`.
+- `docker info` passed; Docker Desktop/engine was available for DB-backed checks.
+- `bun install --frozen-lockfile` passed with no dependency changes.
+- `bun run typecheck` passed for backend, contracts, webapp, and website.
+- `bun run build` passed. Non-blocking warnings: existing Vite webapp chunk-size warning and existing local `NODE_TLS_REJECT_UNAUTHORIZED=0` warning during Astro build.
+- `bun run test:deploy` passed: 16/16.
+- `bun run test:contracts` passed: 18/18.
+- `bun run test:backend:unit` passed: 36/36.
+- `bun run test:webapp` passed: 40/40.
+- `bun run test:backend:integration` passed: 33/33.
+- `bun run --cwd webapp e2e:install` passed.
+- `bun run e2e:webapp` passed: 4/4.
+- `bun run smoke:backend:docker` passed, including backend Docker image build, `/health`, and DB-backed auth smoke.
+- `docker compose ps` showed no running project Compose services after verification.
+- `git diff --check` passed; only expected Windows LF/CRLF working-copy warnings were printed.
 
 ### PZK-013 - DigitalOcean Deployment Decision Gate
 
@@ -1116,3 +1154,7 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Dewey: 8.3/10; required the same deploy env fix, committing the untracked contracts/PDF assets, unique accessible names for repeated PDF links, and tracker cleanup. Changes incorporated.
 - 2026-07-10 PZK-011 focused post-task review round 2:
   - Reviewer Gibbs: 9.6/10; confirmed `PUBLIC_WEBSITE_URL` backend spec wiring, deploy validation/tests, unique PDF link accessible labels, immutable proposal snapshot coverage, and no remaining required changes. PZK-011 gate cleared.
+- 2026-07-10 PZK-012 pre-task review:
+  - Reviewer Aristotle: `gpt-5.5 xhigh`; flagged stale handoff docs, `master` vs actual `main` branch guidance, missing `webapp/.env` setup copy, missing `PUBLIC_WEBAPP_URL` in `website/.env.example`, already-present CI, no-secrets scan expectations, and the need to document accepted early non-task setup commits without rewriting published history. Recommendations incorporated.
+- 2026-07-10 PZK-012 post-task review round 1:
+  - Reviewer Noether: 9.6/10; found no implementation-blocking changes. Confirmed README handoff coverage, `.gitignore` local artifact coverage, agent branch guidance alignment, frontend env example consistency, CI documentation, git remote/branch state, and full provided verification. PZK-012 gate cleared; only final tracker update, commit, and push remained.
