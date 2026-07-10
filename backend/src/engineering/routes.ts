@@ -1,7 +1,10 @@
 import {
   apiErrorSchema,
+  calculationListQuerySchema,
+  calculationListResponseSchema,
   calculationSaveRequestSchema,
   calculationSaveResponseSchema,
+  calculationUpdateRequestSchema,
   exchangeRateSettingRequestSchema,
   exchangeRateSettingResponseSchema,
   projectExampleCreateRequestSchema,
@@ -301,6 +304,30 @@ const reorderServicesRoute = createRoute({
   },
 })
 
+const adminCalculationsRoute = createRoute({
+  method: 'get',
+  path: '/admin/calculations',
+  request: {
+    query: calculationListQuerySchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: calculationListResponseSchema,
+        },
+      },
+      description: 'Submitted calculations/leads with CRM filters and counts',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid filters',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+  },
+})
+
 const getCalculationRoute = createRoute({
   method: 'get',
   path: '/admin/calculations/{id}',
@@ -315,6 +342,41 @@ const getCalculationRoute = createRoute({
         },
       },
       description: 'Saved calculation with immutable snapshots',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+    404: {
+      content: errorResponseContent,
+      description: 'Calculation not found',
+    },
+  },
+})
+
+const updateCalculationRoute = createRoute({
+  method: 'patch',
+  path: '/admin/calculations/{id}',
+  request: {
+    params: idParamsSchema,
+    body: {
+      content: {
+        'application/json': {
+          schema: calculationUpdateRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: calculationSaveResponseSchema,
+        },
+      },
+      description: 'Updated calculation CRM status or notes',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
     },
     401: unauthorizedResponse,
     403: forbiddenResponse,
@@ -553,9 +615,23 @@ export function createEngineeringRoutes() {
     return c.json({ service }, 200)
   })
 
+  protectedRoutes.openapi(adminCalculationsRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    return c.json(await engineering.listCalculations(c.req.valid('query')), 200)
+  })
+
   protectedRoutes.openapi(getCalculationRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
     const calculation = await engineering.getCalculation(c.req.valid('param').id)
+    return c.json({ calculation }, 200)
+  })
+
+  protectedRoutes.openapi(updateCalculationRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const calculation = await engineering.updateCalculation(
+      c.req.valid('param').id,
+      c.req.valid('json'),
+    )
     return c.json({ calculation }, 200)
   })
 

@@ -4,6 +4,7 @@ import {
   CALCULATION_VERSION,
   calculateEngineeringOffer,
   calculationDomainInputSchema,
+  calculationListQuerySchema,
   calculationResultSchema,
   convertUsdCentsToBynCents,
   engineeringServiceSchema,
@@ -621,6 +622,31 @@ describe('engineering calculation domain', () => {
           { id: '00000000-0000-7000-8000-000000000001', sortOrder: 20 },
           { id: '00000000-0000-7000-8000-000000000001', sortOrder: 10 },
         ],
+      }),
+    ).toThrow()
+
+    expect(
+      calculationListQuerySchema.parse({
+        status: 'all',
+        createdFrom: '2026-07-10',
+        createdTo: '2026-07-10',
+      }),
+    ).toMatchObject({
+      createdFrom: '2026-07-10',
+      createdTo: '2026-07-10',
+      limit: 50,
+      offset: 0,
+    })
+
+    expect(() =>
+      calculationListQuerySchema.parse({
+        createdFrom: '2026-02-31',
+      }),
+    ).toThrow()
+
+    expect(() =>
+      calculationListQuerySchema.parse({
+        createdTo: '2026-99-99',
       }),
     ).toThrow()
   })

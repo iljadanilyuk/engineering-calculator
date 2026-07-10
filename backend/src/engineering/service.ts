@@ -3,9 +3,13 @@ import {
   calculateEngineeringOffer,
   calculationResultSchema,
   exchangeRateInputSchema,
+  type CalculationListItem,
+  type CalculationListQuery,
   type CalculationRecord,
   type CalculationResult,
   type CalculationSaveRequest,
+  type CalculationStatus,
+  type CalculationUpdateRequest,
   type ExchangeRateInput,
   type ExchangeRateSnapshot,
   type ProjectExampleCreateRequest,
@@ -33,6 +37,19 @@ const duplicateDetectionWindowMs = 10 * 60 * 1_000
 const consentVersion = 'pzk-public-lead-consent-v1'
 const consentText =
   'Согласен на обработку имени, телефона и выбранного расчета для подготовки коммерческого предложения.'
+const calculationStatuses = [
+  'new',
+  'contacted',
+  'in_progress',
+  'won',
+  'lost',
+  'spam_test',
+] as const satisfies readonly CalculationStatus[]
+const orderedProposalInclude = {
+  orderBy: {
+    createdAt: 'asc' as const,
+  },
+}
 
 type ServiceRow = Awaited<ReturnType<DbClient['service']['findFirstOrThrow']>>
 type CalculationRow = Awaited<ReturnType<DbClient['calculation']['findFirstOrThrow']>>
@@ -400,7 +417,7 @@ export class EngineeringDataService {
     const calculation = await this.db.calculation
       .findUniqueOrThrow({
         where: { id },
-        include: { proposals: true },
+        include: { proposals: orderedProposalInclude },
       })
       .catch((error: unknown) => {
         if (isPrismaNotFound(error)) {
@@ -408,6 +425,82 @@ export class EngineeringDataService {
         }
         throw error
       })
+
+    return calculationToRecord(calculation, calculation.proposals)
+  }
+
+  async listCalculations(input: CalculationListQuery) {
+    const where = calculationListWhere(input)
+    const calculations = await this.db.calculation.findMany({
+      where,
+      include: { proposals: orderedProposalInclude },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: input.limit,
+      skip: input.offset,
+    })
+    const [
+      filteredCount,
+      totalCount,
+      activeCount,
+      spamTestCount,
+      statusCounts,
+    ] = await Promise.all([
+      this.db.calculation.count({ where }),
+      this.db.calculation.count(),
+      this.db.calculation.count({ where: { status: { not: 'spam_test' } } }),
+      this.db.calculation.count({ where: { status: 'spam_test' } }),
+      this.countCalculationsByStatus(),
+    ])
+
+    return {
+      calculations: calculations.map((calculation) =>
+        calculationToListItem(calculation, calculation.proposals),
+      ),
+      summary: {
+        totalCount,
+        activeCount,
+        spamTestCount,
+        filteredCount,
+        statusCounts,
+        limit: input.limit,
+        offset: input.offset,
+      },
+    }
+  }
+
+  async updateCalculation(id: string, input: CalculationUpdateRequest) {
+    const existing = await this.db.calculation
+      .findUniqueOrThrow({
+        where: { id },
+        include: { proposals: orderedProposalInclude },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Calculation not found')
+        }
+        throw error
+      })
+
+    const data: Prisma.CalculationUpdateInput = {}
+
+    if (hasOwn(input, 'status') && input.status !== existing.status) {
+      data.status = input.status
+      data.statusUpdatedAt = new Date()
+    }
+
+    if (hasOwn(input, 'notes')) {
+      data.notes = input.notes ?? null
+    }
+
+    if (Object.keys(data).length === 0) {
+      return calculationToRecord(existing, existing.proposals)
+    }
+
+    const calculation = await this.db.calculation.update({
+      where: { id },
+      data,
+      include: { proposals: orderedProposalInclude },
+    })
 
     return calculationToRecord(calculation, calculation.proposals)
   }
@@ -531,7 +624,7 @@ export class EngineeringDataService {
   private async findCalculationByIdempotencyKey(idempotencyKey: string) {
     return this.db.calculation.findUnique({
       where: { idempotencyKey },
-      include: { proposals: true },
+      include: { proposals: orderedProposalInclude },
     })
   }
 
@@ -540,8 +633,19 @@ export class EngineeringDataService {
   ): Promise<CalculationWithProposals | null> {
     return this.db.calculation.findUnique({
       where: { duplicateFingerprintHash },
-      include: { proposals: true },
+      include: { proposals: orderedProposalInclude },
     })
+  }
+
+  private async countCalculationsByStatus() {
+    const entries = await Promise.all(
+      calculationStatuses.map(async (status) => [
+        status,
+        await this.db.calculation.count({ where: { status } }),
+      ] as const),
+    )
+
+    return Object.fromEntries(entries) as Record<CalculationStatus, number>
   }
 }
 
@@ -661,20 +765,34 @@ function calculationToRecord(
     consentText: calculation.consentText,
     consentIpAddress: calculation.consentIpAddress,
     consentUserAgent: calculation.consentUserAgent,
-    proposalArtifacts: proposals.map((proposal) => ({
-      id: proposal.id,
-      publicToken: proposal.publicToken,
-      offerNumber: proposal.offerNumber,
-      templateVersion: proposal.templateVersion,
-      pdfUrl: proposal.pdfUrl,
-      storageKey: proposal.storageKey,
-      checksumSha256: proposal.checksumSha256,
-      pdfByteSize: proposal.pdfByteSize,
-      hasHtmlSnapshot: proposal.htmlSnapshot !== null,
-      createdAt: proposal.createdAt.toISOString(),
-    })),
+    proposalArtifacts: proposals.map(proposalToArtifactReference),
     createdAt: calculation.createdAt.toISOString(),
     updatedAt: calculation.updatedAt.toISOString(),
+  }
+}
+
+function calculationToListItem(
+  calculation: CalculationRow & { proposals?: ProposalRow[] },
+  proposals: ProposalRow[],
+): CalculationListItem {
+  const record = calculationToRecord(calculation, proposals)
+
+  return {
+    id: record.id,
+    clientName: record.clientName,
+    clientPhone: record.clientPhone,
+    objectName: record.objectName,
+    areaSqm: record.areaSqm,
+    serviceSnapshots: record.serviceSnapshots,
+    totalUsdCents: record.totalUsdCents,
+    totalBynCents: record.totalBynCents,
+    totalBynRoundedRubles: record.totalBynRoundedRubles,
+    status: record.status,
+    statusUpdatedAt: record.statusUpdatedAt,
+    notes: record.notes,
+    proposalArtifacts: record.proposalArtifacts,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   }
 }
 
@@ -741,6 +859,28 @@ function publicProposalReference(proposal: ProposalRow): PublicCalculationRecord
   }
 }
 
+function proposalToArtifactReference(proposal: ProposalRow): CalculationRecord['proposalArtifacts'][number] {
+  const urlPath = `/api/public/proposals/${proposal.publicToken}`
+  const hasPublicPdfRoute = Boolean(proposal.pdfBytes && proposal.checksumSha256)
+  const status = hasPublicPdfRoute || proposal.pdfUrl ? 'ready' : 'html_only'
+
+  return {
+    id: proposal.id,
+    publicToken: proposal.publicToken,
+    offerNumber: proposal.offerNumber,
+    templateVersion: proposal.templateVersion,
+    status,
+    urlPath,
+    ...(hasPublicPdfRoute ? { pdfUrlPath: `${urlPath}/pdf` } : {}),
+    pdfUrl: proposal.pdfUrl,
+    storageKey: proposal.storageKey,
+    checksumSha256: proposal.checksumSha256,
+    pdfByteSize: proposal.pdfByteSize,
+    hasHtmlSnapshot: proposal.htmlSnapshot !== null,
+    createdAt: proposal.createdAt.toISOString(),
+  }
+}
+
 function snapshotExchangeRate(input: ExchangeRateInput): ExchangeRateSnapshot {
   return calculateEngineeringOffer({
     areaSqm: '1',
@@ -771,6 +911,74 @@ function jsonRecordOrNull(value: Prisma.JsonValue | null) {
 
 function jsonRecordOrUndefined(value: Prisma.JsonValue | null) {
   return jsonRecordOrNull(value) ?? undefined
+}
+
+function calculationListWhere(input: CalculationListQuery): Prisma.CalculationWhereInput {
+  const and: Prisma.CalculationWhereInput[] = []
+
+  if (input.status) {
+    and.push({ status: input.status })
+  }
+
+  if (input.name) {
+    and.push({ clientName: { contains: input.name, mode: 'insensitive' } })
+  }
+
+  if (input.phone) {
+    and.push(phoneSearchWhere(input.phone))
+  }
+
+  if (input.search) {
+    and.push({
+      OR: [
+        { clientName: { contains: input.search, mode: 'insensitive' } },
+        phoneSearchWhere(input.search),
+      ],
+    })
+  }
+
+  if (input.createdFrom || input.createdTo) {
+    and.push({
+      createdAt: {
+        ...(input.createdFrom ? { gte: dateOnlyStart(input.createdFrom) } : {}),
+        ...(input.createdTo ? { lte: dateOnlyEnd(input.createdTo) } : {}),
+      },
+    })
+  }
+
+  return and.length > 0 ? { AND: and } : {}
+}
+
+function phoneSearchWhere(value: string): Prisma.CalculationWhereInput {
+  const variants = phoneSearchVariants(value)
+
+  return {
+    OR: variants.map((variant) => ({
+      clientPhone: { contains: variant, mode: 'insensitive' },
+    })),
+  }
+}
+
+function phoneSearchVariants(value: string) {
+  const trimmed = value.trim()
+  const digits = trimmed.replace(/\D/g, '')
+  const variants = new Set<string>()
+
+  if (trimmed) variants.add(trimmed)
+  if (digits) {
+    variants.add(digits)
+    variants.add(`+${digits}`)
+  }
+
+  return [...variants]
+}
+
+function dateOnlyStart(value: string) {
+  return new Date(`${value}T00:00:00.000Z`)
+}
+
+function dateOnlyEnd(value: string) {
+  return new Date(`${value}T23:59:59.999Z`)
 }
 
 function safeNumberFromBigInt(value: bigint, label: string) {
@@ -908,6 +1116,13 @@ function assertIdempotencyFingerprintMatches(
     'CONFLICT',
     'Idempotency key was already used for a different calculation submission',
   )
+}
+
+function hasOwn<T extends object, K extends PropertyKey>(
+  value: T,
+  key: K,
+): value is T & Record<K, unknown> {
+  return Object.prototype.hasOwnProperty.call(value, key)
 }
 
 function sha256Hex(value: unknown) {

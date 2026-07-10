@@ -1,6 +1,10 @@
 import {
   apiErrorSchema,
   authResponseSchema,
+  calculationListQuerySchema,
+  calculationListResponseSchema,
+  calculationSaveResponseSchema,
+  calculationUpdateRequestSchema,
   exchangeRateSettingResponseSchema,
   loginRequestSchema,
   logoutRequestSchema,
@@ -13,6 +17,10 @@ import {
   serviceResponseSchema,
   serviceUpdateRequestSchema,
   type AuthResponse,
+  type CalculationListQueryInput,
+  type CalculationListResponse,
+  type CalculationUpdateRequest,
+  type CalculationRecord,
   type ExchangeRateSettingResponse,
   type LoginRequest,
   type LogoutRequest,
@@ -28,6 +36,10 @@ import {
 import type { z } from 'zod'
 
 const apiBaseUrl = (import.meta.env?.VITE_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+
+export function buildApiUrl(path: string) {
+  return `${apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`
+}
 
 type ApiClientOptions = {
   getAccessToken: () => string | null
@@ -126,6 +138,31 @@ export class ApiClient {
     })
   }
 
+  listCalculations(input: CalculationListQueryInput = {}): Promise<CalculationListResponse> {
+    const query = calculationListQuerySchema.parse(input)
+    return this.request(`/api/admin/calculations${toQueryString(query)}`, calculationListResponseSchema, {
+      auth: true,
+    })
+  }
+
+  getCalculation(id: string): Promise<{ calculation: CalculationRecord }> {
+    return this.request(`/api/admin/calculations/${id}`, calculationSaveResponseSchema, {
+      auth: true,
+    })
+  }
+
+  updateCalculation(
+    id: string,
+    input: CalculationUpdateRequest,
+  ): Promise<{ calculation: CalculationRecord }> {
+    const payload = calculationUpdateRequestSchema.parse(input)
+    return this.request(`/api/admin/calculations/${id}`, calculationSaveResponseSchema, {
+      method: 'PATCH',
+      body: payload,
+      auth: true,
+    })
+  }
+
   async logout(input: LogoutRequest = {}) {
     const payload = logoutRequestSchema.parse(input)
     await this.rawRequest('/api/auth/logout', {
@@ -211,6 +248,18 @@ export class ApiClient {
 
     return headers
   }
+}
+
+function toQueryString(input: Record<string, unknown>) {
+  const params = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined || value === null || value === '') continue
+    params.set(key, String(value))
+  }
+
+  const queryString = params.toString()
+  return queryString ? `?${queryString}` : ''
 }
 
 async function toApiError(response: Response) {

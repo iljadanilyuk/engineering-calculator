@@ -22,6 +22,13 @@ const optionalTextSchema = (max: number) =>
     return trimmed === '' ? null : trimmed
   }, z.string().max(max).nullable().optional())
 
+const optionalQueryTextSchema = (max: number) =>
+  z.preprocess((value) => {
+    if (typeof value !== 'string') return value
+    const trimmed = value.trim()
+    return trimmed === '' ? undefined : trimmed
+  }, z.string().max(max).optional())
+
 const optionalUrlTextSchema = z.preprocess((value) => {
   if (typeof value !== 'string') return value
   const trimmed = value.trim()
@@ -31,11 +38,18 @@ const optionalUrlTextSchema = z.preprocess((value) => {
 const pricingRuleSchema = z.record(z.string(), z.unknown()).nullable().optional()
 const sortOrderSchema = z.number().int().min(-1_000_000).max(1_000_000)
 const workingServicePricingTypeSchema = z.enum(['fixed', 'per_sqm'])
+const dateOnlySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isValidDateOnly, 'Expected a valid calendar date')
 const proposalArtifactReferenceSchema = z.object({
   id: uuidSchema,
   publicToken: publicTokenSchema,
   offerNumber: z.string(),
   templateVersion: z.string(),
+  status: z.enum(['ready', 'html_only']),
+  urlPath: z.string().startsWith('/api/public/proposals/'),
+  pdfUrlPath: z.string().startsWith('/api/public/proposals/').optional(),
   pdfUrl: z.string().url().nullable(),
   storageKey: z.string().nullable(),
   checksumSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
@@ -142,6 +156,11 @@ export const calculationStatusSchema = z.enum([
   'spam_test',
 ])
 
+const optionalCalculationStatusQuerySchema = z.preprocess((value) => {
+  if (value === '' || value === 'all') return undefined
+  return value
+}, calculationStatusSchema.optional())
+
 export const calculationSaveRequestSchema = leadSubmissionSchema
 
 export const calculationRecordSchema = z.object({
@@ -222,6 +241,71 @@ export const calculationSaveResponseSchema = z.object({
   calculation: calculationRecordSchema,
 })
 
+export const calculationListItemSchema = calculationRecordSchema.pick({
+  id: true,
+  clientName: true,
+  clientPhone: true,
+  objectName: true,
+  areaSqm: true,
+  serviceSnapshots: true,
+  totalUsdCents: true,
+  totalBynCents: true,
+  totalBynRoundedRubles: true,
+  status: true,
+  statusUpdatedAt: true,
+  notes: true,
+  proposalArtifacts: true,
+  createdAt: true,
+  updatedAt: true,
+})
+
+export const calculationStatusCountsSchema = z.object({
+  new: z.number().int().nonnegative(),
+  contacted: z.number().int().nonnegative(),
+  in_progress: z.number().int().nonnegative(),
+  won: z.number().int().nonnegative(),
+  lost: z.number().int().nonnegative(),
+  spam_test: z.number().int().nonnegative(),
+})
+
+export const calculationListQuerySchema = z.object({
+  status: optionalCalculationStatusQuerySchema,
+  search: optionalQueryTextSchema(120),
+  phone: optionalQueryTextSchema(40),
+  name: optionalQueryTextSchema(120),
+  createdFrom: dateOnlySchema.optional(),
+  createdTo: dateOnlySchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).max(10_000).default(0),
+}).superRefine((value, context) => {
+  if (!value.createdFrom || !value.createdTo) return
+  if (value.createdFrom <= value.createdTo) return
+
+  context.addIssue({
+    code: 'custom',
+    path: ['createdTo'],
+    message: 'createdTo must be on or after createdFrom',
+  })
+})
+
+export const calculationUpdateRequestSchema = z.object({
+  status: calculationStatusSchema.optional(),
+  notes: optionalTextSchema(5_000),
+}).refine((value) => Object.keys(value).length > 0, 'At least one field is required')
+
+export const calculationListResponseSchema = z.object({
+  calculations: z.array(calculationListItemSchema),
+  summary: z.object({
+    totalCount: z.number().int().nonnegative(),
+    activeCount: z.number().int().nonnegative(),
+    spamTestCount: z.number().int().nonnegative(),
+    filteredCount: z.number().int().nonnegative(),
+    statusCounts: calculationStatusCountsSchema,
+    limit: z.number().int().positive(),
+    offset: z.number().int().nonnegative(),
+  }),
+})
+
 export const publicCalculationSaveResponseSchema = z.object({
   calculation: publicCalculationRecordSchema,
 })
@@ -276,7 +360,26 @@ export type ExchangeRateSettingResponse = z.infer<typeof exchangeRateSettingResp
 export type CalculationStatus = z.infer<typeof calculationStatusSchema>
 export type CalculationSaveRequest = z.infer<typeof calculationSaveRequestSchema>
 export type CalculationRecord = z.infer<typeof calculationRecordSchema>
+export type CalculationListItem = z.infer<typeof calculationListItemSchema>
+export type CalculationListQueryInput = z.input<typeof calculationListQuerySchema>
+export type CalculationListQuery = z.infer<typeof calculationListQuerySchema>
+export type CalculationListResponse = z.infer<typeof calculationListResponseSchema>
+export type CalculationUpdateRequest = z.infer<typeof calculationUpdateRequestSchema>
 export type PublicCalculationRecord = z.infer<typeof publicCalculationRecordSchema>
 export type ProjectExampleCreateRequest = z.infer<typeof projectExampleCreateRequestSchema>
 export type ProjectExampleUpdateRequest = z.infer<typeof projectExampleUpdateRequestSchema>
 export type ProjectExampleRecord = z.infer<typeof projectExampleRecordSchema>
+
+function isValidDateOnly(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return false
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+}

@@ -304,6 +304,103 @@ test('ApiClient sends authenticated service management requests', async () => {
   })
 })
 
+test('ApiClient sends authenticated lead CRM requests', async () => {
+  const calls: Array<{
+    path: string
+    method: string | undefined
+    authorization: string | null
+    body: unknown
+  }> = []
+  const lead = calculationRecord({
+    id: '00000000-0000-7000-8000-000000000101',
+    clientName: 'CRM Client',
+    status: 'new',
+  })
+
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input))
+    const headers = new Headers(init?.headers)
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null
+    calls.push({
+      path: `${url.pathname}${url.search}`,
+      method: init?.method,
+      authorization: headers.get('Authorization'),
+      body,
+    })
+
+    if (url.pathname === '/api/admin/calculations' && init?.method === 'GET') {
+      return json({
+        calculations: [calculationListItem(lead)],
+        summary: {
+          totalCount: 1,
+          activeCount: 1,
+          spamTestCount: 0,
+          filteredCount: 1,
+          statusCounts: {
+            new: 1,
+            contacted: 0,
+            in_progress: 0,
+            won: 0,
+            lost: 0,
+            spam_test: 0,
+          },
+          limit: 25,
+          offset: 0,
+        },
+      }, 200)
+    }
+
+    if (url.pathname === `/api/admin/calculations/${lead.id}` && init?.method === 'GET') {
+      return json({ calculation: lead }, 200)
+    }
+
+    if (url.pathname === `/api/admin/calculations/${lead.id}` && init?.method === 'PATCH') {
+      return json({
+        calculation: calculationRecord({
+          ...lead,
+          ...body,
+          statusUpdatedAt: '2026-07-09T01:00:00.000Z',
+        }),
+      }, 200)
+    }
+
+    return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
+  }
+
+  const client = new ApiClient({
+    getAccessToken: () => 'admin-access-token',
+    setAccessToken: () => undefined,
+  })
+
+  await client.listCalculations({
+    status: 'new',
+    search: 'CRM',
+    limit: 25,
+    offset: 0,
+  })
+  await client.getCalculation(lead.id)
+  await client.updateCalculation(lead.id, {
+    status: 'contacted',
+    notes: 'Call tomorrow',
+  })
+
+  const listUrl = new URL(`http://localhost${calls[0]?.path}`)
+  expect(listUrl.pathname).toBe('/api/admin/calculations')
+  expect(listUrl.searchParams.get('status')).toBe('new')
+  expect(listUrl.searchParams.get('search')).toBe('CRM')
+  expect(listUrl.searchParams.get('limit')).toBe('25')
+  expect(calls.map((call) => [new URL(`http://localhost${call.path}`).pathname, call.method ?? 'GET'])).toEqual([
+    ['/api/admin/calculations', 'GET'],
+    [`/api/admin/calculations/${lead.id}`, 'GET'],
+    [`/api/admin/calculations/${lead.id}`, 'PATCH'],
+  ])
+  expect(calls.every((call) => call.authorization === 'Bearer admin-access-token')).toBe(true)
+  expect(calls[2]?.body).toMatchObject({
+    status: 'contacted',
+    notes: 'Call tomorrow',
+  })
+})
+
 test('ApiClient expireSession clears stale web session cookie through logout', async () => {
   let accessToken: string | null = 'stale-access-token'
   let authExpiredCalls = 0
@@ -407,6 +504,130 @@ function serviceRecord(overrides: Record<string, unknown>) {
     isActive: true,
     isPublic: true,
     sortOrder: 0,
+    createdAt: '2026-07-09T00:00:00.000Z',
+    updatedAt: '2026-07-09T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function calculationListItem(record: Record<string, unknown>) {
+  return {
+    id: record.id,
+    clientName: record.clientName,
+    clientPhone: record.clientPhone,
+    objectName: record.objectName,
+    areaSqm: record.areaSqm,
+    serviceSnapshots: record.serviceSnapshots,
+    totalUsdCents: record.totalUsdCents,
+    totalBynCents: record.totalBynCents,
+    totalBynRoundedRubles: record.totalBynRoundedRubles,
+    status: record.status,
+    statusUpdatedAt: record.statusUpdatedAt,
+    notes: record.notes,
+    proposalArtifacts: record.proposalArtifacts,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }
+}
+
+function calculationRecord(overrides: Record<string, unknown>) {
+  const serviceId = '00000000-0000-7000-8000-000000000201'
+  const serviceSnapshot = {
+    id: serviceId,
+    title: 'Heating design',
+    description: null,
+    pricingType: 'fixed',
+    priceUsdCents: 10_000,
+    isActive: true,
+    sortOrder: 10,
+    pricingRule: undefined,
+    formulaVersion: undefined,
+  }
+  const exchangeRate = {
+    source: 'manual',
+    usdToBynRate: '3',
+    asOf: '2026-07-09T00:00:00.000Z',
+    usdToBynRateScale: 10000,
+    usdToBynRateScaled: 30000,
+  }
+  const calculationSnapshot = {
+    calculationVersion: 'pzk-calculation-v1',
+    areaSqm: '10',
+    areaSqmHundredths: 1_000,
+    selectedServiceIds: [serviceId],
+    billableServiceIds: [serviceId],
+    lineItems: [{
+      serviceId,
+      serviceSnapshot,
+      pricingType: 'fixed',
+      quantity: { kind: 'fixed' },
+      unitPriceUsdCents: 10_000,
+      totalUsdCents: 10_000,
+      totalBynCents: 30_000,
+      totalBynRoundedRubles: 300,
+    }],
+    skippedServices: [],
+    exchangeRate,
+    totals: {
+      totalUsdCents: 10_000,
+      totalBynCents: 30_000,
+      totalBynRoundedRubles: 300,
+    },
+    rounding: {
+      usdLineRounding: 'half_up_to_cent',
+      bynRateRounding: 'half_up_to_cent',
+      bynTotalPolicy: 'sum_rounded_line_byn_cents',
+      bynDisplayRounding: 'half_up_to_whole_ruble',
+    },
+  }
+
+  return {
+    id: '00000000-0000-7000-8000-000000000101',
+    publicToken: 'a'.repeat(32),
+    idempotencyKey: 'idempotency-key-001',
+    requestFingerprintHash: 'b'.repeat(64),
+    duplicateFingerprintHash: 'c'.repeat(64),
+    duplicateWindowStartedAt: '2026-07-09T00:00:00.000Z',
+    clientName: 'CRM Client',
+    clientPhone: '+375291112233',
+    objectName: null,
+    areaSqm: '10',
+    areaSqmHundredths: 1_000,
+    selectedServiceIds: [serviceId],
+    serviceSnapshots: [serviceSnapshot],
+    skippedServices: [],
+    exchangeRate,
+    calculationVersion: 'pzk-calculation-v1',
+    calculationSnapshot,
+    totalUsdCents: 10_000,
+    totalBynCents: 30_000,
+    totalBynRoundedRubles: 300,
+    status: 'new',
+    statusUpdatedAt: '2026-07-09T00:00:00.000Z',
+    notes: null,
+    source: 'public_calculator',
+    referrer: null,
+    utm: null,
+    consentAcceptedAt: '2026-07-09T00:00:00.000Z',
+    consentVersion: 'pzk-public-lead-consent-v1',
+    consentText: 'Consent',
+    consentIpAddress: null,
+    consentUserAgent: null,
+    proposalArtifacts: [{
+      id: '00000000-0000-7000-8000-000000000301',
+      publicToken: 'p'.repeat(32),
+      offerNumber: 'PZK-2026-TEST',
+      templateVersion: 'commercial-proposal-v1',
+      status: 'ready',
+      urlPath: `/api/public/proposals/${'p'.repeat(32)}`,
+      pdfUrlPath: `/api/public/proposals/${'p'.repeat(32)}/pdf`,
+      pdfUrl: null,
+      storageKey: 'proposals/test.pdf',
+      checksumSha256: 'd'.repeat(64),
+      pdfByteSize: 128,
+      hasHtmlSnapshot: true,
+      createdAt: '2026-07-09T00:00:00.000Z',
+    }],
     createdAt: '2026-07-09T00:00:00.000Z',
     updatedAt: '2026-07-09T00:00:00.000Z',
     ...overrides,

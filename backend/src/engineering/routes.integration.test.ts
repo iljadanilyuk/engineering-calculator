@@ -679,9 +679,17 @@ maybeDescribe('engineering API integration', () => {
   test('requires auth for admin engineering routes', async () => {
     const response = await app.request('/api/admin/services')
     const body = await response.json()
+    const calculations = await app.request('/api/admin/calculations')
+    const updateCalculation = await app.request('/api/admin/calculations/00000000-0000-7000-8000-000000000001', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'contacted' }),
+    })
 
     expect(response.status).toBe(401)
     expect(body.error.code).toBe('UNAUTHORIZED')
+    expect(calculations.status).toBe(401)
+    expect(updateCalculation.status).toBe(401)
   })
 
   test('manages admin services with create, edit, archive, reorder, visibility, and validation', async () => {
@@ -962,6 +970,189 @@ maybeDescribe('engineering API integration', () => {
     )
   })
 
+  test('manages admin leads mini-crm list, detail, status, notes, filters, counts, and immutable proposal links', async () => {
+    const accessToken = await loginAdmin('leads-admin@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const heating = await createService(accessToken, {
+      title: 'CRM heating drawings',
+      pricingType: 'per_sqm',
+      priceUsdCents: 250,
+      sortOrder: 1,
+    })
+    const boiler = await createService(accessToken, {
+      title: 'CRM boiler package',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+      sortOrder: 2,
+    })
+    const firstResponse = await saveCalculation({
+      clientName: 'CRM First Client',
+      clientPhone: '+375 29 123-45-67',
+      objectName: 'CRM house',
+      calculation: {
+        areaSqm: '42',
+        selectedServiceIds: [heating.id, boiler.id],
+      },
+      consentAccepted: true,
+    })
+    const secondResponse = await saveCalculation({
+      clientName: 'Spam Person',
+      clientPhone: '+375 33 765-43-21',
+      calculation: {
+        areaSqm: '12',
+        selectedServiceIds: [boiler.id],
+      },
+      consentAccepted: true,
+    })
+    const firstBody = await firstResponse.json()
+    const secondBody = await secondResponse.json()
+    const firstSaved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: firstBody.calculation.publicToken },
+      include: { proposals: true },
+    })
+    const secondSaved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: secondBody.calculation.publicToken },
+      include: { proposals: true },
+    })
+    const originalStatusUpdatedAt = new Date('2026-07-01T12:00:00.000Z')
+    await prisma.calculation.update({
+      where: { id: firstSaved.id },
+      data: { statusUpdatedAt: originalStatusUpdatedAt },
+    })
+
+    const detail = await app.request(`/api/admin/calculations/${firstSaved.id}`, {
+      headers: authHeaders(accessToken),
+    })
+    const detailBody = await detail.json()
+    const invalidStatus = await app.request(`/api/admin/calculations/${firstSaved.id}`, {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({ status: 'bad_status' }),
+    })
+    const notesOnly = await patchCalculation(accessToken, firstSaved.id, {
+      notes: '  Call after 18:00  ',
+    })
+    const contacted = await patchCalculation(accessToken, firstSaved.id, {
+      status: 'contacted',
+    })
+    const sameStatus = await patchCalculation(accessToken, firstSaved.id, {
+      status: 'contacted',
+    })
+    await patchCalculation(accessToken, secondSaved.id, {
+      status: 'spam_test',
+    })
+
+    expect(firstResponse.status).toBe(201)
+    expect(secondResponse.status).toBe(201)
+    expect(detail.status).toBe(200)
+    expect(detailBody.calculation.status).toBe('new')
+    expect(detailBody.calculation.statusUpdatedAt).toBe(originalStatusUpdatedAt.toISOString())
+    expect(detailBody.calculation.clientName).toBe('CRM First Client')
+    expect(detailBody.calculation.exchangeRate.usdToBynRate).toBe('3')
+    expect(detailBody.calculation.calculationSnapshot.lineItems).toHaveLength(2)
+    expect(detailBody.calculation.serviceSnapshots.map((service: { title: string }) => service.title)).toEqual([
+      'CRM heating drawings',
+      'CRM boiler package',
+    ])
+    expect(detailBody.calculation.proposalArtifacts[0]).toMatchObject({
+      publicToken: firstSaved.proposals[0].publicToken,
+      offerNumber: firstSaved.proposals[0].offerNumber,
+      status: 'ready',
+      urlPath: `/api/public/proposals/${firstSaved.proposals[0].publicToken}`,
+      pdfUrlPath: `/api/public/proposals/${firstSaved.proposals[0].publicToken}/pdf`,
+      checksumSha256: firstSaved.proposals[0].checksumSha256,
+    })
+    expect(invalidStatus.status).toBe(400)
+    expect(notesOnly.calculation.notes).toBe('Call after 18:00')
+    expect(notesOnly.calculation.statusUpdatedAt).toBe(originalStatusUpdatedAt.toISOString())
+    expect(contacted.calculation.status).toBe('contacted')
+    expect(new Date(contacted.calculation.statusUpdatedAt).getTime()).toBeGreaterThan(
+      originalStatusUpdatedAt.getTime(),
+    )
+    expect(sameStatus.calculation.statusUpdatedAt).toBe(contacted.calculation.statusUpdatedAt)
+
+    const list = await app.request('/api/admin/calculations', {
+      headers: authHeaders(accessToken),
+    })
+    const listBody = await list.json()
+    const spamList = await app.request('/api/admin/calculations?status=spam_test', {
+      headers: authHeaders(accessToken),
+    })
+    const spamListBody = await spamList.json()
+    const phoneList = await app.request('/api/admin/calculations?phone=291234567', {
+      headers: authHeaders(accessToken),
+    })
+    const phoneListBody = await phoneList.json()
+    const nameList = await app.request('/api/admin/calculations?name=CRM%20First', {
+      headers: authHeaders(accessToken),
+    })
+    const nameListBody = await nameList.json()
+    const searchList = await app.request('/api/admin/calculations?search=Spam', {
+      headers: authHeaders(accessToken),
+    })
+    const searchListBody = await searchList.json()
+    const today = new Date().toISOString().slice(0, 10)
+    const dateList = await app.request(`/api/admin/calculations?createdFrom=${today}&createdTo=${today}`, {
+      headers: authHeaders(accessToken),
+    })
+    const dateListBody = await dateList.json()
+    const invalidDateList = await app.request('/api/admin/calculations?createdFrom=2026-07-10&createdTo=2026-07-09', {
+      headers: authHeaders(accessToken),
+    })
+    const impossibleDateList = await app.request('/api/admin/calculations?createdFrom=2026-02-31', {
+      headers: authHeaders(accessToken),
+    })
+    const invalidCalendarDateList = await app.request('/api/admin/calculations?createdTo=2026-99-99', {
+      headers: authHeaders(accessToken),
+    })
+
+    expect(list.status).toBe(200)
+    expect(listBody.summary).toMatchObject({
+      totalCount: 2,
+      activeCount: 1,
+      spamTestCount: 1,
+      filteredCount: 2,
+    })
+    expect(listBody.summary.statusCounts).toMatchObject({
+      contacted: 1,
+      spam_test: 1,
+    })
+    expect(listBody.calculations).toHaveLength(2)
+    expect(listBody.calculations[0].requestFingerprintHash).toBeUndefined()
+    expect(listBody.calculations[0].consentIpAddress).toBeUndefined()
+    expect(spamListBody.calculations.map((calculation: { id: string }) => calculation.id)).toEqual([
+      secondSaved.id,
+    ])
+    expect(phoneListBody.calculations.map((calculation: { id: string }) => calculation.id)).toEqual([
+      firstSaved.id,
+    ])
+    expect(nameListBody.calculations.map((calculation: { id: string }) => calculation.id)).toEqual([
+      firstSaved.id,
+    ])
+    expect(searchListBody.calculations.map((calculation: { id: string }) => calculation.id)).toEqual([
+      secondSaved.id,
+    ])
+    expect(dateListBody.summary.filteredCount).toBe(2)
+    expect(invalidDateList.status).toBe(400)
+    expect(impossibleDateList.status).toBe(400)
+    expect(invalidCalendarDateList.status).toBe(400)
+
+    const artifact = contacted.calculation.proposalArtifacts[0]
+    const pdfBefore = await app.request(artifact.pdfUrlPath)
+    const pdfBeforeBytes = new Uint8Array(await pdfBefore.arrayBuffer())
+    await patchService(accessToken, heating.id, {
+      title: 'Changed CRM heating drawings',
+      priceUsdCents: 999_999,
+    })
+    const pdfAfter = await app.request(artifact.pdfUrlPath)
+    const pdfAfterBytes = new Uint8Array(await pdfAfter.arrayBuffer())
+
+    expect(pdfBefore.status).toBe(200)
+    expect(pdfBefore.headers.get('x-proposal-checksum-sha256')).toBe(artifact.checksumSha256)
+    expect(pdfAfter.status).toBe(200)
+    expect(pdfAfterBytes).toEqual(pdfBeforeBytes)
+  })
+
   test('rate limits repeated public calculation submissions by client bucket', async () => {
     const accessToken = await loginAdmin('rate-limit@example.com')
     await setExchangeRate(accessToken, '3.0000')
@@ -1069,6 +1260,21 @@ maybeDescribe('engineering API integration', () => {
 
     expect(response.status).toBe(200)
     return body.service
+  }
+
+  async function patchCalculation(accessToken: string, id: string, payload: Record<string, unknown>) {
+    const response = await app.request(`/api/admin/calculations/${id}`, {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    return body
   }
 
   async function createProjectExample(accessToken: string, payload: Record<string, unknown>) {

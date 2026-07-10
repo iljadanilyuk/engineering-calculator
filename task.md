@@ -771,7 +771,7 @@ Verification:
 
 ### PZK-009 - Admin Leads Mini-CRM
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -789,6 +789,39 @@ Acceptance criteria:
 - Search/filter by status, phone, name, and date is included if practical; otherwise document the v1 limitation.
 - `Spam/Test` is excluded from active lead counts by default.
 - Verification covers status change, notes save, filters/search where included, and opening original proposal artifact.
+
+Completion notes:
+
+- Added shared admin calculation/lead CRM contracts for lean list rows, list query filters, status counts, and status/notes updates.
+- Added protected backend endpoints:
+  - `GET /api/admin/calculations` with status, name, phone, search, date, limit, and offset filters.
+  - `GET /api/admin/calculations/{id}` for immutable detail snapshots.
+  - `PATCH /api/admin/calculations/{id}` for status and notes.
+- Status values remain enforced by shared Zod contract and existing DB constraint. Status updates change `statusUpdatedAt` only when the status actually changes; notes-only saves preserve the status timestamp.
+- Notes are internal admin-only text, trimmed to null/limited by contract, and are not exposed in public lead submit responses.
+- New submissions continue to default to `new` / `New`.
+- Admin list shows name, phone, created date/time, area, selected service summary, status dropdown, BYN total, secondary USD total, and original proposal/PDF link.
+- Admin detail shows contact/object data, selected service snapshot, exchange rate used, full line-item breakdown, current status, `statusUpdatedAt`, notes editor, and original immutable proposal/PDF artifacts.
+- Proposal artifacts are ordered deterministically by creation time and linked by saved proposal public token. Admin opens stored artifact routes (`/api/public/proposals/{token}` or `/pdf`) and does not regenerate from current services/prices.
+- `Spam/Test` is excluded from active lead count by default while still visible through explicit status filtering.
+- Added webapp routes `/app/leads` and `/app/leads/$leadId`, plus a dedicated React Query/API client layer for leads.
+- Added simple pagination for the leads table so the UI reports rendered ranges accurately instead of hiding records beyond the current page.
+- Date filters now validate real calendar dates, rejecting impossible values such as `2026-02-31` and `2026-99-99`.
+- Status history table was not added in v1; current status, `statusUpdatedAt`, and notes are implemented as the v1 minimum.
+- No Telegram notifications, cloud resources, Bella/ads files, Codex plugin-layer changes, pricing editor expansion, or public PDF generation changes were made.
+
+Verification:
+
+- `bun run typecheck` passed.
+- `bun run --cwd webapp lint` passed.
+- `bun run test:contracts` passed: 17/17, including admin CRM query/status/date contract validation.
+- `bun run test:backend:unit` passed: 30/30.
+- `docker info` passed before Docker-backed verification.
+- `bun run test:backend:integration` passed: 29/29, including list leads, detail lead, status update, notes save, invalid status rejection, `statusUpdatedAt` behavior, `Spam/Test` active-count exclusion, filters/search/date validation, auth checks for admin calculation routes, and immutable proposal/PDF links.
+- `bun run --cwd webapp test` passed: 40/40, including lead API client calls and pagination range behavior.
+- `bun run build:webapp` passed; non-blocking inherited Vite chunk-size warning remains.
+- `bun run e2e:webapp` passed: 4/4, including admin login, leads table, filter/search, detail view, status change, notes save, and opening the original PDF/proposal artifact.
+- `git diff --check` passed; only expected Windows LF/CRLF working-copy warnings were printed.
 
 ### PZK-010 - Telegram Notifications
 
@@ -1012,3 +1045,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Pasteur: 9/10; confirmed admin CRUD, archive/restore, reorder, USD entry with BYN preview, public filtering, formula exclusion, and snapshot immutability. No required changes remained, but the 9.5 review gate was not yet cleared.
 - 2026-07-09 PZK-008 final post-task review round 3:
   - Reviewer Hubble: 9.6/10; confirmed PZK-008 meets the task gate after direct API formula transition hardening. No required changes remained; PZK-008 gate cleared.
+- 2026-07-10 PZK-009 pre-task review:
+  - Reviewer Sagan: `gpt-5.5 xhigh`; flagged missing admin CRM list/update APIs, string status validation risk, preserving public-response privacy, deterministic proposal ordering for original artifacts, lean list rows, phone/date filter edge cases, `Spam/Test` active-count semantics, notes limits, and API-base-aware proposal links. Recommendations incorporated.
+- 2026-07-10 PZK-009 post-task review round 1:
+  - Reviewer Hilbert: 9.6/10; found no blocking issues and confirmed admin-only routes, status validation, status timestamp semantics, notes persistence, active-count exclusion, immutable proposal reads, and test coverage. Non-blocking gaps included stricter date validation, HTML-only label polish, and pagination beyond 100 rows.
+  - Reviewer Dewey: 9.0/10; required real calendar-date validation and pagination/copy that does not imply more rows are rendered than the current page. Changes incorporated with contract/backend tests and webapp pagination range tests.
+- 2026-07-10 PZK-009 focused post-task review round 2:
+  - Reviewer Ptolemy: 9.6/10; confirmed pagination/copy, valid calendar-date filtering, and HTML-only proposal label fallback fixes. No required changes remained; PZK-009 gate cleared.

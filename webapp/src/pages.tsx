@@ -1,6 +1,7 @@
-import { Link, Outlet } from '@tanstack/react-router'
+import { Link, Outlet, useParams } from '@tanstack/react-router'
 
 import { AuthForm } from '@/components/AuthForm'
+import { LeadDetailView, LeadsManager } from '@/components/LeadsManager'
 import { ServicesManager } from '@/components/ServicesManager'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -55,10 +56,32 @@ export function HomePage() {
 }
 
 export function AppPage() {
-  return <AdminEntry />
+  return <AdminEntry section="services" />
 }
 
-function AdminEntry() {
+export function ServicesPage() {
+  return <AdminEntry section="services" />
+}
+
+export function LeadsPage() {
+  return <AdminEntry section="leads" />
+}
+
+export function LeadDetailPage() {
+  const params = useParams({ strict: false }) as { leadId?: string }
+
+  return <AdminEntry section="lead-detail" leadId={params.leadId ?? ''} />
+}
+
+type AdminSection = 'services' | 'leads' | 'lead-detail'
+
+function AdminEntry({
+  section = 'services',
+  leadId,
+}: {
+  section?: AdminSection
+  leadId?: string
+}) {
   const auth = useAuth()
 
   if (auth.isBootstrapping) {
@@ -73,7 +96,7 @@ function AdminEntry() {
     return <ForbiddenState />
   }
 
-  return <AdminShell />
+  return <AdminShell section={section} leadId={leadId} />
 }
 
 function LoginScreen() {
@@ -116,11 +139,21 @@ function ForbiddenState() {
   )
 }
 
-function AdminShell() {
+function AdminShell({
+  section,
+  leadId,
+}: {
+  section: AdminSection
+  leadId?: string
+}) {
   const auth = useAuth()
   const user = auth.user
 
   if (!user) return null
+
+  const title = section === 'services'
+    ? 'Services management'
+    : section === 'leads' ? 'Leads Mini-CRM' : 'Lead detail'
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
@@ -129,18 +162,26 @@ function AdminShell() {
           <Badge variant="outline" className="w-fit">
             Admin cabinet
           </Badge>
-          <Typography variant="h1">
-            Services management
-          </Typography>
+          <Typography variant="h1">{title}</Typography>
           <Typography tone="muted">
             Signed in as {user.displayName ?? user.email} · {user.email}
           </Typography>
         </div>
+        <nav className="flex flex-wrap gap-2" aria-label="Admin sections">
+          <Button asChild type="button" variant={section === 'services' ? 'default' : 'outline'} size="sm">
+            <Link to="/app/services">Services</Link>
+          </Button>
+          <Button asChild type="button" variant={section !== 'services' ? 'default' : 'outline'} size="sm">
+            <Link to="/app/leads">Leads</Link>
+          </Button>
+        </nav>
       </div>
 
       <Separator />
 
-      <ServicesManager />
+      {section === 'services' && <ServicesManager />}
+      {section === 'leads' && <LeadsManager />}
+      {section === 'lead-detail' && leadId && <LeadDetailView leadId={leadId} />}
     </section>
   )
 }
