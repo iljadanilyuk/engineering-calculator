@@ -41,11 +41,24 @@ ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SECURE=true
 TRUST_PROXY_HEADERS=true
+PUBLIC_API_URL=https://api.example.com
+PUBLIC_WEBAPP_URL=https://webapp.example.com
 ```
 
 `CORS_ORIGINS` must include public browser origins that call non-credentialed API routes, for example the public website. `AUTH_CORS_ORIGINS` must include only admin webapp origins that are allowed to use credentialed auth/admin CORS and cookie refresh/logout. Use exact origins only; do not use wildcards, empty values, or paths.
 
+`PUBLIC_API_URL` is the backend/API origin used when the backend needs to create absolute proposal/PDF links, including Telegram notifications. `PUBLIC_WEBAPP_URL` is the admin webapp origin used for absolute admin detail links such as `/app/leads/:id`.
+
 `JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
+
+For Telegram lead notifications, add these backend runtime secrets only after the approved internal chat is known:
+
+```bash
+TELEGRAM_BOT_TOKEN=<bot-token>
+TELEGRAM_CHAT_ID=<approved-internal-chat-id>
+```
+
+Leave either Telegram value unset to skip notifications safely. Do not expose the bot token or chat ID in static-site build env, admin settings APIs, logs, or browser responses.
 
 If storage is active, also configure:
 

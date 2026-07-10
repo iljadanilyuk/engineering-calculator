@@ -5,6 +5,7 @@ import { createApp } from '../app'
 import { hashPassword } from '../auth/passwords'
 import { createPrisma } from '../db'
 import type { AppEnv } from '../env'
+import { createTelegramLeadNotifierFromEnv } from '../notifications/telegram'
 import {
   createCommercialProposalArtifact,
   type CommercialProposalInput,
@@ -431,6 +432,170 @@ maybeDescribe('engineering API integration', () => {
     expect(firstBody.calculation.source).toBeUndefined()
     expect(await prisma.calculation.count()).toBe(1)
     expect(await prisma.proposal.count()).toBe(1)
+  })
+
+  test('sends Telegram notification after a new public lead submission when env is configured', async () => {
+    const accessToken = await loginAdmin('telegram-success@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Telegram heating drawings',
+      pricingType: 'per_sqm',
+      priceUsdCents: 250,
+    })
+    const telegramRequests: Array<Record<string, unknown>> = []
+    const telegramEnv: AppEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+      TELEGRAM_CHAT_ID: '-100123456',
+      PUBLIC_API_URL: 'https://api.example.com',
+      PUBLIC_WEBAPP_URL: 'https://admin.example.com',
+    }
+    const telegramApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      leadNotifier: createTelegramLeadNotifierFromEnv(telegramEnv, {
+        fetch: async (_url, init) => {
+          telegramRequests.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+          return new Response(JSON.stringify({ ok: true }), { status: 200 })
+        },
+        logger: { info: () => undefined },
+      }),
+    })
+    const payload = {
+      idempotencyKey: nextIdempotencyKey(),
+      clientName: 'Telegram Client',
+      clientPhone: '+375291112233',
+      objectName: 'Should stay out of Telegram',
+      calculation: {
+        areaSqm: '25',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+      utm: {
+        source: 'should-not-leak',
+      },
+    }
+
+    const response = await saveCalculationWithApp(telegramApp, payload)
+    const body = await response.json()
+    const replay = await saveCalculationWithApp(telegramApp, payload)
+    const recentDuplicate = await saveCalculationWithApp(telegramApp, {
+      ...payload,
+      idempotencyKey: nextIdempotencyKey(),
+    })
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: body.calculation.publicToken },
+      include: { proposals: true },
+    })
+    const message = String(telegramRequests[0].text)
+
+    expect(response.status).toBe(201)
+    expect(replay.status).toBe(200)
+    expect(recentDuplicate.status).toBe(200)
+    expect(telegramRequests).toHaveLength(1)
+    expect(telegramRequests[0].chat_id).toBe('-100123456')
+    expect(telegramRequests[0].disable_web_page_preview).toBe(true)
+    expect(message).toContain('Новая заявка: Telegram Client')
+    expect(message).toContain('Тел: +375291112233')
+    expect(message).toContain('Площадь: 25 м2')
+    expect(message).toContain('Итого: 188 Br (~63 $)')
+    expect(message).toContain('Разделы: Telegram heating drawings')
+    expect(message).toContain(`Админка: https://admin.example.com/app/leads/${saved.id}`)
+    expect(message).toContain(
+      `КП/PDF: https://api.example.com/api/public/proposals/${saved.proposals[0].publicToken}/pdf`,
+    )
+    expect(message).not.toContain('Should stay out of Telegram')
+    expect(message).not.toContain('should-not-leak')
+    expect(JSON.stringify(body)).not.toContain('telegram-secret-token')
+    expect(JSON.stringify(body)).not.toContain('-100123456')
+  })
+
+  test('skips missing Telegram env and keeps saving the lead safely', async () => {
+    const accessToken = await loginAdmin('telegram-missing-env@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Telegram optional service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const telegramRequests: string[] = []
+    const missingTelegramApp = createApp({
+      env,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      leadNotifier: createTelegramLeadNotifierFromEnv(env, {
+        fetch: async (url) => {
+          telegramRequests.push(String(url))
+          return new Response(JSON.stringify({ ok: true }), { status: 200 })
+        },
+        logger: { info: () => undefined },
+      }),
+    })
+
+    const response = await saveCalculationWithApp(missingTelegramApp, {
+      clientName: 'Missing Telegram Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(body.calculation.proposal.status).toBe('ready')
+    expect(telegramRequests).toEqual([])
+    expect(await prisma.calculation.count()).toBe(1)
+    expect(await prisma.proposal.count()).toBe(1)
+  })
+
+  test('does not break lead creation when Telegram delivery fails', async () => {
+    const accessToken = await loginAdmin('telegram-failure@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Telegram failure service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const telegramEnv: AppEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+      TELEGRAM_CHAT_ID: '123',
+      PUBLIC_API_URL: 'https://api.example.com',
+      PUBLIC_WEBAPP_URL: 'https://admin.example.com',
+    }
+    const failureApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      leadNotifier: createTelegramLeadNotifierFromEnv(telegramEnv, {
+        fetch: async () => new Response(JSON.stringify({ ok: false }), { status: 500 }),
+        logger: { info: () => undefined },
+      }),
+    })
+
+    const response = await saveCalculationWithApp(failureApp, {
+      clientName: 'Failure Telegram Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const body = await response.json()
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: body.calculation.publicToken },
+      include: { proposals: true },
+    })
+
+    expect(response.status).toBe(201)
+    expect(saved.clientName).toBe('Failure Telegram Client')
+    expect(saved.proposals).toHaveLength(1)
+    expect(body.calculation.proposal.status).toBe('ready')
+    expect(JSON.stringify(body)).not.toContain('telegram-secret-token')
   })
 
   test('does not expose a PDF link for legacy HTML-only proposal artifacts', async () => {
@@ -1293,7 +1458,11 @@ maybeDescribe('engineering API integration', () => {
   }
 
   function saveCalculation(payload: Record<string, unknown>) {
-    return app.request('/api/public/calculations', {
+    return saveCalculationWithApp(app, payload)
+  }
+
+  function saveCalculationWithApp(targetApp: typeof app, payload: Record<string, unknown>) {
+    return targetApp.request('/api/public/calculations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

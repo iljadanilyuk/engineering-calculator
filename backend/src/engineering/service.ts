@@ -26,6 +26,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { DbClient } from '../db'
 import { Prisma } from '../generated/prisma/client'
 import { AppError } from '../http/errors'
+import type { LeadNotifier } from '../notifications/telegram'
 import {
   createCommercialProposalGenerator,
   type ProposalGenerator,
@@ -78,6 +79,7 @@ export class EngineeringDataService {
   constructor(
     private readonly db: DbClient,
     private readonly proposalGenerator: ProposalGenerator = createCommercialProposalGenerator(),
+    private readonly leadNotifier: LeadNotifier | null = null,
   ) {}
 
   async listPublicServices() {
@@ -355,8 +357,11 @@ export class EngineeringDataService {
         return { row, proposals: [proposal] }
       })
 
+      const savedCalculation = calculationToRecord(persisted.row, persisted.proposals)
+      await this.notifyLeadSubmitted(savedCalculation)
+
       return {
-        calculation: calculationToRecord(persisted.row, persisted.proposals),
+        calculation: savedCalculation,
         publicCalculation: calculationToPublicRecord(persisted.row, persisted.proposals),
         created: true,
       }
@@ -646,6 +651,16 @@ export class EngineeringDataService {
     )
 
     return Object.fromEntries(entries) as Record<CalculationStatus, number>
+  }
+
+  private async notifyLeadSubmitted(calculation: CalculationRecord) {
+    if (!this.leadNotifier) return
+
+    try {
+      await this.leadNotifier.notifyLeadSubmitted({ calculation })
+    } catch (error) {
+      console.error('Lead notification failed:', safeErrorMessage(error))
+    }
   }
 }
 
@@ -1157,4 +1172,9 @@ function isPrismaNotFound(error: unknown) {
 
 function isPrismaUniqueConstraint(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+}
+
+function safeErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message.slice(0, 500)
+  return String(error).slice(0, 500)
 }

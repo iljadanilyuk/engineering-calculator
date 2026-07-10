@@ -22,6 +22,10 @@ describe('loadEnv', () => {
     expect(env.SPACES_UPLOAD_URL_TTL_SECONDS).toBe(900)
     expect(env.SPACES_DOWNLOAD_URL_TTL_SECONDS).toBe(300)
     expect(env.SPACES_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
+    expect(env.TELEGRAM_BOT_TOKEN).toBeUndefined()
+    expect(env.TELEGRAM_CHAT_ID).toBeUndefined()
+    expect(env.PUBLIC_API_URL).toBeUndefined()
+    expect(env.PUBLIC_WEBAPP_URL).toBeUndefined()
   })
 
   test('requires complete DigitalOcean Spaces configuration when storage is enabled', () => {
@@ -74,6 +78,32 @@ describe('loadEnv', () => {
         AUTH_CORS_ORIGINS: 'https://admin.example.com',
       }),
     ).toThrow('JWT_SECRET')
+  })
+
+  test('parses optional Telegram and public link env vars', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/poznyak_engineering_calculator',
+      JWT_SECRET: '12345678901234567890123456789012',
+      TELEGRAM_BOT_TOKEN: '  test-token  ',
+      TELEGRAM_CHAT_ID: ' -100123456 ',
+      PUBLIC_API_URL: 'https://api.example.com',
+      PUBLIC_WEBAPP_URL: 'https://admin.example.com',
+    })
+
+    expect(env.TELEGRAM_BOT_TOKEN).toBe('test-token')
+    expect(env.TELEGRAM_CHAT_ID).toBe('-100123456')
+    expect(env.PUBLIC_API_URL).toBe('https://api.example.com')
+    expect(env.PUBLIC_WEBAPP_URL).toBe('https://admin.example.com')
+  })
+
+  test('rejects non-http public link env vars', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/poznyak_engineering_calculator',
+        JWT_SECRET: '12345678901234567890123456789012',
+        PUBLIC_API_URL: 'ftp://api.example.com',
+      }),
+    ).toThrow('PUBLIC_API_URL')
   })
 
   test('requires secure cookies in production', () => {

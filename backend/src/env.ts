@@ -19,6 +19,12 @@ const optionalUrlSchema = z.preprocess((value) => {
   return trimmed === '' ? undefined : trimmed
 }, z.string().url().optional())
 
+const optionalHttpUrlSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}, z.string().url().refine(isHttpUrl, 'Expected an http or https URL').optional())
+
 const stringWithDefault = (defaultValue: string) =>
   z.preprocess((value) => {
     if (typeof value !== 'string') return value
@@ -59,6 +65,10 @@ const envSchema = z.object({
   SPACES_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(5 * 60),
   SPACES_PUBLIC_CACHE_CONTROL: stringWithDefault('public, max-age=31536000, immutable'),
   PDF_CHROMIUM_EXECUTABLE_PATH: optionalStringSchema,
+  TELEGRAM_BOT_TOKEN: optionalStringSchema,
+  TELEGRAM_CHAT_ID: optionalStringSchema,
+  PUBLIC_API_URL: optionalHttpUrlSchema,
+  PUBLIC_WEBAPP_URL: optionalHttpUrlSchema,
 }).superRefine((env, ctx) => {
   validateJwtSecret(env, ctx)
   validateProductionCookieSecurity(env, ctx)
@@ -95,6 +105,15 @@ function isWeakJwtSecret(secret: string) {
     knownWeakJwtSecrets.has(normalized) ||
     new Set(normalized).size === 1
   )
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 function validateProductionCookieSecurity(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {

@@ -56,6 +56,8 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production must use `COOKIE_SECURE=true` with exact HTTPS origins. `CORS_ORIGINS` is for public, non-credentialed browser API origins such as the public website. `AUTH_CORS_ORIGINS` is for admin webapp origins that may use credentialed auth/admin CORS and cookie-backed refresh/logout. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, or path-bearing origins are invalid. Cookie-backed `refresh` and `logout` requests also require a trusted `Origin` in `AUTH_CORS_ORIGINS` in production cookie mode. Set `TRUST_PROXY_HEADERS=true` only when the backend is behind a trusted proxy such as DigitalOcean App Platform so login throttling can use the proxy-normalized `X-Forwarded-For` client IP; leave it `false` for direct local backend access.
 
+Telegram lead notifications are optional runtime env. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` only in `backend/.env` or deployment secrets; never expose them through `PUBLIC_*` frontend env or API responses. If either value is blank, public lead submission still saves the calculation/proposal and the notifier skips delivery. When Telegram is enabled, set `PUBLIC_API_URL` to the backend/API origin used for proposal/PDF links and `PUBLIC_WEBAPP_URL` to the admin webapp origin used for `/app/leads/:id` detail links. Telegram failures are logged with sanitized errors and do not roll back or reject the lead submission.
+
 Create the first administrator with a one-off command after migrations:
 
 ```powershell

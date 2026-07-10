@@ -107,8 +107,8 @@ Planned v1 env areas:
 - PostgreSQL: `DATABASE_URL`, `TEST_DATABASE_URL`
 - Auth/session: `JWT_SECRET`, token TTLs, `COOKIE_SECURE`, `TRUST_PROXY_HEADERS`
 - First admin setup: one-off `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_DISPLAY_NAME`
-- Public URLs/CORS: `CORS_ORIGINS` for public browser API origins, `AUTH_CORS_ORIGINS` for admin webapp cookie/auth origins, later proposal/admin/public URLs
-- Telegram notifications: bot token and approved internal chat ID
+- Public URLs/CORS: `CORS_ORIGINS` for public browser API origins, `AUTH_CORS_ORIGINS` for admin webapp cookie/auth origins, `PUBLIC_API_URL` for proposal/PDF links, and `PUBLIC_WEBAPP_URL` for admin detail links
+- Telegram notifications: `TELEGRAM_BOT_TOKEN` and approved internal `TELEGRAM_CHAT_ID`; leave either blank to skip notifications safely
 - PDF/proposal storage: persistent local volume, object storage, or another approved durable store
 - Public contacts: phone/email/Telegram shown on the public page and PDF
 

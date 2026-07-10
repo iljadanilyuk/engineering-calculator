@@ -825,7 +825,7 @@ Verification:
 
 ### PZK-010 - Telegram Notifications
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -838,6 +838,31 @@ Acceptance criteria:
 - Environment variables are documented.
 - Token/chat ID are not exposed to the browser or returned by API responses.
 - Verification covers successful notification and simulated Telegram failure.
+
+Completion notes:
+
+- Added backend-only Telegram lead notifications in `backend/src/notifications/telegram.ts`.
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are parsed from backend env only; blank or partial config skips notification safely and logs one concise skip message.
+- Added `PUBLIC_API_URL` for proposal/PDF links and `PUBLIC_WEBAPP_URL` for admin detail links; notification link construction uses configured backend runtime URLs, not browser headers/referrers.
+- `EngineeringDataService.saveCalculation` sends notification only after a real newly-created calculation/proposal is committed. Idempotent replays and recent duplicate returns do not resend Telegram messages.
+- Telegram API failures are caught and logged with sanitized errors; lead creation and proposal generation still return successfully.
+- Notification text includes lead name, phone, area, BYN total, rounded USD reference, selected services, admin detail link, and proposal/PDF link. It intentionally omits object name, UTM/referrer, IP, user-agent, consent text, notes, hashes, and other extra personal/internal data.
+- `createApp` accepts an injected `leadNotifier` for tests, so automated verification never calls the real Telegram API.
+- Documented Telegram/runtime URL env in `backend/.env.example`, `README.md`, `backend/README.md`, and `docs/DEPLOYMENT.md`.
+- No admin UI for Telegram secrets, encryption-at-rest work, DigitalOcean resources, Bella/ads files, Codex plugin-layer changes, or broad CRM/PDF refactors were added.
+
+Verification:
+
+- `bun test src/env.test.ts src/notifications/telegram.test.ts` passed: 10/10.
+- `bun run --cwd backend typecheck` passed.
+- `docker info` passed before Docker-backed verification.
+- `bun run test:backend:unit` passed: 35/35, including env parsing and Telegram notifier unit tests.
+- `bun run test:backend:integration` passed: 32/32, including successful Telegram notification after public lead submit, missing env skip, simulated Telegram failure preserving lead/proposal creation, idempotent/duplicate no-resend behavior, API response no secret exposure, and message links to admin detail plus proposal/PDF.
+- `bun run typecheck` passed for backend, contracts, webapp, and website.
+- `bun run test:contracts` passed: 17/17.
+- First `bun run smoke:backend:docker` attempt exceeded the initial 5-minute command timeout during the cold Docker image build; the build process completed afterward.
+- Re-run `bun run smoke:backend:docker` passed with Docker cache: backend `/health` and DB-backed auth smoke succeeded.
+- `git diff --check` passed; only expected Windows LF/CRLF working-copy warnings were printed.
 
 ### PZK-011 - Project Examples
 
@@ -1052,3 +1077,7 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Dewey: 9.0/10; required real calendar-date validation and pagination/copy that does not imply more rows are rendered than the current page. Changes incorporated with contract/backend tests and webapp pagination range tests.
 - 2026-07-10 PZK-009 focused post-task review round 2:
   - Reviewer Ptolemy: 9.6/10; confirmed pagination/copy, valid calendar-date filtering, and HTML-only proposal label fallback fixes. No required changes remained; PZK-009 gate cleared.
+- 2026-07-10 PZK-010 pre-task review:
+  - Reviewer Harvey: `gpt-5.5 xhigh`; flagged sending only for `created=true`, notifying after DB persistence and proposal creation, using the internal calculation record instead of the minimized public response, env-only Telegram secrets, absolute links from configured backend URLs, concise no-extra-PII text, sanitized logs, injectable notifier tests, and no duplicate/idempotent resend. Recommendations incorporated.
+- 2026-07-10 PZK-010 post-task review round 1:
+  - Reviewer McClintock: 9.6/10; no required changes. Confirmed notification happens only after a newly-created committed calculation/proposal, failures are caught without breaking lead submission, duplicates/idempotent replays do not notify, message content and omission of extra PII are covered, secrets remain env-only and absent from public responses, and docs are sufficient. Non-blocking gaps noted for raw network timeout/rejection hardening and missing public URL fallback tests; PZK-010 gate cleared.

@@ -14,22 +14,31 @@ import { createEngineeringRoutes } from './engineering/routes'
 import { EngineeringDataService } from './engineering/service'
 import type { AppHonoEnv } from './http/context'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
+import {
+  createTelegramLeadNotifierFromEnv,
+  type LeadNotifier,
+} from './notifications/telegram'
 import { createStorageServiceFromEnv } from './storage/service'
 
 type CreateAppOptions = {
   env: AppEnv
   prisma: DbClient
   proposalGenerator?: ProposalGenerator
+  leadNotifier?: LeadNotifier
 }
 
-export function createApp({ env, prisma, proposalGenerator }: CreateAppOptions) {
+export function createApp({ env, prisma, proposalGenerator, leadNotifier }: CreateAppOptions) {
   const authService = new AuthService(prisma, env)
   const resolvedProposalGenerator =
     proposalGenerator ??
     createCommercialProposalGenerator({
       chromiumExecutablePath: env.PDF_CHROMIUM_EXECUTABLE_PATH,
     })
-  const engineeringDataService = new EngineeringDataService(prisma, resolvedProposalGenerator)
+  const engineeringDataService = new EngineeringDataService(
+    prisma,
+    resolvedProposalGenerator,
+    leadNotifier ?? createTelegramLeadNotifierFromEnv(env),
+  )
   const storageService = createStorageServiceFromEnv(env)
   const app = new OpenAPIHono<AppHonoEnv>({
     defaultHook: validationErrorHook,
