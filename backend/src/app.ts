@@ -38,6 +38,9 @@ export function createApp({ env, prisma, proposalGenerator, leadNotifier }: Crea
     prisma,
     resolvedProposalGenerator,
     leadNotifier ?? createTelegramLeadNotifierFromEnv(env),
+    {
+      publicWebsiteUrl: env.PUBLIC_WEBSITE_URL,
+    },
   )
   const storageService = createStorageServiceFromEnv(env)
   const app = new OpenAPIHono<AppHonoEnv>({

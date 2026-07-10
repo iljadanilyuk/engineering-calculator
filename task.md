@@ -866,7 +866,7 @@ Verification:
 
 ### PZK-011 - Project Examples
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -878,6 +878,34 @@ Acceptance criteria:
 - Admin can manage examples if included in v1.
 - Files are stored in a deploy-safe location.
 - Verification covers public access to example links and PDF offer links.
+
+Completion notes:
+
+- Added two real public PDF examples as deploy-time static website assets:
+  - `website/public/project-examples/proekt-primer-ov.pdf`: 39 pages, 5,607,314 bytes.
+  - `website/public/project-examples/primer-proekt-vk.pdf`: 24 pages, 3,511,548 bytes.
+- Source PDFs were inspected for size/page count before copying. Total committed PDF size is about 9.1 MB, which is acceptable for the current static website deploy shape. Future larger examples or editable media should move to the production storage plan decided in PZK-013/PZK-014.
+- Added shared `publicProjectExampleAssets` metadata in contracts so the website and proposal renderer use the same public paths, titles, sizes, and page counts.
+- Replaced the public website placeholder examples section with real PDF open/download links and unique accessible link labels.
+- Extended ProjectExample URL contracts to allow either absolute HTTP(S) URLs or root-relative public paths, with regression coverage.
+- Proposal generation now snapshots public example links into the immutable proposal HTML/PDF. Admin-managed public `ProjectExample` records are used when present; otherwise the static public assets are used as the fallback.
+- Added `PUBLIC_WEBSITE_URL` backend runtime env support and DigitalOcean spec generation/validation so proposal snapshots can resolve static PDF paths to stable absolute website URLs.
+- Preserved immutable proposal behavior: existing proposal HTML/PDF artifacts are served from stored snapshots and do not change when ProjectExample records are edited later.
+- Minimal admin management UI was not added in PZK-011. The DB/API foundation from PZK-003 is used for proposal snapshots, while the public website examples remain deploy-time static assets in v1.
+- No Bella/ads tasks were changed; the Bella PDFs were used only as source assets for this engineering-calculator task.
+
+Verification:
+
+- `docker info` passed before Docker-backed integration verification.
+- `bun run typecheck` passed for backend, contracts, webapp, and website.
+- `bun run test:contracts` passed: 18/18.
+- `bun run test:backend:unit` passed: 36/36.
+- `bun run test:backend:integration` passed: 33/33, including ProjectExample public/admin separation and immutable proposal snapshot coverage after example edits.
+- `bun run test:webapp` passed: 40/40.
+- `bun run test:deploy` passed: 16/16, including `PUBLIC_WEBSITE_URL` backend spec generation coverage.
+- `bun run build:website` passed; the only warning was the existing local `NODE_TLS_REJECT_UNAUTHORIZED=0` warning.
+- `git diff --check` passed; only expected Windows LF/CRLF working-copy warnings were printed.
+- Browser/Chrome CLI verification passed for public page PDF links, HTTP PDF access with `%PDF-` responses, proposal page example links, generated PDF offer example references/links via `pdftotext`, and mobile public/proposal layout sanity.
 
 ### PZK-012 - GitHub Preparation
 
@@ -949,7 +977,7 @@ These do not block PZK-001, but should be resolved before final public launch:
 
 - Exact brand name to show: `ИП Позняк`, another name, or a future studio/bureau name?
 - Exact contact phone/email/Telegram for production.
-- Should sample PDFs be public downloads immediately or gated by phone?
+- Current sample PDFs are public downloads. Decide later whether future/larger sample PDFs should stay public, move to CDN/Spaces, or be gated by phone.
 - Which Telegram chat should receive lead notifications?
 - Should PDF offers have an expiration period, for example 7 or 14 days?
 - Should admin support multiple users in v1 or only one owner account?
@@ -1081,3 +1109,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Harvey: `gpt-5.5 xhigh`; flagged sending only for `created=true`, notifying after DB persistence and proposal creation, using the internal calculation record instead of the minimized public response, env-only Telegram secrets, absolute links from configured backend URLs, concise no-extra-PII text, sanitized logs, injectable notifier tests, and no duplicate/idempotent resend. Recommendations incorporated.
 - 2026-07-10 PZK-010 post-task review round 1:
   - Reviewer McClintock: 9.6/10; no required changes. Confirmed notification happens only after a newly-created committed calculation/proposal, failures are caught without breaking lead submission, duplicates/idempotent replays do not notify, message content and omission of extra PII are covered, secrets remain env-only and absent from public responses, and docs are sufficient. Non-blocking gaps noted for raw network timeout/rejection hardening and missing public URL fallback tests; PZK-010 gate cleared.
+- 2026-07-10 PZK-011 pre-task review:
+  - Reviewer Halley: `gpt-5.5 xhigh`; flagged public/static PDF deploy-safety, proposal snapshot immutability, ProjectExample API reuse, admin-shell scope control, and source-PDF size/page checks. Recommendations incorporated.
+- 2026-07-10 PZK-011 post-task review round 1:
+  - Reviewer Zeno: 9.2/10; required wiring `PUBLIC_WEBSITE_URL` into backend DigitalOcean deployment specs and deploy tests before closure. Changes incorporated.
+  - Reviewer Dewey: 8.3/10; required the same deploy env fix, committing the untracked contracts/PDF assets, unique accessible names for repeated PDF links, and tracker cleanup. Changes incorporated.
+- 2026-07-10 PZK-011 focused post-task review round 2:
+  - Reviewer Gibbs: 9.6/10; confirmed `PUBLIC_WEBSITE_URL` backend spec wiring, deploy validation/tests, unique PDF link accessible labels, immutable proposal snapshot coverage, and no remaining required changes. PZK-011 gate cleared.

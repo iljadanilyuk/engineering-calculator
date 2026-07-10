@@ -25,6 +25,7 @@ describe('loadEnv', () => {
     expect(env.TELEGRAM_BOT_TOKEN).toBeUndefined()
     expect(env.TELEGRAM_CHAT_ID).toBeUndefined()
     expect(env.PUBLIC_API_URL).toBeUndefined()
+    expect(env.PUBLIC_WEBSITE_URL).toBeUndefined()
     expect(env.PUBLIC_WEBAPP_URL).toBeUndefined()
   })
 
@@ -87,12 +88,14 @@ describe('loadEnv', () => {
       TELEGRAM_BOT_TOKEN: '  test-token  ',
       TELEGRAM_CHAT_ID: ' -100123456 ',
       PUBLIC_API_URL: 'https://api.example.com',
+      PUBLIC_WEBSITE_URL: ' https://website.example.com ',
       PUBLIC_WEBAPP_URL: 'https://admin.example.com',
     })
 
     expect(env.TELEGRAM_BOT_TOKEN).toBe('test-token')
     expect(env.TELEGRAM_CHAT_ID).toBe('-100123456')
     expect(env.PUBLIC_API_URL).toBe('https://api.example.com')
+    expect(env.PUBLIC_WEBSITE_URL).toBe('https://website.example.com')
     expect(env.PUBLIC_WEBAPP_URL).toBe('https://admin.example.com')
   })
 

@@ -28,6 +28,7 @@ import { Prisma } from '../generated/prisma/client'
 import { AppError } from '../http/errors'
 import type { LeadNotifier } from '../notifications/telegram'
 import {
+  type CommercialProposalProjectExample,
   createCommercialProposalGenerator,
   type ProposalGenerator,
 } from './proposal'
@@ -74,12 +75,16 @@ type SaveCalculationMetadata = {
   ipAddress?: string
   userAgent?: string
 }
+type EngineeringDataServiceOptions = {
+  publicWebsiteUrl?: string
+}
 
 export class EngineeringDataService {
   constructor(
     private readonly db: DbClient,
     private readonly proposalGenerator: ProposalGenerator = createCommercialProposalGenerator(),
     private readonly leadNotifier: LeadNotifier | null = null,
+    private readonly options: EngineeringDataServiceOptions = {},
   ) {}
 
   async listPublicServices() {
@@ -291,6 +296,11 @@ export class EngineeringDataService {
     const proposalToken = await this.createUniqueProposalToken()
     const consentAcceptedAt = new Date()
     const offerNumber = offerNumberFromToken(proposalToken, consentAcceptedAt)
+    const sourcePageUrl = normalizeOptionalText(
+      this.options.publicWebsiteUrl ?? referrer ?? metadata.referrer,
+      2_048,
+    )
+    const projectExamples = await this.listPublicProjectExamples()
     const proposalArtifact = await this.proposalGenerator.generate({
       offerNumber,
       publicToken: proposalToken,
@@ -299,7 +309,8 @@ export class EngineeringDataService {
       objectName: input.objectName ?? null,
       calculation,
       issuedAt: consentAcceptedAt,
-      sourcePageUrl: normalizeOptionalText(metadata.referrer, 2_048),
+      sourcePageUrl,
+      projectExamples: projectExamples.map(projectExampleToProposalInput),
     })
 
     try {
@@ -850,6 +861,14 @@ function projectExampleToRecord(example: ProjectExampleRow): ProjectExampleRecor
     sortOrder: example.sortOrder,
     createdAt: example.createdAt.toISOString(),
     updatedAt: example.updatedAt.toISOString(),
+  }
+}
+
+function projectExampleToProposalInput(example: ProjectExampleRecord): CommercialProposalProjectExample {
+  return {
+    title: example.title,
+    description: example.description,
+    fileUrl: example.fileUrl,
   }
 }
 

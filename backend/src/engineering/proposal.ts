@@ -1,4 +1,8 @@
-import type { CalculationLineItem, CalculationResult } from '@poznyak-engineering-calculator/contracts'
+import {
+  publicProjectExampleAssets,
+  type CalculationLineItem,
+  type CalculationResult,
+} from '@poznyak-engineering-calculator/contracts'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { access, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -17,6 +21,14 @@ export type CommercialProposalInput = {
   calculation: CalculationResult
   issuedAt: Date
   sourcePageUrl?: string | null
+  projectExamples?: CommercialProposalProjectExample[]
+}
+
+export type CommercialProposalProjectExample = {
+  code?: string | null
+  title: string
+  description?: string | null
+  fileUrl: string
 }
 
 export type CommercialProposalArtifact = {
@@ -83,6 +95,7 @@ export function renderCommercialProposalHtmlSnapshot(input: CommercialProposalIn
   const displayBynRubles = allocateDisplayBynRubles(input.calculation, visibleLineItems)
   const examplesUrl = withHash(input.sourcePageUrl, 'examples')
   const contactsUrl = withHash(input.sourcePageUrl, 'contacts')
+  const projectExamples = proposalProjectExamples(input)
   const totalRubles = formatInteger(input.calculation.totals.totalBynRoundedRubles)
   const totalUsd = formatUsd(input.calculation.totals.totalUsdCents)
 
@@ -174,20 +187,7 @@ export function renderCommercialProposalHtmlSnapshot(input: CommercialProposalIn
     '</div>',
     '</section>',
     '<section class="proof-grid">',
-    '<div class="proof-card">',
-    '<span class="proof-code">ОВ</span>',
-    '<h3>Пример проекта отопления</h3>',
-    examplesUrl
-      ? `<a href="${escapeHtml(examplesUrl)}">Открыть раздел с примерами</a>`
-      : '<p>Ссылка на пример проекта будет добавлена после согласования публичного хранилища.</p>',
-    '</div>',
-    '<div class="proof-card">',
-    '<span class="proof-code">ВК</span>',
-    '<h3>Пример проекта водоснабжения и канализации</h3>',
-    examplesUrl
-      ? `<a href="${escapeHtml(examplesUrl)}">Открыть раздел с примерами</a>`
-      : '<p>Примеры доступны по запросу у менеджера до публикации файлов.</p>',
-    '</div>',
+    projectExamples.map((example) => proofCard(example, examplesUrl)).join(''),
     '</section>',
     '<section class="contact-block">',
     '<div>',
@@ -448,6 +448,57 @@ function serviceRow(lineItem: CalculationLineItem, index: number, displayBynRubl
   ].join('')
 }
 
+function proofCard(
+  example: ReturnType<typeof proposalProjectExamples>[number],
+  examplesUrl: string | null,
+) {
+  const fallbackLink = examplesUrl
+    ? `<a href="${escapeHtml(examplesUrl)}">Открыть раздел с примерами</a>`
+    : '<p>Ссылка на PDF-пример будет добавлена после настройки публичного URL.</p>'
+
+  return [
+    '<div class="proof-card">',
+    `<span class="proof-code">${escapeHtml(example.code)}</span>`,
+    `<h3>${escapeHtml(example.title)}</h3>`,
+    `<p>${escapeHtml(example.description)}</p>`,
+    example.href
+      ? `<a href="${escapeHtml(example.href)}" aria-label="${escapeHtml(`Открыть PDF-пример: ${example.title}`)}">Открыть PDF-пример</a>`
+      : fallbackLink,
+    '</div>',
+  ].join('')
+}
+
+function proposalProjectExamples(input: CommercialProposalInput) {
+  const customExamples = input.projectExamples?.filter((example) => example.title.trim() && example.fileUrl.trim()) ?? []
+  const baseUrl = input.sourcePageUrl ?? undefined
+
+  if (customExamples.length > 0) {
+    return customExamples.slice(0, 2).map((example, index) => ({
+      code: example.code?.trim() || `П${index + 1}`,
+      title: example.title.trim(),
+      description: example.description?.trim() || 'PDF-пример проекта для проверки состава и оформления.',
+      href: resolvePublicUrl(example.fileUrl, baseUrl),
+    }))
+  }
+
+  return publicProjectExampleAssets.slice(0, 2).map((example) => ({
+    code: example.code,
+    title: example.title,
+    description: `${example.description} ${example.pageCount} листов, PDF ${formatMegabytes(example.fileSizeBytes)}.`,
+    href: resolvePublicUrl(example.filePath, baseUrl),
+  }))
+}
+
+function resolvePublicUrl(rawUrl: string, baseUrl: string | undefined) {
+  try {
+    const url = baseUrl ? new URL(rawUrl, baseUrl) : new URL(rawUrl)
+    if (!['http:', 'https:'].includes(url.protocol)) return null
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 function allocateDisplayBynRubles(
   calculation: CalculationResult,
   visibleLineItems = calculation.lineItems,
@@ -532,6 +583,12 @@ function formatInteger(value: number) {
 
 function formatUsd(usdCents: number) {
   return formatInteger(Math.round(usdCents / 100))
+}
+
+function formatMegabytes(bytes: number) {
+  return new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 1,
+  }).format(bytes / 1024 / 1024) + ' МБ'
 }
 
 function withHash(rawUrl: string | null | undefined, hash: string) {

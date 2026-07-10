@@ -31,6 +31,7 @@ maybeDescribe('engineering API integration', () => {
     SPACES_UPLOAD_URL_TTL_SECONDS: 900,
     SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
     SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
+    PUBLIC_WEBSITE_URL: 'https://website.example.com',
   }
   const prisma = createPrisma(databaseUrl!)
   const app = createApp({ env, prisma, proposalGenerator: createTestProposalGenerator() })
@@ -187,6 +188,8 @@ maybeDescribe('engineering API integration', () => {
     expect(publicProposalHtml).toContain('Коммерческое предложение')
     expect(publicProposalHtml).toContain('Анна Клиент')
     expect(publicProposalHtml).toContain('Boiler room fixed package')
+    expect(publicProposalHtml).toContain('https://website.example.com/project-examples/proekt-primer-ov.pdf')
+    expect(publicProposalHtml).toContain('https://website.example.com/project-examples/primer-proekt-vk.pdf')
     expect(publicProposalHtml).not.toContain('Коммерческое предложение готовится')
 
     const publicProposalPdf = await app.request(`/api/public/proposals/${saved.proposals[0].publicToken}/pdf`)
@@ -1073,6 +1076,59 @@ maybeDescribe('engineering API integration', () => {
     expect(adminBody.examples).toHaveLength(2)
   })
 
+  test('snapshots public project example links into generated proposals', async () => {
+    const accessToken = await loginAdmin('proposal-examples@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Example snapshot service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const publicExample = await createProjectExample(accessToken, {
+      title: 'Approved OV project example',
+      description: 'Published CDN PDF for proposal snapshots.',
+      fileUrl: 'https://cdn.example.com/project-examples/approved-ov.pdf',
+      sortOrder: 1,
+    })
+    await createProjectExample(accessToken, {
+      title: 'Private draft example',
+      fileUrl: 'https://cdn.example.com/project-examples/private-draft.pdf',
+      isPublic: false,
+      sortOrder: 2,
+    })
+
+    const response = await saveCalculation({
+      clientName: 'Proposal Examples Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const body = await response.json()
+    const proposalToken = body.calculation.proposal.publicToken
+    const proposalBeforeEdit = await app.request(`/api/public/proposals/${proposalToken}`)
+    const htmlBeforeEdit = await proposalBeforeEdit.text()
+
+    await patchProjectExample(accessToken, publicExample.id, {
+      title: 'Changed OV project example',
+      fileUrl: 'https://cdn.example.com/project-examples/changed-ov.pdf',
+    })
+
+    const proposalAfterEdit = await app.request(`/api/public/proposals/${proposalToken}`)
+    const htmlAfterEdit = await proposalAfterEdit.text()
+
+    expect(response.status).toBe(201)
+    expect(proposalBeforeEdit.status).toBe(200)
+    expect(htmlBeforeEdit).toContain('Approved OV project example')
+    expect(htmlBeforeEdit).toContain('https://cdn.example.com/project-examples/approved-ov.pdf')
+    expect(htmlBeforeEdit).not.toContain('Private draft example')
+    expect(htmlBeforeEdit).not.toContain('proekt-primer-ov.pdf')
+    expect(htmlAfterEdit).toBe(htmlBeforeEdit)
+    expect(htmlAfterEdit).not.toContain('changed-ov.pdf')
+  })
+
   test('database migration constraints reject invalid statuses and incomplete proposal artifacts', async () => {
     const accessToken = await loginAdmin('constraints@example.com')
     await setExchangeRate(accessToken, '3.0000')
@@ -1454,6 +1510,21 @@ maybeDescribe('engineering API integration', () => {
     const body = await response.json()
 
     expect(response.status).toBe(201)
+    return body.example
+  }
+
+  async function patchProjectExample(accessToken: string, id: string, payload: Record<string, unknown>) {
+    const response = await app.request(`/api/admin/project-examples/${id}`, {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
     return body.example
   }
 

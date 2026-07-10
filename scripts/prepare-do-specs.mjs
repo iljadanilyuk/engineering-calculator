@@ -298,7 +298,7 @@ function assertSafeProductionEnv(outputName, contents) {
     }
   }
 
-  for (const key of ['VITE_API_URL', 'PUBLIC_API_URL', 'PUBLIC_WEBAPP_URL']) {
+  for (const key of ['VITE_API_URL', 'PUBLIC_API_URL', 'PUBLIC_WEBAPP_URL', 'PUBLIC_WEBSITE_URL']) {
     const value = findEnvValue(contents, key)
     if (value !== undefined) {
       assertBuildTimeHttpsUrl(outputName, key, value)

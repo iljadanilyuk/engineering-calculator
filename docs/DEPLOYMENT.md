@@ -42,12 +42,13 @@ REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SECURE=true
 TRUST_PROXY_HEADERS=true
 PUBLIC_API_URL=https://api.example.com
+PUBLIC_WEBSITE_URL=https://website.example.com
 PUBLIC_WEBAPP_URL=https://webapp.example.com
 ```
 
 `CORS_ORIGINS` must include public browser origins that call non-credentialed API routes, for example the public website. `AUTH_CORS_ORIGINS` must include only admin webapp origins that are allowed to use credentialed auth/admin CORS and cookie refresh/logout. Use exact origins only; do not use wildcards, empty values, or paths.
 
-`PUBLIC_API_URL` is the backend/API origin used when the backend needs to create absolute proposal/PDF links, including Telegram notifications. `PUBLIC_WEBAPP_URL` is the admin webapp origin used for absolute admin detail links such as `/app/leads/:id`.
+`PUBLIC_API_URL` is the backend/API origin used when the backend needs to create absolute proposal/PDF links, including Telegram notifications. `PUBLIC_WEBSITE_URL` is the public website origin used for example links embedded into immutable proposal snapshots. `PUBLIC_WEBAPP_URL` is the admin webapp origin used for absolute admin detail links such as `/app/leads/:id`.
 
 `JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
 
@@ -289,7 +290,7 @@ Required component shape (static build):
 
 Keep website independent from authenticated browser-app flows unless the product explicitly needs shared API data.
 
-`PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
+The backend also needs runtime `PUBLIC_WEBSITE_URL=https://website.example.com` so newly generated proposal HTML/PDF snapshots can embed absolute links to public project example PDFs. `PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
 
 ## Managed PostgreSQL
 
@@ -375,7 +376,7 @@ After deployment:
 ## Failure Modes This Template Guards Against
 
 - `GitHub user not authenticated`: App Platform GitHub integration was not connected or did not have repository access before `doctl apps create`.
-- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `AUTH_CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEBAPP_URL` must be concrete before deployment.
+- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `AUTH_CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEBAPP_URL` must be concrete before deployment; `PUBLIC_WEBSITE_URL` must be present as either the deployed website URL or a supported App Platform self URL.
 - Dirty or ambiguous release source: deployment tooling must stop when the worktree has uncommitted/untracked files, the checkout branch differs from `DO_GIT_BRANCH`, or the branch is not pushed and in sync.
 - Backend crash on startup: empty, placeholder, or obviously weak `JWT_SECRET` is rejected by env validation, so the spec generator must fail before App Platform deploys it.
 - Broken browser auth CORS: production public and auth CORS lists must use exact HTTPS origins, not wildcard or empty values; public website origins must not be auth-cookie origins unless they are also an admin webapp.

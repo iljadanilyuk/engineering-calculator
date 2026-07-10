@@ -68,6 +68,7 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: optionalStringSchema,
   TELEGRAM_CHAT_ID: optionalStringSchema,
   PUBLIC_API_URL: optionalHttpUrlSchema,
+  PUBLIC_WEBSITE_URL: optionalHttpUrlSchema,
   PUBLIC_WEBAPP_URL: optionalHttpUrlSchema,
 }).superRefine((env, ctx) => {
   validateJwtSecret(env, ctx)

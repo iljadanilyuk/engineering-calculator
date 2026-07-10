@@ -86,6 +86,7 @@ describe('prepare-do-specs', () => {
     expect(spec).toContain('workers:');
     expect(spec).toContain('key: CORS_ORIGINS');
     expect(spec).toContain('value: "https://website.example.com"');
+    expect(spec).toContain('key: PUBLIC_WEBSITE_URL');
     expect(spec).toContain('key: AUTH_CORS_ORIGINS');
     expect(spec).toContain('value: "https://webapp.example.com"');
     expect(spec).toContain('key: TRUST_PROXY_HEADERS');

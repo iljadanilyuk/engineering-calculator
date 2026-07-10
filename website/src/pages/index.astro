@@ -1,6 +1,7 @@
 ---
 import {
   calculateEngineeringOffer,
+  publicProjectExampleAssets,
   type CalculationResult,
   type EngineeringService,
 } from '@poznyak-engineering-calculator/contracts'
@@ -108,6 +109,8 @@ const formatUsdUnit = (cents: number) =>
   new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100)
+const formatFileSizeMb = (bytes: number) =>
+  `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(bytes / 1024 / 1024)} МБ`
 
 function priceModeLabel(service: EngineeringService) {
   return service.pricingType === 'fixed'
@@ -464,41 +467,51 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
             <p class="section-kicker">Примеры и объекты</p>
             <h2 id="examples-title">Проекты для домов и небольшой коммерции</h2>
             <p>
-              Публичные ссылки на реальные PDF-примеры появятся после согласования файлов и
-              постоянного места хранения.
+              Два реальных PDF-комплекта доступны как публичные примеры: можно открыть в браузере
+              или скачать перед расчетом.
             </p>
           </div>
           <div class="objects">
-            <article class="object-card">
-              <div class="blueprint" data-title="ОВ · частный дом">
-                <span class="room r1"></span>
-                <span class="room r2"></span>
-                <span class="pipe-line l1"></span>
-                <span class="pipe-line l2"></span>
-                <span class="node n1">ТП</span>
-                <span class="node n2">КТ</span>
-              </div>
-              <div class="object-body">
-                <h3>Частный дом 120-250 м²</h3>
-                <p>Отопление, теплые полы, котельная, водоснабжение и канализация.</p>
-                <a class="button small light" href="#contacts">Запросить пример ОВ</a>
-              </div>
-            </article>
-            <article class="object-card">
-              <div class="blueprint" data-title="ВК · коттедж">
-                <span class="room r1"></span>
-                <span class="room r2"></span>
-                <span class="pipe-line l1"></span>
-                <span class="pipe-line l2"></span>
-                <span class="node n1">В1</span>
-                <span class="node n2">К1</span>
-              </div>
-              <div class="object-body">
-                <h3>Коттедж с полной инженерией</h3>
-                <p>ВК, отопление, вентиляция, трассы и спецификация оборудования.</p>
-                <a class="button small light" href="#contacts">Запросить пример ВК</a>
-              </div>
-            </article>
+            {publicProjectExampleAssets.map((example) => (
+              <article class="object-card">
+                <div class="blueprint" data-title={`${example.code} · PDF пример`}>
+                  <span class="room r1"></span>
+                  <span class="room r2"></span>
+                  <span class="pipe-line l1"></span>
+                  <span class="pipe-line l2"></span>
+                  <span class="node n1">{example.code}</span>
+                  <span class="node n2">PDF</span>
+                </div>
+                <div class="object-body">
+                  <span class="example-meta">
+                    {example.pageCount} листов · PDF {formatFileSizeMb(example.fileSizeBytes)}
+                  </span>
+                  <h3>{example.title}</h3>
+                  <p>{example.description}</p>
+                  <div class="object-actions">
+                    <a
+                      class="button small light"
+                      href={example.filePath}
+                      target="_blank"
+                      rel="noopener"
+                      type="application/pdf"
+                      aria-label={`Открыть PDF-пример: ${example.title}`}
+                    >
+                      Открыть PDF
+                    </a>
+                    <a
+                      class="text-link"
+                      href={example.filePath}
+                      download={example.fileName}
+                      type="application/pdf"
+                      aria-label={`Скачать PDF-пример: ${example.title}`}
+                    >
+                      Скачать
+                    </a>
+                  </div>
+                </div>
+              </article>
+            ))}
             <article class="object-card accent">
               <div class="blueprint" data-title="КП · малая коммерция">
                 <span class="room r1"></span>
@@ -2255,6 +2268,33 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     display: grid;
     gap: 12px;
     padding: 18px;
+  }
+
+  .example-meta {
+    color: var(--steel);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .object-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 2px;
+  }
+
+  .text-link {
+    color: var(--steel);
+    font-size: 13px;
+    font-weight: 900;
+    text-decoration: none;
+  }
+
+  .text-link:hover {
+    color: var(--orange);
   }
 
   .steps {

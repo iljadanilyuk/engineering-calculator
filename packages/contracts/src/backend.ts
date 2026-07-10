@@ -29,11 +29,15 @@ const optionalQueryTextSchema = (max: number) =>
     return trimmed === '' ? undefined : trimmed
   }, z.string().max(max).optional())
 
-const optionalUrlTextSchema = z.preprocess((value) => {
+const projectExampleUrlSchema = z.string().trim().min(1).max(2_048).refine(
+  (value) => isHttpUrl(value) || isRootRelativePublicPath(value),
+  'Expected an http(s) URL or root-relative public path',
+)
+const optionalProjectExampleUrlSchema = z.preprocess((value) => {
   if (typeof value !== 'string') return value
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
-}, z.string().url().nullable().optional())
+}, projectExampleUrlSchema.nullable().optional())
 
 const pricingRuleSchema = z.record(z.string(), z.unknown()).nullable().optional()
 const sortOrderSchema = z.number().int().min(-1_000_000).max(1_000_000)
@@ -313,8 +317,8 @@ export const publicCalculationSaveResponseSchema = z.object({
 export const projectExampleCreateRequestSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: optionalTextSchema(2_000),
-  fileUrl: z.string().url(),
-  coverImageUrl: optionalUrlTextSchema,
+  fileUrl: projectExampleUrlSchema,
+  coverImageUrl: optionalProjectExampleUrlSchema,
   isPublic: z.boolean().default(true),
   sortOrder: sortOrderSchema.default(0),
 })
@@ -322,8 +326,8 @@ export const projectExampleCreateRequestSchema = z.object({
 export const projectExampleUpdateRequestSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   description: optionalTextSchema(2_000),
-  fileUrl: z.string().url().optional(),
-  coverImageUrl: optionalUrlTextSchema,
+  fileUrl: projectExampleUrlSchema.optional(),
+  coverImageUrl: optionalProjectExampleUrlSchema,
   isPublic: z.boolean().optional(),
   sortOrder: sortOrderSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, 'At least one field is required')
@@ -332,8 +336,8 @@ export const projectExampleRecordSchema = z.object({
   id: uuidSchema,
   title: z.string(),
   description: z.string().nullable(),
-  fileUrl: z.string().url(),
-  coverImageUrl: z.string().url().nullable(),
+  fileUrl: projectExampleUrlSchema,
+  coverImageUrl: projectExampleUrlSchema.nullable(),
   isPublic: z.boolean(),
   sortOrder: z.number().int(),
   createdAt: z.string().datetime(),
@@ -382,4 +386,25 @@ function isValidDateOnly(value: string) {
   return date.getUTCFullYear() === year &&
     date.getUTCMonth() === month - 1 &&
     date.getUTCDate() === day
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function isRootRelativePublicPath(value: string) {
+  if (!value.startsWith('/') || value.startsWith('//')) return false
+  if (/\s/.test(value)) return false
+
+  try {
+    new URL(value, 'https://example.com')
+    return true
+  } catch {
+    return false
+  }
 }
