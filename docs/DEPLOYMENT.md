@@ -1,8 +1,10 @@
 # Deployment
 
-Use this document only after the user has asked for deployment. Read the root [README.md](../README.md), [deployment decision gate](deployment/digitalocean-decision-gate.md), and active surface READMEs first; they record the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
+Use this document only after the user has asked for deployment. Read the root [README.md](../README.md), [deployment decision gate](deployment/digitalocean-decision-gate.md), [DigitalOcean App Platform prep runbook](deployment/digitalocean-app-platform-prep.md), and active surface READMEs first; they record the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
 
 PZK-013 selected DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18 as the production deployment shape. This is a decision record only. No App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, or other paid resource has been created. Future provisioning must be separately approved by the user and must use DigitalOcean Project ID `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`.
+
+PZK-014 prepared safe draft App Platform templates and a DNS/deployment runbook only. It did not create or update cloud resources. Use [deployment/digitalocean-app-platform-prep.md](deployment/digitalocean-app-platform-prep.md) as the concrete pre-provisioning checklist.
 
 The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
 
@@ -160,6 +162,7 @@ doctl apps create --project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3 --spec .scra
 
 # 4. After the website URL exists, update backend CORS for both browser origins.
 export DO_WEBSITE_URL=https://<website-default-ingress>
+export DO_BACKEND_URL=https://<api-default-ingress>
 bun run deploy:do:specs backend-final
 doctl apps spec validate .scratch/deploy/backend-app.yaml
 doctl apps update <backend-app-id> --spec .scratch/deploy/backend-app.yaml
@@ -188,9 +191,11 @@ docker push registry.digitalocean.com/<registry>/<project>-backend:latest
 
 Backend service requirements:
 
+- The committed backend draft spec pins the attached App Platform PostgreSQL database to `version: "18"`.
 - Set both the service `http_port` and `PORT` env to `8080` unless the project has a reason to choose another port.
 - Use `instance_size_slug: apps-s-1vcpu-1gb` and `instance_count: 1` as the default production API starter shape. This is one shared 1 vCPU / 1 GiB App Platform container, which is the $12/month single-container option as of May 2026.
 - Configure health checks to hit `/health`.
+- Set `NODE_ENV=production`, `PUBLIC_API_URL=https://api.<domain>`, `PUBLIC_WEBSITE_URL=https://www.<domain>`, and `PUBLIC_WEBAPP_URL=https://admin.<domain>` before real leads.
 - Set `COOKIE_SECURE=true` for HTTPS production traffic.
 - Set `TRUST_PROXY_HEADERS=true` only when the backend is behind DigitalOcean App Platform or another trusted proxy; login throttling uses the proxy-normalized `X-Forwarded-For` client IP only in that mode.
 - Set `CORS_ORIGINS` to the exact public browser origins, and `AUTH_CORS_ORIGINS` to the exact admin webapp origins. Do not use `*`, empty values, or URLs with paths.
@@ -298,7 +303,7 @@ The backend also needs runtime `PUBLIC_WEBSITE_URL=https://www.example.com` so n
 
 ## Managed PostgreSQL
 
-Use DigitalOcean Managed PostgreSQL 18 for production data. PostgreSQL 18 is required because the Prisma schema uses database-generated `uuidv7()` defaults. For a new low-cost production launch, start with the Basic Regular 1 GiB / 1 vCPU cluster with no standby nodes; it is $15.15/month as checked on 2026-07-10. When attaching the database inside App Platform, prefer bindable variables such as the database component's `DATABASE_URL`/`DATABASE_PRIVATE_URL` rather than copying raw credentials into the spec.
+Use DigitalOcean Managed PostgreSQL 18 for production data. PostgreSQL 18 is required because the Prisma schema uses database-generated `uuidv7()` defaults. The committed backend draft spec pins `version: "18"`. For a new low-cost production launch, start with the Basic Regular 1 GiB / 1 vCPU cluster with no standby nodes; it is $15.15/month as checked on 2026-07-10. When attaching the database inside App Platform, prefer bindable variables such as the database component's `DATABASE_URL`/`DATABASE_PRIVATE_URL` rather than copying raw credentials into the spec.
 
 Operational defaults:
 
@@ -381,7 +386,7 @@ After deployment:
 ## Failure Modes This Template Guards Against
 
 - `GitHub user not authenticated`: App Platform GitHub integration was not connected or did not have repository access before `doctl apps create`.
-- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `AUTH_CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEBAPP_URL` must be concrete before deployment; `PUBLIC_WEBSITE_URL` must be present as either the deployed website URL or a supported App Platform self URL.
+- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `AUTH_CORS_ORIGINS`, `PUBLIC_API_URL`, `PUBLIC_WEBSITE_URL`, `PUBLIC_WEBAPP_URL`, and `VITE_API_URL` must be concrete before final deployment; bootstrap specs may use supported App Platform self URLs and `placeholder.invalid` only before real traffic.
 - Dirty or ambiguous release source: deployment tooling must stop when the worktree has uncommitted/untracked files, the checkout branch differs from `DO_GIT_BRANCH`, or the branch is not pushed and in sync.
 - Backend crash on startup: empty, placeholder, or obviously weak `JWT_SECRET` is rejected by env validation, so the spec generator must fail before App Platform deploys it.
 - Broken browser auth CORS: production public and auth CORS lists must use exact HTTPS origins, not wildcard or empty values; public website origins must not be auth-cookie origins unless they are also an admin webapp.

@@ -17,6 +17,8 @@ Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app
 
 PZK-013 selected the production deployment shape: DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18, with `website` and `webapp` as static sites, `backend` as one App Platform service, and generated proposal/PDF artifacts stored in PostgreSQL for v1. See [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md). This is documentation only; no App Platform app, database, Spaces bucket, Droplet, DNS record, or other paid resource has been created.
 
+PZK-014 prepared safe draft App Platform templates and the concrete DNS/deployment runbook in [docs/deployment/digitalocean-app-platform-prep.md](docs/deployment/digitalocean-app-platform-prep.md). These are preparation artifacts only; they were not applied to DigitalOcean.
+
 ## Product Direction
 
 The first product version should let public users calculate an indicative design-work offer, submit name and phone, and download a polished PDF proposal. Admin users should manage services/prices, review submitted calculations, change lead statuses, and use the app as a lightweight mini-CRM.
@@ -200,9 +202,9 @@ CI:
 
 ## Deployment Notes
 
-No DigitalOcean paid resources, apps, databases, Spaces buckets, or DNS records have been created for this product. PZK-013 is complete as a decision record only; provisioning remains behind PZK-014 and a separate explicit user approval.
+No DigitalOcean paid resources, apps, databases, Spaces buckets, or DNS records have been created for this product. PZK-013 is complete as a decision record and PZK-014 is deploy-prep only; provisioning remains behind a separate explicit user approval.
 
-Use [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md) for the selected deployment shape and PZK-014 checklist, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the DigitalOcean App Platform runbook, [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) for local PostgreSQL, [docs/TESTING.md](docs/TESTING.md) for verification details, and [docs/STORAGE.md](docs/STORAGE.md) when generated files or media need persistent storage.
+Use [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md) for the selected deployment shape, [docs/deployment/digitalocean-app-platform-prep.md](docs/deployment/digitalocean-app-platform-prep.md) for the PZK-014 App Platform/DNS prep checklist, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the broader deployment runbook, [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) for local PostgreSQL, [docs/TESTING.md](docs/TESTING.md) for verification details, and [docs/STORAGE.md](docs/STORAGE.md) when generated files or media need persistent storage.
 
 ## Template Attribution
 

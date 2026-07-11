@@ -9,6 +9,8 @@ Current DigitalOcean resources in this Project: 0
 
 No DigitalOcean App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, or other paid resource was created for PZK-013. This document is a decision record only.
 
+PZK-014 deployment preparation is documented in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md). That follow-up is still preparation only; it does not approve or create paid resources.
+
 ## Decision
 
 Use DigitalOcean App Platform for production:
@@ -88,7 +90,8 @@ Risks and limits:
 Current repo expectations:
 
 - Backend runtime: Bun via `backend/Dockerfile`.
-- Backend Docker image currently starts from `oven/bun:1`; PZK-014 should pin or record the exact Bun image tag/digest before production.
+- Backend Docker image starts from `oven/bun:1.3.14`.
+- Static-site App Platform buildpack Bun is pinned with `BUN_VERSION=1.3.14` and root `.bun-version`.
 - Website build requires Node `>=22.12.0` by `website/package.json`.
 - PostgreSQL: 18+ required by native `uuidv7()`.
 - PDF generation: Chromium/headless browser is required. `backend/Dockerfile` runs `bun x playwright install --with-deps chromium`.
@@ -247,7 +250,7 @@ Baseline:
 - Monitor App Platform CPU, memory, restarts, deployment failures, health-check failures, and outbound transfer.
 - Keep application logs free of secrets and avoid printing full Telegram tokens, database URLs, JWTs, or lead payload dumps.
 
-PZK-014 should add a small post-deploy verification checklist and record where production logs/alerts are reviewed.
+PZK-014 added the concrete post-deploy smoke checklist in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md). After resources exist, extend that runbook with the exact App Platform log and alert locations used by the production app.
 
 ## Expected Monthly Cost
 
@@ -273,6 +276,8 @@ Rejected Droplet path:
 - Operational risk is higher for this project than the saved monthly cost.
 
 ## PZK-014 Deployment Prep Checklist
+
+Implemented in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md) and kept here as the original decision-gate handoff checklist.
 
 Before provisioning:
 

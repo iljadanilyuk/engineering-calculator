@@ -45,7 +45,7 @@ const projectSlug = doName(process.env.DO_PROJECT_SLUG ?? packageJson.name ?? 'a
 const gitBranch = requiredBranch()
 const githubRepo = requiredGithubRepo()
 assertCleanReleaseGitState(gitBranch)
-const appRegion = process.env.DO_APP_REGION?.trim() || 'nyc'
+const appRegion = process.env.DO_APP_REGION?.trim() || 'fra'
 const dbComponentName = doName(process.env.DO_DB_COMPONENT_NAME ?? `${projectSlug}-db`, 32)
 const dbClusterName = doName(process.env.DO_DB_CLUSTER_NAME ?? `${projectSlug}-pg`)
 const dbName = process.env.DO_DB_NAME?.trim() || 'defaultdb'
@@ -64,12 +64,15 @@ await mkdir(scratchDir, { recursive: true })
 if (target === 'backend-initial' || target === 'backend-final' || target === 'all') {
   const jwtSecret = requiredEnv('JWT_SECRET')
   assertStrongJwtSecret(jwtSecret)
+  const backendPublicUrl =
+    target === 'backend-initial' ? '${_self.PUBLIC_URL}' : requiredUrlEnv('DO_BACKEND_URL')
   const webappUrl = target === 'backend-initial' ? 'https://placeholder.invalid' : requiredUrlEnv('DO_WEBAPP_URL')
   const websiteUrl = target === 'backend-initial' ? 'https://placeholder.invalid' : requiredUrlEnv('DO_WEBSITE_URL')
 
   await writePreparedSpec('backend-app.yaml.example', 'backend-app.yaml', {
     ...commonReplacements(),
     REPLACE_WITH_AT_LEAST_32_RANDOM_CHARS: jwtSecret,
+    REPLACE_WITH_BACKEND_PUBLIC_URL: backendPublicUrl,
     'https://REPLACE_WITH_WEBAPP_DEFAULT_INGRESS': webappUrl,
     'https://REPLACE_WITH_WEBSITE_DEFAULT_INGRESS': websiteUrl,
     REPLACE_WITH_OPTIONAL_BACKEND_WORKERS: optionalBackendWorkersBlock(),
@@ -88,10 +91,15 @@ if (target === 'webapp' || target === 'all') {
 if (target === 'website' || target === 'all') {
   // Fully prerendered website output is a Static Site component; SSR/on-demand routes,
   // server islands, or other runtime-rendered routes need a runtime service instead.
+  const websitePublicUrl = process.env.DO_WEBSITE_URL?.trim()
+    ? requiredUrlEnv('DO_WEBSITE_URL')
+    : '${_self.PUBLIC_URL}'
+
   await writePreparedSpec('website-static-app.yaml.example', 'website-static-app.yaml', {
     ...commonReplacements(),
     'https://REPLACE_WITH_WEBAPP_DEFAULT_INGRESS': requiredUrlEnv('DO_WEBAPP_URL'),
     'https://REPLACE_WITH_BACKEND_DEFAULT_INGRESS': requiredUrlEnv('DO_BACKEND_URL'),
+    REPLACE_WITH_WEBSITE_PUBLIC_URL: websitePublicUrl,
   })
 }
 
@@ -100,6 +108,9 @@ console.log(`Prepared DigitalOcean specs under ${scratchDir}`)
 function commonReplacements() {
   return {
     REPLACE_WITH_PROJECT_SLUG: projectSlug,
+    REPLACE_WITH_BACKEND_APP_NAME: suffixedDoName(projectSlug, 'api', 32),
+    REPLACE_WITH_WEBAPP_APP_NAME: suffixedDoName(projectSlug, 'webapp', 32),
+    REPLACE_WITH_WEBSITE_APP_NAME: suffixedDoName(projectSlug, 'website', 32),
     REPLACE_WITH_DO_APP_REGION: appRegion,
     REPLACE_WITH_GITHUB_REPO: githubRepo,
     REPLACE_WITH_GIT_BRANCH: gitBranch,
@@ -133,7 +144,7 @@ function printUsage() {
   console.error('Required env:')
   console.error('  all targets: DO_GITHUB_REPO, optional DO_PROJECT_SLUG, DO_GIT_BRANCH, DO_APP_REGION')
   console.error('  backend-initial: JWT_SECRET')
-  console.error('  backend-final: JWT_SECRET, DO_WEBAPP_URL, DO_WEBSITE_URL')
+  console.error('  backend-final: JWT_SECRET, DO_BACKEND_URL, DO_WEBAPP_URL, DO_WEBSITE_URL')
   console.error('  webapp: DO_BACKEND_URL')
   console.error('  website: DO_BACKEND_URL, DO_WEBAPP_URL')
   console.error('  all: JWT_SECRET, DO_BACKEND_URL, DO_WEBAPP_URL, DO_WEBSITE_URL')
@@ -535,6 +546,14 @@ function doName(value, maxLength = 63) {
   const withLetterStart = /^[a-z]/.test(normalized) ? normalized : `app-${normalized}`
   const fallback = withLetterStart === 'app-' ? 'app-template' : withLetterStart
   return fallback.slice(0, maxLength).replace(/-+$/g, '') || 'app-template'
+}
+
+function suffixedDoName(base, suffix, maxLength = 32) {
+  const normalizedSuffix = doName(suffix, maxLength)
+  const baseMaxLength = maxLength - normalizedSuffix.length - 1
+  const normalizedBase = doName(base, Math.max(1, baseMaxLength))
+
+  return `${normalizedBase}-${normalizedSuffix}`.slice(0, maxLength).replace(/-+$/g, '')
 }
 
 function unquoteYamlScalar(value) {

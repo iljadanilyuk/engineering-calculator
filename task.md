@@ -1010,7 +1010,7 @@ Verification:
 
 ### PZK-014 - DigitalOcean Deployment Prep
 
-Status: pending
+Status: complete
 
 Goal:
 
@@ -1035,6 +1035,36 @@ Acceptance criteria:
   - migrations run cleanly.
 - Rollback and backup/restore notes are included.
 
+Completion notes:
+
+- Added `docs/deployment/digitalocean-app-platform-prep.md` as the concrete PZK-014 App Platform and registrar DNS prep runbook.
+- Kept PZK-014 preparation-only: no App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, domain attachment, or other paid DigitalOcean resource was created or updated.
+- Documented the approved target shape as three safe draft App Platform apps/components: backend/API at `api.<domain>`, admin webapp static site at `admin.<domain>`, and public website static site at canonical `www.<domain>`.
+- Documented the Managed PostgreSQL 18 attachment, Prisma `prisma:deploy` pre-deploy job, first-admin setup flow, backup/restore notes, rollback plan, CORS/auth/cookie/proxy settings, final public/API/admin URL settings, proposal/PDF URL immutability risks, and full post-deploy smoke checklist.
+- Added registrar-side DNS runbook placeholders for `www`, apex redirect to `www`, `admin`, `api`, verification TXT, CAA, DNSSEC, TLS propagation, and preserving MX/SPF/DKIM/DMARC/existing TXT records.
+- Updated `.do` App Platform draft templates so backend pins PostgreSQL `version: "18"`, sets `NODE_ENV=production`, includes `PUBLIC_API_URL`, `PUBLIC_WEBSITE_URL`, and `PUBLIC_WEBAPP_URL`, and uses generated provider-valid app names.
+- Updated static-site draft templates to pin `BUN_VERSION=1.3.14`; added root `.bun-version`; pinned backend Docker runtime to `oven/bun:1.3.14`.
+- Updated `scripts/prepare-do-specs.mjs` so the default region is `fra`, backend final specs require `DO_BACKEND_URL`, website specs can use a final `DO_WEBSITE_URL` or safe `${_self.PUBLIC_URL}` bootstrap fallback, and generated app names satisfy DigitalOcean's 32-character app-name limit.
+- Updated deploy generator tests for PostgreSQL 18, backend public/admin/website URL env, Bun version pinning, safe bootstrap URL behavior, and provider app-name length.
+- Updated `README.md`, `docs/DEPLOYMENT.md`, and `docs/deployment/digitalocean-decision-gate.md` to point to the PZK-014 runbook and preserve the no-provisioning boundary.
+- DigitalOcean Project ID remains fixed for future provisioning: `engineering-calculator` / `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`.
+
+Verification:
+
+- PZK-014 pre-task `gpt-5.5 xhigh` review completed and recommendations incorporated.
+- `bun run test:deploy` passed: 20/20.
+- `bun run typecheck` passed.
+- `docker info` confirmed Docker was running.
+- `docker manifest inspect oven/bun:1.3.14` confirmed the pinned Bun image tag is available.
+- `bun run smoke:backend:docker` passed, including backend Docker image build, `/health`, and DB-backed auth smoke.
+- `docker compose ps` showed no running project Compose services after Docker smoke.
+- Generated draft specs into `.scratch/deploy` using test-mode release-git-check bypass with safe `example.com` URLs because the current PZK-014 worktree was intentionally dirty before commit.
+- `doctl apps spec validate` passed for generated backend, webapp, and website specs. No `doctl apps create`, `doctl apps update`, database, Spaces, Droplet, DNS, or other provisioning command was run.
+- Generated final example specs were inspected with `rg`; no `REPLACE_WITH_`, `localhost`, or `placeholder.invalid` remained, and expected `region: fra`, PostgreSQL `version: "18"`, `NODE_ENV`, `PUBLIC_API_URL`, `PUBLIC_WEBSITE_URL`, `PUBLIC_WEBAPP_URL`, and `BUN_VERSION` entries were present.
+- Scoped no-secrets scan returned no matches. Future validation with real secrets must not paste full `doctl apps spec validate` output because `doctl` echoes normalized secret env values.
+- `git diff --check` passed with only expected Windows LF/CRLF working-copy warnings.
+- Post-task review gate cleared with reviewer score 9.6/10 and no required changes.
+
 ## 11. Open Questions
 
 These do not block PZK-001, but should be resolved before final public launch:
@@ -1051,7 +1081,7 @@ These do not block PZK-001, but should be resolved before final public launch:
 - Confirm whether public PDF/proposal links should expire or remain permanently accessible by token.
 - Confirm the exact production domain/subdomain and registrar account access before attaching it to DigitalOcean.
 - Confirm the chosen production domain's DNSSEC state before App Platform domain attachment; current DigitalOcean docs say App Platform does not support adding DNSSEC-enabled domains to apps.
-- Confirm the exact monthly-cost approval threshold before PZK-014 provisioning. Current documented baseline is about `$27.15/mo` before taxes/overages, excluding optional Spaces.
+- Confirm the exact monthly-cost approval threshold before any DigitalOcean provisioning. Current documented baseline is about `$27.15/mo` before taxes/overages, excluding optional Spaces.
 
 ## 12. Known Risks And Edge Cases
 
@@ -1194,3 +1224,7 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Noether: 8.5/10; confirmed prior content fixes but required tracker reconciliation and including the new decision document in the final commit before handoff. Changes incorporated.
 - 2026-07-10 PZK-013 final focused post-task review round 3:
   - Reviewer Ptolemy: 9.6/10; confirmed the staged tree satisfies PZK-013, the decision document is included, `task.md` is reconciled, DNSSEC/project-ID/hostname/README blockers are resolved, and no cloud provisioning artifacts are present. No required changes remained; PZK-013 gate cleared.
+- 2026-07-11 PZK-014 pre-task review:
+  - Reviewer Godel: `gpt-5.5 xhigh`; flagged missing backend `PUBLIC_API_URL`/`PUBLIC_WEBAPP_URL`, unpinned PostgreSQL 18 in the app spec, region default drift, loose Bun runtime pinning, need for concrete registrar DNS placeholders, separate-app shape clarity, `DATABASE_URL` vs `DATABASE_PRIVATE_URL` validation, and proposal/PDF smoke risks. Recommendations incorporated.
+- 2026-07-11 PZK-014 post-task review round 1:
+  - Reviewer Erdos: 9.6/10; confirmed draft App Platform specs/templates, PostgreSQL 18 pinning, runtime/env coverage, DNS runbook, rollback/backup/smoke checklists, Project ID usage, and explicit no-resource-creation language. No required changes remained; PZK-014 gate cleared after tracker update.

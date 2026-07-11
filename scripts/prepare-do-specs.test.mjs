@@ -83,10 +83,17 @@ describe('prepare-do-specs', () => {
     expect(result.status).toBe(0);
 
     const spec = normalizeNewlines(readFileSync(backendSpecPath, 'utf8'));
+    expect(appSpecName(spec)?.length).toBeLessThanOrEqual(32);
+    expect(spec).toContain('version: "18"');
     expect(spec).toContain('workers:');
     expect(spec).toContain('key: CORS_ORIGINS');
     expect(spec).toContain('value: "https://website.example.com"');
+    expect(spec).toContain('key: NODE_ENV');
+    expect(spec).toContain('value: "production"');
+    expect(spec).toContain('key: PUBLIC_API_URL');
+    expect(spec).toContain('value: "https://api.example.com"');
     expect(spec).toContain('key: PUBLIC_WEBSITE_URL');
+    expect(spec).toContain('key: PUBLIC_WEBAPP_URL');
     expect(spec).toContain('key: AUTH_CORS_ORIGINS');
     expect(spec).toContain('value: "https://webapp.example.com"');
     expect(spec).toContain('key: TRUST_PROXY_HEADERS');
@@ -118,6 +125,28 @@ describe('prepare-do-specs', () => {
     expect(spec).not.toContain('REPLACE_WITH_');
   });
 
+  test('generates initial backend spec with safe self API URL and PostgreSQL 18', () => {
+    const result = runPrepareSpecs({}, { target: 'backend-initial' });
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+
+    const spec = normalizeNewlines(readFileSync(backendSpecPath, 'utf8'));
+    expect(spec).toContain('region: fra');
+    expect(spec).toContain('version: "18"');
+    expect(spec).toContain('key: PUBLIC_API_URL');
+    expect(spec).toContain('value: "${_self.PUBLIC_URL}"');
+    expect(spec).toContain('https://placeholder.invalid');
+    expect(spec).not.toContain('REPLACE_WITH_');
+  });
+
+  test('backend final requires the deployed backend URL for proposal and Telegram links', () => {
+    const result = runPrepareSpecs({ DO_BACKEND_URL: '' });
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain('DO_BACKEND_URL is required and cannot be empty');
+  });
+
   test('generates website build-time API and webapp URLs', () => {
     const result = runPrepareSpecs(
       {
@@ -131,10 +160,54 @@ describe('prepare-do-specs', () => {
     expect(result.status).toBe(0);
 
     const spec = normalizeNewlines(readFileSync(websiteSpecPath, 'utf8'));
+    expect(appSpecName(spec)?.length).toBeLessThanOrEqual(32);
+    expect(spec).toContain('key: BUN_VERSION');
+    expect(spec).toContain('value: "1.3.14"');
     expect(spec).toContain('key: PUBLIC_API_URL');
     expect(spec).toContain('value: "https://api.example.com"');
     expect(spec).toContain('key: PUBLIC_WEBAPP_URL');
     expect(spec).toContain('value: "https://webapp.example.com"');
+    expect(spec).toContain('key: PUBLIC_WEBSITE_URL');
+    expect(spec).toContain('value: "https://website.example.com"');
+    expect(spec).not.toContain('REPLACE_WITH_');
+  });
+
+  test('website spec can use App Platform self public URL before the custom domain is known', () => {
+    const result = runPrepareSpecs(
+      {
+        DO_BACKEND_URL: 'https://api.example.com',
+        DO_WEBAPP_URL: 'https://webapp.example.com',
+        DO_WEBSITE_URL: '',
+      },
+      { target: 'website' },
+    );
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+
+    const spec = normalizeNewlines(readFileSync(websiteSpecPath, 'utf8'));
+    expect(spec).toContain('key: PUBLIC_WEBSITE_URL');
+    expect(spec).toContain('value: "${_self.PUBLIC_URL}"');
+    expect(spec).not.toContain('REPLACE_WITH_');
+  });
+
+  test('generates webapp build-time API URL with pinned Bun buildpack version', () => {
+    const result = runPrepareSpecs(
+      {
+        DO_BACKEND_URL: 'https://api.example.com',
+      },
+      { target: 'webapp' },
+    );
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+
+    const spec = normalizeNewlines(readFileSync(resolve(repoRoot, '.scratch/deploy/webapp-static-app.yaml'), 'utf8'));
+    expect(appSpecName(spec)?.length).toBeLessThanOrEqual(32);
+    expect(spec).toContain('key: BUN_VERSION');
+    expect(spec).toContain('value: "1.3.14"');
+    expect(spec).toContain('key: VITE_API_URL');
+    expect(spec).toContain('value: "https://api.example.com"');
     expect(spec).not.toContain('REPLACE_WITH_');
   });
 });
@@ -158,6 +231,7 @@ function runPrepareSpecs(extraEnv = {}, { skipReleaseGitCheck = true, target = '
       DO_GITHUB_REPO: 'owner/repo',
       DO_GIT_BRANCH: 'main',
       JWT_SECRET: 'abcdefghijklmnopqrstuvwxyz123456',
+      DO_BACKEND_URL: 'https://api.example.com',
       DO_WEBAPP_URL: 'https://webapp.example.com',
       DO_WEBSITE_URL: 'https://website.example.com',
       ...extraEnv,
@@ -167,4 +241,8 @@ function runPrepareSpecs(extraEnv = {}, { skipReleaseGitCheck = true, target = '
 
 function normalizeNewlines(value) {
   return value.replace(/\r\n/g, '\n');
+}
+
+function appSpecName(spec) {
+  return spec.match(/^name:\s*(.+)$/m)?.[1]?.trim();
 }

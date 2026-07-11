@@ -1,4 +1,4 @@
-name: REPLACE_WITH_PROJECT_SLUG-website
+name: REPLACE_WITH_WEBSITE_APP_NAME
 region: REPLACE_WITH_DO_APP_REGION
 alerts:
   - rule: DEPLOYMENT_FAILED
@@ -15,6 +15,10 @@ static_sites:
     output_dir: website/dist
     index_document: index.html
     envs:
+      - key: BUN_VERSION
+        value: "1.3.14"
+        scope: BUILD_TIME
+        type: GENERAL
       - key: PUBLIC_WEBAPP_URL
         value: "https://REPLACE_WITH_WEBAPP_DEFAULT_INGRESS"
         scope: BUILD_TIME
@@ -24,6 +28,6 @@ static_sites:
         scope: BUILD_TIME
         type: GENERAL
       - key: PUBLIC_WEBSITE_URL
-        value: "${_self.PUBLIC_URL}"
+        value: "REPLACE_WITH_WEBSITE_PUBLIC_URL"
         scope: BUILD_TIME
         type: GENERAL
