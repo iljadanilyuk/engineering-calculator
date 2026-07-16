@@ -296,7 +296,9 @@ async function playwrightCacheChromiumCandidates() {
     }
 
     const chromiumDirs = entries
-      .filter((entry) => entry.isDirectory() && entry.name.startsWith('chromium-'))
+      .filter((entry) =>
+        entry.isDirectory() &&
+        (entry.name.startsWith('chromium-') || entry.name.startsWith('chromium_headless_shell-')))
       .map((entry) => entry.name)
       .sort()
       .reverse()
@@ -310,6 +312,9 @@ async function playwrightCacheChromiumCandidates() {
         candidates.push(join(base, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'chrome'))
       } else {
         candidates.push(join(base, 'chrome-linux', 'chrome'))
+        candidates.push(join(base, 'chrome-linux', 'headless_shell'))
+        candidates.push(join(base, 'chrome-linux64', 'chrome'))
+        candidates.push(join(base, 'chrome-linux64', 'headless_shell'))
       }
     }
   }
@@ -326,6 +331,9 @@ function playwrightCacheRoots() {
       ? join(process.env.LOCALAPPDATA, 'ms-playwright')
       : undefined,
     process.env.HOME ? join(process.env.HOME, '.cache', 'ms-playwright') : undefined,
+    '/home/bun/.cache/ms-playwright',
+    '/root/.cache/ms-playwright',
+    '/ms-playwright',
   ].filter((root): root is string => Boolean(root))
 
   return [...new Set(roots)]
