@@ -1335,6 +1335,42 @@ Out of scope:
 - Automatically changing the final technical assignment without admin approval.
 - Exposing Telegram bot secrets in frontend env, browser responses, or logs.
 
+### PZK-021 - Admin Workspace V1 From Prototype
+
+Status: Pending
+
+Goal:
+
+- Move the admin panel from a functional set of pages toward a unified working cabinet for leads, proposals, project context, future technical assignments, and future contracts.
+- Use the new admin prototype as design direction, while deliberately reducing noise and avoiding premature implementation of every future entity.
+
+Task brief:
+
+- `docs/design/admin-workspace-v1-redesign-task-2026-07-17.md`
+
+Prototype sources:
+
+- `прототип/poznyak-admin-prototype-v1-package/poznyak-admin-prototype-v1-codex-task.md`
+- `прототип/poznyak-admin-prototype-v1-package/poznyak-admin-prototype-v1.html`
+- `прототип/poznyak-admin-prototype-v1-package/*.png`
+
+Required behavior:
+
+- Keep existing admin auth, services CRUD, leads list/detail, status update, notes, proposal/PDF links, and project-example request visibility working.
+- Introduce a calmer admin shell with persistent desktop sidebar and responsive mobile navigation.
+- Add a dashboard/workspace view based on existing data.
+- Rework `Заявки и проекты` toward a pipeline/list experience without inventing unsupported persistent backend stages.
+- Rework the lead detail as a project record that connects client, object, calculation, КП/PDF, notes, and future ТЗ/contract slots.
+- Bring `Услуги и цены` into the same visual system without losing current service management behavior.
+
+Out of scope:
+
+- Contract generation from Word templates.
+- Full questionnaire builder/client flow.
+- Telegram group listener or AI extraction.
+- New paid DigitalOcean resources, DNS, env, secrets, or public website changes.
+- Backend schema expansion unless a blocker is explicitly found and reviewed.
+
 ## 11. Post-Launch Follow-Ups
 
 These do not block the PZK-015 production launch, but should be resolved for polish, operations, or v2 work:
