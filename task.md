@@ -1371,6 +1371,104 @@ Out of scope:
 - New paid DigitalOcean resources, DNS, env, secrets, or public website changes.
 - Backend schema expansion unless a blocker is explicitly found and reviewed.
 
+### PZK-022 - Public Project Case Pages And Telegram Delivery
+
+Status: Pending
+
+Goal:
+
+- Add public pages for completed/realized engineering project examples as trust-building content, while keeping full example delivery gated through contact capture and Telegram.
+
+Required behavior:
+
+- Public website has a `Реализованные проекты` section/listing.
+- Each project case has a public detail page with:
+  - project title and object type;
+  - generalized location/area where appropriate;
+  - initial task or client problem;
+  - included engineering systems;
+  - screenshots/fragments of project documentation;
+  - captions explaining what each shown section solves for the client/builders.
+- Case pages include a CTA such as `Получить пример проекта` / `Скачать пример`.
+- CTA must route the user toward Telegram bot delivery when Telegram delivery is ready.
+- Until Telegram delivery is fully ready, keep a lead-gated/token fallback and do not expose direct anonymous PDF downloads.
+- Admin can create, edit, archive, publish, and reorder project case pages.
+- Admin can upload/manage case screenshots, captions, and linked example assets.
+- Public pages include basic SEO metadata and safe canonical URLs.
+- Real client/project data must be sanitized before publication.
+
+Dependencies / notes:
+
+- Coordinate with PZK-020 for Telegram bot delivery.
+- Can start with the existing lead-gated project example flow as a fallback.
+
+Out of scope:
+
+- Telegram group listener and daily ТЗ extraction.
+- Publishing unsanitized client documents or personal data.
+- Rebuilding proposal/PDF generation unless a blocker is explicitly found.
+
+### PZK-023 - Blog And Admin Publishing
+
+Status: Pending
+
+Goal:
+
+- Add a public blog/news/articles section and admin publishing workflow for project news, educational articles, and company updates.
+
+Required behavior:
+
+- Public website has a blog index page and article detail pages.
+- Admin can create, edit, preview, publish, archive, and unpublish articles.
+- Article model supports:
+  - title;
+  - slug;
+  - excerpt;
+  - body content;
+  - cover image;
+  - category/tags;
+  - SEO title/description;
+  - published date;
+  - draft/published/archived status.
+- Editing UI is in Russian and protected by existing admin auth.
+- Public website shows only published articles.
+- Content rendering is sanitized; no arbitrary script injection from admin article content.
+- Basic SEO/Open Graph metadata are generated for published articles.
+
+Out of scope:
+
+- Public comments.
+- Newsletter/subscription automation.
+- AI article generation.
+- External CMS migration unless separately approved.
+
+### PZK-024 - Public Documentation Screenshot Lightbox
+
+Status: Pending
+
+Goal:
+
+- Make current public landing screenshots from `Примеры проектной документации` clickable and viewable full-size without exposing the full downloadable example anonymously.
+
+Required behavior:
+
+- Clicking a preview screenshot opens a full-size modal/lightbox or equivalent viewer.
+- Viewer works on desktop and mobile.
+- Viewer supports keyboard accessibility:
+  - `Esc` closes;
+  - focus behavior is sensible;
+  - image has alt text/caption.
+- If several screenshots belong to one gallery, previous/next navigation should be supported.
+- No horizontal page scroll should be introduced.
+- Full PDF/example download remains gated through the existing lead/Telegram flow; only preview images open full-size.
+- Browser verification covers desktop and mobile.
+
+Out of scope:
+
+- Admin CMS for project cases; covered by PZK-022.
+- Telegram delivery; covered by PZK-020/PZK-022.
+- Adding a large new library unless the existing stack cannot provide a reliable accessible viewer.
+
 ## 11. Post-Launch Follow-Ups
 
 These do not block the PZK-015 production launch, but should be resolved for polish, operations, or v2 work:
