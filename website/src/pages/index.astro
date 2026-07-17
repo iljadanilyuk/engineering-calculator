@@ -11,6 +11,7 @@ import {
   exchangeRate,
   fallbackServices,
 } from '../lib/public-calculator'
+import { createPageMeta, siteName } from '../lib/seo'
 
 const selectedServiceIds = defaultSelectedServiceIds
 const initialCalculation = calculateEngineeringOffer({
@@ -270,6 +271,73 @@ const faqItems = [
   ],
 ]
 
+const pageMeta = createPageMeta({
+  siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
+  path: '/',
+  title: 'ИП Позняк - проектирование инженерных систем',
+  description:
+    'Проектирование отопления, водоснабжения, канализации, вентиляции и кондиционирования. Калькулятор стоимости проектных работ в белорусских рублях.',
+})
+const organizationId = `${pageMeta.siteUrl}/#organization`
+const websiteId = `${pageMeta.siteUrl}/#website`
+const serviceId = `${pageMeta.siteUrl}/#engineering-design-service`
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'ProfessionalService',
+      '@id': organizationId,
+      name: siteName,
+      url: pageMeta.siteUrl,
+      image: pageMeta.imageUrl,
+      logo: `${pageMeta.siteUrl}/favicon.svg`,
+      description: pageMeta.description,
+      areaServed: {
+        '@type': 'Country',
+        name: 'Беларусь',
+      },
+      ...(contactPhone ? { telephone: contactPhone } : {}),
+      ...(contactEmail ? { email: contactEmail } : {}),
+    },
+    {
+      '@type': 'WebSite',
+      '@id': websiteId,
+      name: `${siteName} - проектирование инженерных систем`,
+      url: pageMeta.siteUrl,
+      inLanguage: 'ru-BY',
+      publisher: {
+        '@id': organizationId,
+      },
+    },
+    {
+      '@type': 'Service',
+      '@id': serviceId,
+      name: 'Проектирование инженерных систем',
+      serviceType: 'Проектирование отопления, водоснабжения, канализации, вентиляции и кондиционирования',
+      provider: {
+        '@id': organizationId,
+      },
+      areaServed: {
+        '@type': 'Country',
+        name: 'Беларусь',
+      },
+      url: pageMeta.canonicalUrl,
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': `${pageMeta.canonicalUrl}#faq`,
+      mainEntity: faqItems.map(([question, answer]) => ({
+        '@type': 'Question',
+        name: question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: answer,
+        },
+      })),
+    },
+  ],
+}
+
 function allocateDisplayBynRubles(calculation: CalculationResult) {
   const floorRows = calculation.lineItems.map((lineItem, index) => ({
     serviceId: lineItem.serviceId,
@@ -310,11 +378,28 @@ function serviceRublesMap(calculation: CalculationResult) {
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
-    <meta
-      name="description"
-      content="Проектирование отопления, водоснабжения, канализации, вентиляции и кондиционирования. Калькулятор стоимости проектных работ в белорусских рублях."
-    />
-    <title>ИП Позняк - проектирование инженерных систем</title>
+    <title>{pageMeta.title}</title>
+    <meta name="description" content={pageMeta.description} />
+    <meta name="robots" content={pageMeta.robots} />
+    <link rel="canonical" href={pageMeta.canonicalUrl} />
+    <meta property="og:locale" content="ru_BY" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={pageMeta.title} />
+    <meta property="og:description" content={pageMeta.description} />
+    <meta property="og:url" content={pageMeta.canonicalUrl} />
+    <meta property="og:image" content={pageMeta.imageUrl} />
+    <meta property="og:image:secure_url" content={pageMeta.imageUrl} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={pageMeta.imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageMeta.title} />
+    <meta name="twitter:description" content={pageMeta.description} />
+    <meta name="twitter:image" content={pageMeta.imageUrl} />
+    <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
   </head>
   <body>
     <script

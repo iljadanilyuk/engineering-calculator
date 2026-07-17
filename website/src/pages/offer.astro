@@ -10,6 +10,7 @@ import {
   exchangeRate,
   fallbackServices,
 } from '../lib/public-calculator'
+import { createPageMeta, siteName } from '../lib/seo'
 
 const initialCalculation = calculateEngineeringOffer({
   areaSqm: defaultAreaSqm,
@@ -50,6 +51,36 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 }
 
 const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
+const pageMeta = createPageMeta({
+  siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
+  path: '/offer/',
+  title: 'Получить коммерческое предложение - ИП Позняк',
+  description:
+    'Выбор сценария получения коммерческого предложения по инженерному проекту: подробный опросник или предварительное КП после контакта.',
+  robots: 'noindex,follow',
+})
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebPage',
+      '@id': `${pageMeta.canonicalUrl}#webpage`,
+      url: pageMeta.canonicalUrl,
+      name: pageMeta.title,
+      description: pageMeta.description,
+      inLanguage: 'ru-BY',
+      isPartOf: {
+        '@id': `${pageMeta.siteUrl}/#website`,
+      },
+      primaryImageOfPage: {
+        '@type': 'ImageObject',
+        url: pageMeta.imageUrl,
+        width: 1200,
+        height: 630,
+      },
+    },
+  ],
+}
 ---
 
 <html lang="ru">
@@ -65,11 +96,28 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
-    <meta
-      name="description"
-      content="Выбор сценария получения коммерческого предложения по инженерному проекту: подробный опросник или предварительное КП после контакта."
-    />
-    <title>Выбор коммерческого предложения - ИП Позняк</title>
+    <title>{pageMeta.title}</title>
+    <meta name="description" content={pageMeta.description} />
+    <meta name="robots" content={pageMeta.robots} />
+    <link rel="canonical" href={pageMeta.canonicalUrl} />
+    <meta property="og:locale" content="ru_BY" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={pageMeta.title} />
+    <meta property="og:description" content={pageMeta.description} />
+    <meta property="og:url" content={pageMeta.canonicalUrl} />
+    <meta property="og:image" content={pageMeta.imageUrl} />
+    <meta property="og:image:secure_url" content={pageMeta.imageUrl} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={pageMeta.imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageMeta.title} />
+    <meta name="twitter:description" content={pageMeta.description} />
+    <meta name="twitter:image" content={pageMeta.imageUrl} />
+    <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
     <script
       id="offer-data"
       type="application/json"

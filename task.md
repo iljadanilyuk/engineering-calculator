@@ -1502,7 +1502,7 @@ Out of scope:
 
 ### PZK-025 - SEO, Social Preview, And Structured Data Foundation
 
-Status: Pending
+Status: Complete
 
 Goal:
 
@@ -1553,6 +1553,30 @@ Out of scope:
 - Public project case SEO templates beyond the reusable metadata convention; covered by PZK-022 when case pages are implemented.
 - Paid advertising tracking changes.
 - Google Search Console or external webmaster account setup unless separately approved.
+
+Completion notes:
+
+- Added reusable website SEO metadata helper in `website/src/lib/seo.ts`.
+- Added a project-specific `1200x630` social preview image at `website/public/social-preview.jpg`.
+- Home page now renders production canonical, robots, Open Graph, Twitter card metadata, and JSON-LD `ProfessionalService`, `WebSite`, `Service`, and `FAQPage`.
+- Offer choice page now renders canonical/social metadata with `noindex,follow` so it can be shared without becoming an indexed public landing page.
+- Added `robots.txt` and a static sitemap for `https://poznyak.by/`.
+- Confirmed no direct anonymous public project-example PDF links were reintroduced.
+- Messenger previews may keep the previous image-less cache until the updated deployment is live and the link is sent again or the messenger cache refreshes.
+
+Verification notes:
+
+- `bun run typecheck:website` passed.
+- `bun run build:website` passed.
+- `bun run test:deploy` passed, 20/20.
+- Static built-output checks passed for canonical URLs, robots directives, OG/Twitter image metadata, JSON-LD presence, sitemap, and robots.txt.
+- `social-preview.jpg` verified at `1200x630`.
+- `git diff --check` passed with only expected Windows LF/CRLF warnings.
+
+Review log:
+
+- Pre-task sub-agent Jason, `gpt-5.5 xhigh`: flagged cache/absolute URL/FAQ/PDF leak/image-context risks before closeout.
+- Post-task reviewer Jason, `gpt-5.5 xhigh`: 9.7/10, required fixes none, gate cleared.
 
 ## 11. Post-Launch Follow-Ups
 
