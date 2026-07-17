@@ -7,6 +7,11 @@ import {
 } from '@poznyak-engineering-calculator/contracts'
 
 const defaultAreaSqm = '180'
+const areaLimits = {
+  min: 50,
+  max: 500,
+  step: 5,
+}
 const exchangeRate = {
   source: 'fallback' as const,
   usdToBynRate: '2.8668',
@@ -17,106 +22,325 @@ const fallbackServices = [
   {
     id: 'boiler-room-3d',
     title: 'Проект котельной + 3D',
-    description: 'Компоновка оборудования, узлы, схема котельной',
+    description: 'План котельной, обвязка, подбор оборудования',
     pricingType: 'fixed',
     priceUsdCents: 20_000,
     isActive: true,
     sortOrder: 10,
-    code: 'КТ',
   },
   {
     id: 'radiator-heating',
     title: 'Радиаторное отопление',
-    description: 'Приборы, мощности, привязки и трассы',
+    description: 'Схемы, подбор приборов, гидравлика',
     pricingType: 'per_sqm',
     priceUsdCents: 50,
     isActive: true,
     sortOrder: 20,
-    code: 'РО',
   },
   {
     id: 'warm-floor',
     title: 'Теплые полы',
-    description: 'Контуры, коллекторы, шаг укладки',
+    description: 'Схемы укладки, узлы и расчеты',
     pricingType: 'per_sqm',
     priceUsdCents: 60,
     isActive: true,
     sortOrder: 30,
-    code: 'ТП',
   },
   {
     id: 'water-supply',
     title: 'Водопровод',
-    description: 'Точки воды, ГВС, фильтрация, оборудование',
+    description: 'Холодное и горячее водоснабжение',
     pricingType: 'per_sqm',
     priceUsdCents: 50,
     isActive: true,
     sortOrder: 40,
-    code: 'В',
   },
   {
     id: 'sewerage',
     title: 'Канализация',
-    description: 'Выводы, стояки, подключение сантехники',
+    description: 'Внутренняя бытовая канализация',
     pricingType: 'per_sqm',
     priceUsdCents: 60,
     isActive: true,
     sortOrder: 50,
-    code: 'К',
   },
   {
     id: 'ventilation',
     title: 'Вентиляция',
-    description: 'Схемы, воздуховоды, оборудование',
+    description: 'Приточно-вытяжная вентиляция',
     pricingType: 'fixed',
     priceUsdCents: 25_000,
     isActive: true,
     sortOrder: 60,
-    code: 'ВН',
   },
   {
     id: 'conditioning',
     title: 'Кондиционирование',
-    description: 'Трассы, блоки, спецификация',
+    description: 'Система кондиционирования',
     pricingType: 'fixed',
     priceUsdCents: 25_000,
     isActive: true,
     sortOrder: 70,
-    code: 'КД',
   },
-] satisfies Array<EngineeringService & { code: string }>
+] satisfies EngineeringService[]
 
-const selectedServiceIds = fallbackServices.map((service) => service.id)
+const selectedServiceIds = fallbackServices.slice(0, 3).map((service) => service.id)
 const initialCalculation = calculateEngineeringOffer({
   areaSqm: defaultAreaSqm,
   selectedServiceIds,
   services: fallbackServices,
   exchangeRate,
 })
-const initialDisplayRubles = allocateDisplayBynRubles(initialCalculation)
+const allServicesInitialCalculation = calculateEngineeringOffer({
+  areaSqm: defaultAreaSqm,
+  selectedServiceIds: fallbackServices.map((service) => service.id),
+  services: fallbackServices,
+  exchangeRate,
+})
+const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
+const initialServiceRubles = serviceRublesMap(allServicesInitialCalculation)
 
 const calculatorData = {
   defaultAreaSqm,
+  areaLimits,
   exchangeRate,
   fallbackServices,
   selectedServiceIds,
+  selectedProjectType: 'private',
 }
 
 const formatRubles = (value: number) => new Intl.NumberFormat('ru-RU').format(value)
-const formatUsd = (cents: number) =>
-  new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(cents / 100))
-const formatUsdUnit = (cents: number) =>
-  new Intl.NumberFormat('ru-RU', {
-    maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
-  }).format(cents / 100)
-const formatFileSizeMb = (bytes: number) =>
-  `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(bytes / 1024 / 1024)} МБ`
 
-function priceModeLabel(service: EngineeringService) {
-  return service.pricingType === 'fixed'
-    ? `${formatUsd(service.priceUsdCents)} $`
-    : `${formatUsdUnit(service.priceUsdCents)} $/м²`
+const contactPhone = (import.meta.env.PUBLIC_CONTACT_PHONE ?? '').trim()
+const contactEmail = (import.meta.env.PUBLIC_CONTACT_EMAIL ?? '').trim()
+
+type IconDefinition = {
+  paths?: string[]
+  circles?: Array<[number, number, number]>
+  rects?: Array<{ x: number; y: number; width: number; height: number; rx?: number }>
 }
+
+const lucideIcons = {
+  calculator: {
+    rects: [{ x: 4, y: 2, width: 16, height: 20, rx: 2 }],
+    paths: [
+      'M8 6h8',
+      'M8 10h.01',
+      'M12 10h.01',
+      'M16 10h.01',
+      'M8 14h.01',
+      'M12 14h.01',
+      'M16 14h.01',
+      'M8 18h.01',
+      'M12 18h.01',
+      'M16 18h.01',
+    ],
+  },
+  workflow: {
+    rects: [
+      { x: 3, y: 4, width: 6, height: 6, rx: 1.5 },
+      { x: 15, y: 4, width: 6, height: 6, rx: 1.5 },
+      { x: 9, y: 14, width: 6, height: 6, rx: 1.5 },
+    ],
+    paths: ['M9 7h6', 'M6 10v2a4 4 0 0 0 4 4h-.5', 'M18 10v2a4 4 0 0 1-4 4h.5'],
+  },
+  clipboardList: {
+    rects: [
+      { x: 8, y: 2, width: 8, height: 4, rx: 1 },
+      { x: 4, y: 4, width: 16, height: 18, rx: 2 },
+    ],
+    paths: ['M8 11h8', 'M8 15h8', 'M8 19h5'],
+  },
+  clipboardCheck: {
+    rects: [
+      { x: 8, y: 2, width: 8, height: 4, rx: 1 },
+      { x: 4, y: 4, width: 16, height: 18, rx: 2 },
+    ],
+    paths: ['m9 14 2 2 4-5'],
+  },
+  fileChart: {
+    paths: [
+      'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z',
+      'M14 2v6h6',
+      'M8 18v-4',
+      'M12 18v-7',
+      'M16 18v-2',
+    ],
+  },
+  clock3: {
+    circles: [[12, 12, 9]],
+    paths: ['M12 7v5l3 2'],
+  },
+  badgeCheck: {
+    paths: [
+      'M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.78 4.78 4 4 0 0 1-6.74 0 4 4 0 0 1-4.78-4.78 4 4 0 0 1 0-6.75z',
+      'm9 12 2 2 4-4',
+    ],
+  },
+  chartNoAxesCombined: {
+    paths: [
+      'M12 16v5',
+      'M16 14v7',
+      'M20 10v11',
+      'm22 3-8.65 8.65a.5.5 0 0 1-.7 0L9.35 8.35a.5.5 0 0 0-.7 0L2 15',
+    ],
+  },
+  listChecks: {
+    paths: ['m3 17 2 2 4-4', 'm3 7 2 2 4-4', 'M13 6h8', 'M13 12h8', 'M13 18h8'],
+  },
+  home: {
+    paths: ['m3 11 9-8 9 8', 'M5 10v11h14V10', 'M9 21v-7h6v7'],
+  },
+  building2: {
+    paths: [
+      'M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18',
+      'M6 12H4a2 2 0 0 0-2 2v8h20v-8a2 2 0 0 0-2-2h-2',
+      'M10 6h4',
+      'M10 10h4',
+      'M10 14h4',
+      'M10 18h4',
+    ],
+  },
+  fileInput: {
+    paths: [
+      'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z',
+      'M14 2v6h6',
+      'M12 18v-6',
+      'm9 15 3 3 3-3',
+    ],
+  },
+  messagesSquare: {
+    paths: [
+      'M14 9a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H7l-4 4V11a2 2 0 0 1 2-2z',
+      'M18 13h1a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v1',
+    ],
+  },
+  phone: {
+    paths: [
+      'M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.35 1.9.66 2.8a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.31 1.84.53 2.8.66A2 2 0 0 1 22 16.92z',
+    ],
+  },
+  mail: {
+    rects: [{ x: 3, y: 5, width: 18, height: 14, rx: 2 }],
+    paths: ['m3 7 9 6 9-6'],
+  },
+  mapPin: {
+    paths: ['M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z'],
+    circles: [[12, 10, 3]],
+  },
+} satisfies Record<string, IconDefinition>
+
+const proofItems: Array<{ title: string; text: string; icon: IconDefinition }> = [
+  {
+    title: 'Расчеты',
+    text: 'Теплотехнические и гидравлические расчеты под ваш объект.',
+    icon: lucideIcons.calculator,
+  },
+  {
+    title: 'Схемы',
+    text: 'Принципиальные и монтажные схемы систем в понятном виде.',
+    icon: lucideIcons.workflow,
+  },
+  {
+    title: 'Спецификация',
+    text: 'Ведомости оборудования и материалов с точными количествами.',
+    icon: lucideIcons.clipboardList,
+  },
+  {
+    title: 'Задания для монтажа',
+    text: 'Четкие указания и пояснения для бригады без лишних вопросов.',
+    icon: lucideIcons.clipboardCheck,
+  },
+]
+
+const benefitItems: Array<{ title: string; icon: IconDefinition }> = [
+  {
+    title: 'Понимаете объем работ и бюджет до старта строительства.',
+    icon: lucideIcons.fileChart,
+  },
+  {
+    title: 'Знаете, какое оборудование и в каком количестве понадобится.',
+    icon: lucideIcons.clock3,
+  },
+  {
+    title: 'Избегаете переделок и лишних затрат на объекте.',
+    icon: lucideIcons.badgeCheck,
+  },
+  {
+    title: 'Монтажники работают по понятным схемам и заданиям.',
+    icon: lucideIcons.chartNoAxesCombined,
+  },
+  {
+    title: 'Легче согласовать проект и подобрать поставщиков.',
+    icon: lucideIcons.listChecks,
+  },
+]
+
+const documentationExamples = [
+  {
+    title: 'Планы и схемы',
+    description: 'Планы расположения оборудования, трассировки систем, принципиальные схемы.',
+    image: '/landing-v4/project-preview-plan-08.jpg',
+    imageAlt: 'Реальный лист проекта отопления и вентиляции с планами и схемами',
+    slug: 'ov',
+  },
+  {
+    title: '3D-визуализация',
+    description: 'Наглядное размещение оборудования и прокладка инженерных систем.',
+    image: '/landing-v4/project-preview-3d-04.jpg',
+    imageAlt: 'Реальный лист проекта с 3D-визуализацией котельной',
+    slug: 'ov',
+  },
+  {
+    title: 'Спецификации',
+    description: 'Ведомости оборудования и материалов с артикулами и количествами.',
+    image: '/landing-v4/project-preview-spec-10.jpg',
+    imageAlt: 'Реальный лист проекта со спецификацией оборудования и материалов',
+    slug: 'ov',
+  },
+  {
+    title: 'Узлы и детали',
+    description: 'Монтажные узлы, привязки и пояснения для выполнения работ.',
+    image: '/landing-v4/project-preview-vk-node-12.jpg',
+    imageAlt: 'Реальный лист проекта водоснабжения и канализации с узлами и деталями',
+    slug: 'vk',
+  },
+]
+
+const processSteps: Array<[string, string, string, IconDefinition]> = [
+  ['01', 'Заявка', 'Вы оставляете заявку или звоните нам.', lucideIcons.fileInput],
+  ['02', 'Сбор данных', 'Уточняем параметры объекта и ваши пожелания.', lucideIcons.clipboardList],
+  ['03', 'Расчеты и проект', 'Выполняем расчеты, готовим проектную документацию.', lucideIcons.calculator],
+  ['04', 'Согласование', 'Обсуждаем проект и вносим необходимые корректировки.', lucideIcons.messagesSquare],
+  ['05', 'Выдача проекта', 'Передаем готовые файлы и печатные комплекты документации.', lucideIcons.badgeCheck],
+]
+
+const faqItems = [
+  [
+    'Зачем нужен проект перед покупкой оборудования?',
+    'Проект определяет мощности, состав оборудования, трассы и объем материалов до закупки. Так проще избежать неподходящих решений и переделок.',
+  ],
+  [
+    'Что входит в проект инженерных систем?',
+    'Состав зависит от выбранных разделов и может включать расчеты, планы, схемы, спецификации, узлы и пояснения для монтажа.',
+  ],
+  [
+    'Сколько времени занимает разработка проекта?',
+    'Срок зависит от площади, состава инженерных систем и полноты исходных данных. Точный срок указывается в коммерческом предложении.',
+  ],
+  [
+    'Можно ли изменить проект после согласования?',
+    'Корректировки обсуждаются до финальной выдачи. Условия изменений после передачи проекта фиксируются в договоре.',
+  ],
+  [
+    'В каком формате вы передаете проект?',
+    'Основной комплект передается в PDF. Дополнительные форматы и печатные экземпляры согласовываются отдельно.',
+  ],
+  [
+    'Работаете ли вы по всей Беларуси?',
+    'Проектирование и передача документации могут выполняться дистанционно. Необходимость выезда определяется по объекту.',
+  ],
+]
 
 function allocateDisplayBynRubles(calculation: CalculationResult) {
   const floorRows = calculation.lineItems.map((lineItem, index) => ({
@@ -137,6 +361,12 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 
   return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
 }
+
+function serviceRublesMap(calculation: CalculationResult) {
+  return new Map(
+    calculation.lineItems.map((lineItem) => [lineItem.serviceId, lineItem.totalBynRoundedRubles]),
+  )
+}
 ---
 
 <html lang="ru">
@@ -144,13 +374,19 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
     <meta
       name="description"
-      content="Инженерный калькулятор ИП Позняк для предварительного расчета проектных работ по отоплению, водоснабжению, канализации, вентиляции и кондиционированию."
+      content="Проектирование отопления, водоснабжения, канализации, вентиляции и кондиционирования. Калькулятор стоимости проектных работ в белорусских рублях."
     />
-    <title>Инженерный калькулятор проектных работ | ИП Позняк</title>
+    <title>ИП Позняк - проектирование инженерных систем</title>
   </head>
   <body>
     <script
@@ -159,338 +395,312 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       is:inline
       set:html={JSON.stringify(calculatorData)}
     />
-    <main>
-      <section class="top" aria-labelledby="page-title">
-        <div class="container">
-          <header class="nav" aria-label="Навигация">
-            <a class="brand" href="#top" aria-label="ИП Позняк">
-              <span class="brand-mark">П</span>
-              <span>
-                <strong>ИП Позняк</strong>
-                <small>инженерные проекты для частных домов</small>
-              </span>
-            </a>
-            <nav class="nav-links" aria-label="Разделы страницы">
-              <a href="#calculator">Калькулятор</a>
-              <a href="#examples">Примеры</a>
-              <a href="#stages">Этапы</a>
-              <a href="#contacts">Контакты</a>
-            </nav>
-          </header>
+    <header class="header">
+      <div class="shell header-inner">
+        <a class="brand" href="#top" aria-label="ИП Позняк">
+          <strong>ИП Позняк</strong>
+          <span>Проектирование инженерных систем</span>
+        </a>
+        <nav class="nav" aria-label="Навигация">
+          <a href="#calculator">Калькулятор</a>
+          <a href="#benefits">Что дает проект</a>
+          <a href="#documents">Документация</a>
+          <a href="#process">Как работаем</a>
+          <a href="#faq">Вопросы и ответы</a>
+        </nav>
+        <a class="top-cta" href="#lead">Получить КП</a>
+      </div>
+    </header>
 
-          <div class="hero" id="top">
-            <p class="eyebrow">ОВ · ВК · вентиляция · кондиционирование</p>
-            <h1 id="page-title">Расчет стоимости инженерного проекта до заявки</h1>
-            <p class="suboffer">
-              Выберите площадь и состав разделов, чтобы сразу увидеть ориентир по бюджету
-              проектирования. Основной итог показывается в BYN, USD остается справочной строкой.
+    <main id="top">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow">Инженерный проект до закупки и монтажа</div>
+            <h1 id="page-title">Проект инженерных систем для дома и небольших объектов</h1>
+            <p class="hero-text">
+              Понятные решения и точные расчеты до покупки оборудования и начала монтажных работ.
             </p>
-            <div class="hero-actions">
-              <a class="button primary" href="#calculator">Открыть калькулятор</a>
-              <a class="button secondary" href="#examples">Посмотреть примеры</a>
+            <div class="hero-list" aria-label="Ключевые аргументы">
+              <div class="hero-point">
+                <span class="check" aria-hidden="true">✓</span>
+                <span>Прозрачный состав работ и материалов</span>
+              </div>
+              <div class="hero-point">
+                <span class="check" aria-hidden="true">✓</span>
+                <span>Схемы и спецификации без лишнего</span>
+              </div>
+              <div class="hero-point">
+                <span class="check" aria-hidden="true">✓</span>
+                <span>Четкие задания для монтажников</span>
+              </div>
             </div>
-            <div class="hero-bullets" aria-label="Ключевые преимущества">
-              <article class="hero-bullet">
-                <span class="symbol">Σ</span>
-                <strong>Сумма до заявки</strong>
-                <span>Итог пересчитывается при изменении площади и каждого раздела проекта.</span>
-              </article>
-              <article class="hero-bullet">
-                <span class="symbol">ΔT</span>
-                <strong>Понятный состав</strong>
-                <span>Разделы связаны с расчетами, схемами, спецификациями и узлами.</span>
-              </article>
-              <article class="hero-bullet">
-                <span class="symbol">КП</span>
-                <strong>Коммерческое</strong>
-                <span>После контактов расчет сохраняется, а КП переходит в подготовку.</span>
-              </article>
-              <article class="hero-bullet">
-                <span class="symbol">ОП</span>
-                <strong>Опросный лист</strong>
-                <span>После КП собираются технические данные по дому и инженерным системам.</span>
-              </article>
-            </div>
+          </div>
+          <div class="hero-image">
+            <img
+              src="/landing-v4/hero-consultation.png"
+              alt="Инженер обсуждает проектную документацию с заказчиками за столом"
+            />
           </div>
         </div>
       </section>
 
-      <section class="calculator-shell" id="calculator" aria-labelledby="calculator-title">
-        <div class="container">
-          <div class="calculator" data-calculator>
-            <header class="calc-head">
-              <div>
-                <p class="section-kicker">Онлайн-расчет</p>
-                <h2 id="calculator-title">Калькулятор проектных работ</h2>
-                <p>
-                  Меняйте площадь и разделы проекта, чтобы оценить порядок бюджета до разговора
-                  о деталях объекта.
-                </p>
-              </div>
-              <div class="calc-status" data-service-source>
-                Базовые тарифы · курс {exchangeRate.usdToBynRate} BYN/USD
-              </div>
-            </header>
-
-            <div class="calc-grid">
-              <aside class="calc-panel object-panel" aria-label="Параметры объекта">
-                <div class="panel-title">
-                  <span>Объект</span>
-                  <small>площадь дома</small>
+      <section class="value-strip" aria-label="Что входит в проект">
+        <div class="shell value-grid">
+          {
+            proofItems.map((item) => (
+              <article class="value-item">
+                <div class="icon-box" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    {
+                      item.icon.rects?.map((rect) => (
+                        <rect
+                          x={rect.x}
+                          y={rect.y}
+                          width={rect.width}
+                          height={rect.height}
+                          rx={rect.rx ?? 0}
+                        />
+                      ))
+                    }
+                    {item.icon.circles?.map(([cx, cy, r]) => <circle cx={cx} cy={cy} r={r} />)}
+                    {item.icon.paths?.map((path) => <path d={path} />)}
+                  </svg>
                 </div>
-                <label class="area-field" for="area-input">
-                  <span>Площадь, м²</span>
-                  <input
-                    id="area-input"
-                    data-area-input
-                    inputmode="decimal"
-                    autocomplete="off"
-                    value={defaultAreaSqm}
-                    aria-describedby="area-help area-error"
-                  />
-                </label>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.text}</p>
+                </div>
+              </article>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="section soft" id="calculator" aria-labelledby="calculator-title">
+        <div class="shell">
+          <div class="section-head">
+            <div class="section-kicker">Предварительный расчет</div>
+            <h2 id="calculator-title">Калькулятор стоимости проектных работ</h2>
+            <p>Укажите площадь объекта, выберите тип проекта и необходимые инженерные разделы.</p>
+            <p class="sr-only" data-service-source aria-live="polite">
+              Базовые тарифы для предварительного расчета.
+            </p>
+          </div>
+
+          <div class="calculator-layout" data-calculator>
+            <div class="calculator-panel">
+              <label class="field-label" for="area-input">Площадь объекта, м²</label>
+              <div class="area-input-wrap">
                 <input
-                  class="area-range"
-                  data-area-range
-                  type="range"
-                  min="30"
-                  max="500"
-                  step="5"
+                  class="area-input"
+                  id="area-input"
+                  data-area-input
+                  inputmode="decimal"
+                  autocomplete="off"
                   value={defaultAreaSqm}
-                  aria-label="Площадь дома"
+                  aria-describedby="area-help area-error"
                 />
-                <p class="field-help" id="area-help">
-                  Можно ввести дробную площадь через точку или запятую, до двух знаков.
-                </p>
-                <p class="field-error" id="area-error" data-area-error hidden>
-                  Укажите площадь больше 0, максимум с двумя знаками после запятой.
-                </p>
-                <div class="area-presets" aria-label="Быстрый выбор площади">
-                  <button type="button" data-area-preset="120">120</button>
-                  <button type="button" data-area-preset="180">180</button>
-                  <button type="button" data-area-preset="240">240</button>
-                </div>
-                <dl class="terms-list">
-                  <div>
-                    <dt>Оплата</dt>
-                    <dd>70% старт / 30% после передачи проекта</dd>
-                  </div>
-                  <div>
-                    <dt>Формат</dt>
-                    <dd>PDF-комплект для согласования и монтажа</dd>
-                  </div>
-                  <div>
-                    <dt>Расчетный курс</dt>
-                    <dd>{exchangeRate.usdToBynRate} BYN за 1 USD</dd>
-                  </div>
-                </dl>
-              </aside>
+                <span class="area-unit" aria-hidden="true">м²</span>
+              </div>
+              <input
+                class="area-range"
+                data-area-range
+                type="range"
+                min={areaLimits.min}
+                max={areaLimits.max}
+                step={areaLimits.step}
+                value={defaultAreaSqm}
+                aria-label="Площадь объекта"
+              />
+              <div class="range-labels" aria-hidden="true">
+                <span>50</span>
+                <span>150</span>
+                <span>250</span>
+                <span>350</span>
+                <span>500</span>
+              </div>
+              <p class="field-help" id="area-help">
+                Введите площадь от 50 до 500 м² или настройте ползунок.
+              </p>
+              <p class="field-error" id="area-error" data-area-error hidden>
+                Укажите площадь от 50 до 500 м², максимум с двумя знаками после запятой.
+              </p>
 
-              <section class="calc-panel services-panel" aria-labelledby="services-title">
-                <div class="panel-title">
-                  <span id="services-title">Разделы проекта</span>
-                  <small>рычаг включает услугу</small>
-                </div>
-                <div class="services" data-service-list>
-                  {
-                    fallbackServices.map((service) => {
-                      const line = initialCalculation.lineItems.find(
-                        (item) => item.serviceId === service.id,
-                      )
-                      const displayRubles = initialDisplayRubles.get(service.id)
-
-                      return (
-                        <button
-                          type="button"
-                          class="service-row selected"
-                          data-service-id={service.id}
-                          role="switch"
-                          aria-checked="true"
-                        >
-                          <span class="lever" aria-hidden="true">
-                            <span class="pipe" />
-                            <span class="body" />
-                            <span class="stem" />
-                            <span class="handle" />
-                          </span>
-                          <span class="service-code">{service.code}</span>
-                          <span class="service-copy">
-                            <strong>{service.title}</strong>
-                            <span>{service.description}</span>
-                          </span>
-                          <span class="rate">{priceModeLabel(service)}</span>
-                          <span class="row-price">
-                            <strong>{displayRubles !== undefined ? formatRubles(displayRubles) : '0'} Br</strong>
-                            <span>~{line ? formatUsd(line.totalUsdCents) : '0'} $</span>
-                          </span>
-                        </button>
-                      )
-                    })
-                  }
-                </div>
-                <div class="service-empty" data-service-empty hidden>
-                  Сейчас нет опубликованных услуг для публичного расчета. Калькулятор не показывает
-                  нулевую сумму как рабочее КП.
-                </div>
-              </section>
-
-              <aside class="calc-panel result-panel" aria-live="polite" aria-label="Итог расчета">
-                <div class="result-card">
-                  <span class="result-label">Стоимость проекта</span>
-                  <div class="total" data-total-byn>
-                    {formatRubles(initialCalculation.totals.totalBynRoundedRubles)} <span>Br</span>
-                  </div>
-                  <p class="usd-line" data-total-usd>
-                    ~{formatUsd(initialCalculation.totals.totalUsdCents)} $ за выбранный состав
-                  </p>
-                </div>
-
-                <div class="summary-list" data-summary-list>
-                  {
-                    initialCalculation.lineItems.map((lineItem) => (
-                      <div class="summary-row" data-summary-service-id={lineItem.serviceId}>
-                        <span>{lineItem.serviceSnapshot.title}</span>
-                        <strong>
-                          {formatRubles(initialDisplayRubles.get(lineItem.serviceId) ?? 0)} Br
-                        </strong>
-                      </div>
-                    ))
-                  }
-                </div>
-
-                <div class="calc-note">
-                  <div>BYN - основной итог для клиента.</div>
-                  <div>USD - справочная строка по базовым тарифам.</div>
-                  <div>Для точного КП менеджер уточнит исходные данные объекта.</div>
-                </div>
-
-                <form class="lead-shell" id="lead-shell" data-lead-form novalidate>
-                  <label for="lead-name">
-                    <span>Имя</span>
-                    <input
-                      id="lead-name"
-                      data-lead-name
-                      type="text"
-                      autocomplete="name"
-                      placeholder="Например, Андрей"
-                      aria-describedby="lead-name-error"
-                    />
-                  </label>
-                  <p class="field-error" id="lead-name-error" data-lead-name-error hidden>
-                    Укажите имя: минимум 2 символа.
-                  </p>
-                  <label for="lead-phone">
-                    <span>Телефон</span>
-                    <input
-                      id="lead-phone"
-                      data-lead-phone
-                      type="tel"
-                      inputmode="tel"
-                      autocomplete="tel"
-                      placeholder="+375 ..."
-                      aria-describedby="lead-phone-error"
-                    />
-                  </label>
-                  <p class="field-error" id="lead-phone-error" data-lead-phone-error hidden>
-                    Укажите телефон в белорусском или международном формате.
-                  </p>
-                  <label class="consent-row" for="lead-consent">
-                    <input
-                      id="lead-consent"
-                      data-lead-consent
-                      type="checkbox"
-                      aria-describedby="lead-consent-error privacy-note"
-                    />
-                    <span>
-                      Согласен на обработку имени, телефона и выбранного расчета для подготовки коммерческого предложения.
-                    </span>
-                  </label>
-                  <p class="field-error" id="lead-consent-error" data-lead-consent-error hidden>
-                    Подтвердите согласие перед отправкой.
-                  </p>
-                  <button class="button primary" type="submit" data-lead-shell-trigger>
-                    Получить КП
+              <div class="type-block">
+                <span class="field-label">Тип проекта</span>
+                <div class="type-switch" role="group" aria-label="Тип проекта">
+                  <button
+                    class="type-button active"
+                    type="button"
+                    data-project-type="private"
+                    aria-pressed="true"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      {lucideIcons.home.paths?.map((path) => <path d={path} />)}
+                    </svg>
+                    <span>Частный дом</span>
                   </button>
-                  <p class="privacy-note" id="privacy-note">
-                    Данные используются только для связи по расчету и подготовки предложения.
-                    Удаление заявки - по запросу через контакты после их подтверждения перед запуском.
-                  </p>
-                  <p data-lead-shell-status role="status">
-                    Заполните контакты: после отправки откроется ссылка на коммерческое предложение и PDF.
-                  </p>
-                  <div class="lead-success" data-lead-success hidden></div>
-                </form>
-              </aside>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="included" aria-labelledby="included-title">
-        <div class="container">
-          <div class="section-head">
-            <p class="section-kicker">Состав проекта</p>
-            <h2 id="included-title">Что входит в проектирование</h2>
-            <p>
-              Клиент видит не только цену, но и предмет работы: исходные данные, расчеты,
-              схемы, спецификации и комплект листов для монтажников.
-            </p>
-          </div>
-          <div class="deliverables">
-            <article class="tile">
-              <span class="symbol light">ОП</span>
-              <h3>Опросный лист</h3>
-              <p>Исходные данные по дому, системам, материалам, оборудованию и пожеланиям.</p>
-            </article>
-            <article class="tile">
-              <span class="symbol light">ΔT</span>
-              <h3>Расчетная база</h3>
-              <p>Теплопотери и технические решения, от которых зависит подбор оборудования.</p>
-            </article>
-            <article class="tile">
-              <span class="symbol light">Σ</span>
-              <h3>Спецификация</h3>
-              <p>Состав оборудования и материалов, который можно передать на закупку.</p>
-            </article>
-            <article class="tile">
-              <span class="symbol light">PDF</span>
-              <h3>Комплект листов</h3>
-              <p>Схемы, планы, узлы и пояснения в электронном виде для согласования.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="section white" id="examples" aria-labelledby="examples-title">
-        <div class="container">
-          <div class="section-head">
-            <p class="section-kicker">Примеры и объекты</p>
-            <h2 id="examples-title">Проекты для домов и небольшой коммерции</h2>
-            <p>
-              Два реальных PDF-комплекта остаются proof-asset: состав и объем видны сразу,
-              а сами файлы выдаются после контакта по защищенной ссылке.
-            </p>
-          </div>
-          <div class="objects">
-            {publicProjectExampleAssets.map((example) => (
-              <article class="object-card">
-                <div class="blueprint" data-title={`${example.code} · PDF пример`}>
-                  <span class="room r1"></span>
-                  <span class="room r2"></span>
-                  <span class="pipe-line l1"></span>
-                  <span class="pipe-line l2"></span>
-                  <span class="node n1">{example.code}</span>
-                  <span class="node n2">PDF</span>
+                  <button
+                    class="type-button"
+                    type="button"
+                    data-project-type="commercial"
+                    aria-pressed="false"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      {lucideIcons.building2.paths?.map((path) => <path d={path} />)}
+                    </svg>
+                    <span>Коммерческий объект</span>
+                  </button>
                 </div>
-                <div class="object-body">
-                  <span class="example-meta">
-                    {example.pageCount} листов · PDF {formatFileSizeMb(example.fileSizeBytes)}
-                  </span>
-                  <h3>{example.title}</h3>
-                  <p>{example.description}</p>
-                  <div class="object-actions">
+              </div>
+
+              <div class="services-head">
+                <strong>Разделы проекта</strong>
+                <span>Нажмите на строку, чтобы изменить состав</span>
+              </div>
+              <div class="services" data-service-list>
+                {
+                  fallbackServices.map((service) => {
+                    const isSelected = selectedServiceIds.includes(service.id)
+                    const displayRubles = initialServiceRubles.get(service.id) ?? 0
+
+                    return (
+                      <button
+                        type="button"
+                        class:list={['service-row', { selected: isSelected }]}
+                        data-service-id={service.id}
+                        role="switch"
+                        aria-checked={isSelected ? 'true' : 'false'}
+                      >
+                        <span class="service-copy">
+                          <strong>{service.title}</strong>
+                          <span>{service.description}</span>
+                        </span>
+                        <span class="row-price">
+                          <strong>
+                            {formatRubles(displayRubles)}
+                            <img
+                              class="currency-symbol"
+                              src="/landing-v4/byn-symbol.svg"
+                              alt=""
+                              aria-hidden="true"
+                            />
+                            <span class="sr-only"> BYN</span>
+                          </strong>
+                        </span>
+                        <span class="toggle" aria-hidden="true"><span /></span>
+                      </button>
+                    )
+                  })
+                }
+              </div>
+              <div class="service-empty" data-service-empty hidden>
+                Сейчас нет опубликованных услуг для публичного расчета.
+              </div>
+              <p class="calc-footnote">
+                Итоговая стоимость зависит от состава и сложности проекта.
+              </p>
+            </div>
+
+            <aside class="result-card" aria-live="polite" aria-label="Итог расчета">
+              <h3>Состав проекта</h3>
+              <div class="selected-list" data-summary-list>
+                {
+                  initialCalculation.lineItems.map((lineItem) => (
+                    <div class="summary-row" data-summary-service-id={lineItem.serviceId}>
+                      <span>{lineItem.serviceSnapshot.title}</span>
+                      <strong>
+                        {formatRubles(initialSummaryRubles.get(lineItem.serviceId) ?? 0)}
+                        <img
+                          class="currency-symbol"
+                          src="/landing-v4/byn-symbol.svg"
+                          alt=""
+                          aria-hidden="true"
+                        />
+                        <span class="sr-only"> BYN</span>
+                      </strong>
+                    </div>
+                  ))
+                }
+              </div>
+              <div class="area-summary">
+                <span>Площадь объекта</span>
+                <strong><span data-summary-area>{defaultAreaSqm}</span> м²</strong>
+              </div>
+              <div class="total-box">
+                <div class="total-label">Итого стоимость проекта</div>
+                <div class="total" data-total-byn>
+                  {formatRubles(initialCalculation.totals.totalBynRoundedRubles)}
+                  <img
+                    class="currency-symbol"
+                    src="/landing-v4/byn-symbol.svg"
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span class="sr-only"> BYN</span>
+                </div>
+              </div>
+              <a class="button primary result-cta" href="#lead">
+                Получить коммерческое предложение
+              </a>
+              <div class="result-note">Ответим в течение рабочего дня.</div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="benefits" aria-labelledby="benefits-title">
+        <div class="shell">
+          <div class="section-head">
+            <div class="section-kicker">Практический результат</div>
+            <h2 id="benefits-title">Что дает проектирование</h2>
+            <p>Вы принимаете решения на основе точных данных, а не наугад.</p>
+          </div>
+          <div class="benefits-grid">
+            {
+              benefitItems.map((item) => (
+                <article class="benefit">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    {
+                      item.icon.rects?.map((rect) => (
+                        <rect
+                          x={rect.x}
+                          y={rect.y}
+                          width={rect.width}
+                          height={rect.height}
+                          rx={rect.rx ?? 0}
+                        />
+                      ))
+                    }
+                    {item.icon.circles?.map(([cx, cy, r]) => <circle cx={cx} cy={cy} r={r} />)}
+                    {item.icon.paths?.map((path) => <path d={path} />)}
+                  </svg>
+                  <strong>{item.title}</strong>
+                </article>
+              ))
+            }
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft" id="documents" aria-labelledby="documents-title">
+        <div class="shell">
+          <div class="section-head">
+            <div class="section-kicker">Результат работы</div>
+            <h2 id="documents-title">Примеры проектной документации</h2>
+            <p>Каждый проект содержит всё необходимое для реализации.</p>
+          </div>
+          <div class="docs-grid">
+            {
+              documentationExamples.map((example) => (
+                <article class="doc-card">
+                  <img class="doc-image" src={example.image} alt={example.imageAlt} />
+                  <div class="doc-body">
+                    <strong>{example.title}</strong>
+                    <p>{example.description}</p>
                     <button
-                      class="button small light"
+                      class="text-button"
                       type="button"
                       data-example-select
                       data-example-slug={example.slug}
@@ -498,210 +708,296 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
                     >
                       Получить PDF
                     </button>
-                    <span class="text-link">после контакта</span>
                   </div>
-                </div>
-              </article>
-            ))}
-            <article class="object-card accent">
-              <div class="blueprint" data-title="КП · малая коммерция">
-                <span class="room r1"></span>
-                <span class="room r2"></span>
-                <span class="pipe-line l1"></span>
-                <span class="pipe-line l2"></span>
-                <span class="node n1">Σ</span>
-                <span class="node n2">PDF</span>
-              </div>
-              <div class="object-body">
-                <h3>Получить примеры проектов</h3>
-                <p>Оставьте контакт, и сайт сразу откроет token-ссылки на выбранные PDF.</p>
-                <form
-                  class="example-request-form"
-                  id="example-request-form"
-                  data-example-form
-                  novalidate
-                >
-                  <fieldset class="example-choice-group" aria-describedby="example-choice-error">
-                    <legend>Какие примеры нужны</legend>
-                    {publicProjectExampleAssets.map((example) => (
-                      <label class="example-choice" for={`example-choice-${example.slug}`}>
-                        <input
-                          id={`example-choice-${example.slug}`}
-                          type="checkbox"
-                          value={example.slug}
-                          data-example-choice
-                          checked
-                        />
-                        <span>{example.code}</span>
-                        <strong>{example.title}</strong>
-                      </label>
-                    ))}
-                  </fieldset>
-                  <p class="field-error" id="example-choice-error" data-example-choice-error hidden>
-                    Выберите хотя бы один пример проекта.
-                  </p>
-                  <label for="example-name">
-                    <span>Имя</span>
+                </article>
+              ))
+            }
+          </div>
+          <form class="example-request-form" id="example-request-form" data-example-form novalidate>
+            <div class="example-form-copy">
+              <strong>Получить примеры проектов</strong>
+              <span>После контакта сайт откроет защищенные ссылки на выбранные PDF.</span>
+            </div>
+            <fieldset class="example-choice-group" aria-describedby="example-choice-error">
+              <legend>Какие примеры нужны</legend>
+              {
+                publicProjectExampleAssets.map((example) => (
+                  <label class="example-choice" for={`example-choice-${example.slug}`}>
                     <input
-                      id="example-name"
-                      data-example-name
-                      type="text"
-                      autocomplete="name"
-                      placeholder="Например, Андрей"
-                      aria-describedby="example-name-error"
-                    />
-                  </label>
-                  <p class="field-error" id="example-name-error" data-example-name-error hidden>
-                    Укажите имя: минимум 2 символа.
-                  </p>
-                  <label for="example-phone">
-                    <span>Телефон</span>
-                    <input
-                      id="example-phone"
-                      data-example-phone
-                      type="tel"
-                      inputmode="tel"
-                      autocomplete="tel"
-                      placeholder="+375 ..."
-                      aria-describedby="example-phone-error"
-                    />
-                  </label>
-                  <p class="field-error" id="example-phone-error" data-example-phone-error hidden>
-                    Укажите телефон в белорусском или международном формате.
-                  </p>
-                  <label class="consent-row" for="example-consent">
-                    <input
-                      id="example-consent"
-                      data-example-consent
+                      id={`example-choice-${example.slug}`}
                       type="checkbox"
-                      aria-describedby="example-consent-error"
+                      value={example.slug}
+                      data-example-choice
+                      checked
                     />
-                    <span>
-                      Согласен на обработку имени и телефона для выдачи примеров проектов и связи по проектированию.
-                    </span>
+                    <span>{example.code}</span>
+                    <strong>{example.title}</strong>
                   </label>
-                  <p class="field-error" id="example-consent-error" data-example-consent-error hidden>
-                    Подтвердите согласие перед отправкой.
-                  </p>
-                  <button class="button small primary" type="submit" data-example-trigger>
-                    Получить PDF-примеры
-                  </button>
-                  <p data-example-status role="status">
-                    Прямые PDF-ссылки не публикуются: после отправки здесь появятся защищенные ссылки.
-                  </p>
-                  <div class="lead-success" data-example-success hidden></div>
-                </form>
-              </div>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="stages" aria-labelledby="stages-title">
-        <div class="container">
-          <div class="section-head">
-            <p class="section-kicker">Процесс</p>
-            <h2 id="stages-title">Этапы работы</h2>
-            <p>
-              Путь короткий: предварительный расчет, коммерческое предложение, исходные данные
-              и проектный комплект.
+                ))
+              }
+            </fieldset>
+            <p class="field-error" id="example-choice-error" data-example-choice-error hidden>
+              Выберите хотя бы один пример проекта.
             </p>
+            <div class="example-fields">
+              <div class="example-input-grid">
+                <label for="example-name">
+                  <span>Имя</span>
+                  <input
+                    id="example-name"
+                    data-example-name
+                    type="text"
+                    autocomplete="name"
+                    placeholder="Ваше имя"
+                    aria-describedby="example-name-error"
+                  />
+                </label>
+                <label for="example-phone">
+                  <span>Телефон</span>
+                  <input
+                    id="example-phone"
+                    data-example-phone
+                    type="tel"
+                    inputmode="tel"
+                    autocomplete="tel"
+                    placeholder="Телефон"
+                    aria-describedby="example-phone-error"
+                  />
+                </label>
+              </div>
+              <p class="field-error" id="example-name-error" data-example-name-error hidden>
+                Укажите имя: минимум 2 символа.
+              </p>
+              <p class="field-error" id="example-phone-error" data-example-phone-error hidden>
+                Укажите телефон в белорусском или международном формате.
+              </p>
+              <label class="consent-row" for="example-consent">
+                <input
+                  id="example-consent"
+                  data-example-consent
+                  type="checkbox"
+                  aria-describedby="example-consent-error"
+                />
+                <span>Согласен на обработку имени и телефона для выдачи примеров проектов.</span>
+              </label>
+              <p class="field-error" id="example-consent-error" data-example-consent-error hidden>
+                Подтвердите согласие перед отправкой.
+              </p>
+              <div class="example-action-row">
+                <button class="button primary" type="submit" data-example-trigger>
+                  Получить PDF-примеры
+                </button>
+                <p data-example-status role="status">
+                  Прямые PDF-ссылки не публикуются: после отправки здесь появятся защищенные ссылки.
+                </p>
+              </div>
+              <div class="lead-success" data-example-success hidden></div>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="section" id="process" aria-labelledby="process-title">
+        <div class="shell">
+          <div class="section-head">
+            <div class="section-kicker">Последовательный процесс</div>
+            <h2 id="process-title">Как проходит работа</h2>
+            <p>От первого обращения до передачи готового комплекта проектной документации.</p>
           </div>
-          <div class="steps">
-            <article class="step">
-              <span>01 / расчет</span>
-              <h3>Выбор разделов</h3>
-              <p>Клиент включает нужные рычаги и видит итог сразу.</p>
-            </article>
-            <article class="step">
-              <span>02 / КП</span>
-              <h3>Фиксация состава</h3>
-              <p>Состав, площадь и условия фиксируются перед детальной анкетой.</p>
-            </article>
-            <article class="step">
-              <span>03 / опросник</span>
-              <h3>Исходные данные</h3>
-              <p>Менеджер помогает пройти технические вопросы по объекту.</p>
-            </article>
-            <article class="step">
-              <span>04 / проект</span>
-              <h3>PDF-комплект</h3>
-              <p>Готовые листы, расчеты, спецификации и узлы передаются заказчику.</p>
-            </article>
+          <div class="process">
+            {
+              processSteps.map(([number, title, text, icon]) => (
+                <article class="step">
+                  <span class="step-number">{number}</span>
+                  <div class="step-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      {
+                        icon.rects?.map((rect) => (
+                          <rect
+                            x={rect.x}
+                            y={rect.y}
+                            width={rect.width}
+                            height={rect.height}
+                            rx={rect.rx ?? 0}
+                          />
+                        ))
+                      }
+                      {icon.circles?.map(([cx, cy, r]) => <circle cx={cx} cy={cy} r={r} />)}
+                      {icon.paths?.map((path) => <path d={path} />)}
+                    </svg>
+                  </div>
+                  <strong>{title}</strong>
+                  <p>{text}</p>
+                </article>
+              ))
+            }
           </div>
         </div>
       </section>
 
-      <section class="section white" id="faq" aria-labelledby="faq-title">
-        <div class="container">
+      <section class="section soft" id="faq" aria-labelledby="faq-title">
+        <div class="shell">
           <div class="section-head">
-            <p class="section-kicker">FAQ</p>
-            <h2 id="faq-title">Частые вопросы</h2>
-            <p>Ответы закрывают основные сомнения до разговора о деталях объекта.</p>
+            <div class="section-kicker">Основные вопросы</div>
+            <h2 id="faq-title">Вопросы и ответы</h2>
           </div>
           <div class="faq-grid">
-            <details open>
-              <summary>Это окончательная цена проекта?</summary>
-              <p>
-                Нет. Это предварительный расчет по площади и выбранным разделам. Итоговое КП
-                уточняется после исходных данных и состава оборудования.
-              </p>
-            </details>
-            <details>
-              <summary>Почему BYN основной, а USD вторичный?</summary>
-              <p>
-                Клиенту удобнее видеть сумму в BYN. USD остается справочным ориентиром, потому
-                что базовые тарифы проекта ведутся в USD.
-              </p>
-            </details>
-            <details>
-              <summary>Можно выбрать только часть разделов?</summary>
-              <p>
-                Да. Рычаги включают отдельные услуги, а расчет пересчитывается по выбранному
-                составу.
-              </p>
-            </details>
-            <details>
-              <summary>Когда появится PDF-коммерческое?</summary>
-              <p>
-                PDF генерируется после отправки имени, телефона и согласия. Ссылка защищена
-                публичным токеном и фиксирует расчет на дату заявки.
-              </p>
-            </details>
+            {
+              faqItems.map(([question, answer], index) => (
+                <article class="faq-item">
+                  <h3>
+                    <button
+                      class="faq-question"
+                      type="button"
+                      aria-expanded="false"
+                      aria-controls={`faq-answer-${index}`}
+                      data-faq-trigger
+                    >
+                      <span>{question}</span>
+                      <span aria-hidden="true">⌄</span>
+                    </button>
+                  </h3>
+                  <div class="faq-answer" id={`faq-answer-${index}`} hidden>
+                    {answer}
+                  </div>
+                </article>
+              ))
+            }
           </div>
         </div>
       </section>
 
-      <section class="section dark" id="contacts" aria-labelledby="contacts-title">
-        <div class="container">
-          <div class="contact-layout">
-            <div>
-              <p class="section-kicker">Контакты</p>
-              <h2 id="contacts-title">Связаться с ИП Позняк</h2>
+      <section class="cta-section" id="lead" aria-labelledby="lead-title">
+        <div class="shell">
+          <div class="cta-grid">
+            <div class="cta-copy">
+              <h2 id="lead-title">Готовы начать проект?</h2>
               <p>
-                После отправки формы имя, телефон и расчет сохраняются для подготовки КП.
-                Перед публичным запуском здесь будут подтвержденные контакты и ссылка/адрес для
-                запросов на уточнение, исправление или удаление заявки.
+                Оставьте заявку — подготовим коммерческое предложение по вашему объекту.
               </p>
+              <div class="cta-facts">
+                <div class="cta-fact">
+                  <strong>Быстрый ответ</strong>
+                  <span>в рабочее время</span>
+                </div>
+                <div class="cta-fact">
+                  <strong>Индивидуальный подход</strong>
+                  <span>к каждому проекту</span>
+                </div>
+                <div class="cta-fact">
+                  <strong>Конфиденциальность</strong>
+                  <span>ваших данных</span>
+                </div>
+              </div>
             </div>
-            <div class="contact-card">
-              <dl>
-                <div>
-                  <dt>Телефон</dt>
-                  <dd>уточнить перед запуском</dd>
+
+            <form class="lead-form" id="lead-shell" data-lead-form novalidate>
+              <label for="lead-name">
+                <span>Ваше имя</span>
+                <input
+                  id="lead-name"
+                  data-lead-name
+                  type="text"
+                  autocomplete="name"
+                  placeholder="Ваше имя"
+                  aria-describedby="lead-name-error"
+                />
+              </label>
+              <p class="field-error" id="lead-name-error" data-lead-name-error hidden>
+                Укажите имя: минимум 2 символа.
+              </p>
+              <label for="lead-phone">
+                <span>Телефон</span>
+                <input
+                  id="lead-phone"
+                  data-lead-phone
+                  type="tel"
+                  inputmode="tel"
+                  autocomplete="tel"
+                  placeholder="Телефон"
+                  aria-describedby="lead-phone-error"
+                />
+              </label>
+              <p class="field-error" id="lead-phone-error" data-lead-phone-error hidden>
+                Укажите телефон в белорусском или международном формате.
+              </p>
+              <label for="lead-object">
+                <span>Кратко опишите объект и задачу</span>
+                <textarea
+                  id="lead-object"
+                  data-lead-object
+                  rows="4"
+                  maxlength="160"
+                  placeholder="Кратко опишите объект и задачу"
+                ></textarea>
+              </label>
+              <label class="consent-row" for="lead-consent">
+                <input
+                  id="lead-consent"
+                  data-lead-consent
+                  type="checkbox"
+                  aria-describedby="lead-consent-error privacy-note"
+                />
+                <span>Согласен на обработку персональных данных</span>
+              </label>
+              <p class="field-error" id="lead-consent-error" data-lead-consent-error hidden>
+                Подтвердите согласие перед отправкой.
+              </p>
+              <button class="button primary" type="submit" data-lead-shell-trigger>
+                Получить коммерческое предложение
+              </button>
+              <p class="privacy-note" id="privacy-note">
+                Данные используются только для связи по расчету и подготовки предложения.
+              </p>
+              <p data-lead-shell-status role="status">
+                Заполните контакты: после отправки откроется ссылка на коммерческое предложение и PDF.
+              </p>
+              <div class="lead-success" data-lead-success hidden></div>
+            </form>
+
+            <div class="contacts">
+              <h3>Контакты</h3>
+              <div class="contact-list">
+                <div class="contact-row">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    {lucideIcons.phone.paths?.map((path) => <path d={path} />)}
+                  </svg>
+                  <span>{contactPhone || 'Телефон будет указан после подтверждения владельца'}</span>
                 </div>
-                <div>
-                  <dt>Мессенджер</dt>
-                  <dd>канал связи после подтверждения</dd>
+                <div class="contact-row">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    {
+                      lucideIcons.mail.rects?.map((rect) => (
+                        <rect
+                          x={rect.x}
+                          y={rect.y}
+                          width={rect.width}
+                          height={rect.height}
+                          rx={rect.rx ?? 0}
+                        />
+                      ))
+                    }
+                    {lucideIcons.mail.paths?.map((path) => <path d={path} />)}
+                  </svg>
+                  <span>{contactEmail || 'Контактный email указывается перед публикацией'}</span>
                 </div>
-                <div>
-                  <dt>Email для PDF</dt>
-                  <dd>уточнить перед запуском и политикой данных</dd>
+                <div class="contact-row">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    {lucideIcons.mapPin.circles?.map(([cx, cy, r]) => <circle cx={cx} cy={cy} r={r} />)}
+                    {lucideIcons.mapPin.paths?.map((path) => <path d={path} />)}
+                  </svg>
+                  <span>Минск и вся Беларусь</span>
                 </div>
-              </dl>
-              <a class="button primary" href="#calculator">Вернуться к расчету</a>
+              </div>
+              <p class="contacts-note">Работаем по договору с физическими и юридическими лицами.</p>
             </div>
           </div>
+
+          <footer class="footer">
+            <span>ИП Позняк</span>
+            <span>Проектирование инженерных систем</span>
+            <span>Данные контактов и юридические тексты уточняются перед публикацией</span>
+          </footer>
         </div>
       </section>
     </main>
@@ -720,9 +1016,15 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
 
-  type CalculatorService = EngineeringService & { code?: string; isPublic?: boolean }
+  type ProjectType = 'private' | 'commercial'
+  type CalculatorService = EngineeringService & { isPublic?: boolean }
   type CalculatorData = {
     defaultAreaSqm: string
+    areaLimits: {
+      min: number
+      max: number
+      step: number
+    }
     exchangeRate: {
       source: 'manual' | 'nbrb' | 'fallback'
       usdToBynRate: string
@@ -730,6 +1032,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     }
     fallbackServices: CalculatorService[]
     selectedServiceIds: string[]
+    selectedProjectType: ProjectType
   }
 
   const dataElement = document.querySelector<HTMLScriptElement>('#calculator-data')
@@ -741,11 +1044,15 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   const serviceEmpty = document.querySelector<HTMLElement>('[data-service-empty]')
   const serviceSource = document.querySelector<HTMLElement>('[data-service-source]')
   const totalByn = document.querySelector<HTMLElement>('[data-total-byn]')
-  const totalUsd = document.querySelector<HTMLElement>('[data-total-usd]')
+  const summaryArea = document.querySelector<HTMLElement>('[data-summary-area]')
   const summaryList = document.querySelector<HTMLElement>('[data-summary-list]')
+  const projectTypeButtons = [
+    ...document.querySelectorAll<HTMLButtonElement>('[data-project-type]'),
+  ]
   const leadForm = document.querySelector<HTMLFormElement>('[data-lead-form]')
   const leadNameInput = document.querySelector<HTMLInputElement>('[data-lead-name]')
   const leadPhoneInput = document.querySelector<HTMLInputElement>('[data-lead-phone]')
+  const leadObjectInput = document.querySelector<HTMLTextAreaElement>('[data-lead-object]')
   const leadConsent = document.querySelector<HTMLInputElement>('[data-lead-consent]')
   const leadNameError = document.querySelector<HTMLElement>('[data-lead-name-error]')
   const leadPhoneError = document.querySelector<HTMLElement>('[data-lead-phone-error]')
@@ -767,13 +1074,16 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   const exampleSuccess = document.querySelector<HTMLElement>('[data-example-success]')
 
   const numberFormatter = new Intl.NumberFormat('ru-RU')
-  const usdFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
-  const usdUnitFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
   const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
   const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
+  const projectTypeLabels: Record<ProjectType, string> = {
+    private: 'Частный дом',
+    commercial: 'Коммерческий объект',
+  }
 
   let services = normalizeServices(data.fallbackServices)
   let selectedServiceIds = new Set(data.selectedServiceIds)
+  let selectedProjectType: ProjectType = data.selectedProjectType ?? 'private'
   let currentCalculation: CalculationResult | null = null
   let currentCalculationSignature = ''
   let hasApiConfig = false
@@ -790,7 +1100,10 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     areaInput?.addEventListener('input', () => {
       const parsed = parseArea(areaInput.value)
       if (parsed.valid && areaRange) {
-        const rangeValue = Math.min(Math.max(Number(parsed.canonical), 30), 500)
+        const rangeValue = Math.min(
+          Math.max(Number(parsed.canonical), data.areaLimits.min),
+          data.areaLimits.max,
+        )
         areaRange.value = String(rangeValue)
       }
       render()
@@ -801,12 +1114,13 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       render()
     })
 
-    document.querySelectorAll<HTMLButtonElement>('[data-area-preset]').forEach((button) => {
+    projectTypeButtons.forEach((button) => {
       button.addEventListener('click', () => {
-        const value = button.dataset.areaPreset ?? data.defaultAreaSqm
-        if (areaInput) areaInput.value = value
-        if (areaRange) areaRange.value = value
-        render()
+        const nextType = button.dataset.projectType
+        if (nextType !== 'private' && nextType !== 'commercial') return
+        selectedProjectType = nextType
+        updateProjectTypeButtons()
+        resetLeadSubmissionState()
       })
     })
 
@@ -817,6 +1131,10 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 
     leadPhoneInput?.addEventListener('input', () => {
       validateLeadForm(false)
+      resetLeadSubmissionState()
+    })
+
+    leadObjectInput?.addEventListener('input', () => {
       resetLeadSubmissionState()
     })
 
@@ -866,12 +1184,23 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       void submitExampleRequest()
     })
 
+    document.querySelectorAll<HTMLButtonElement>('[data-faq-trigger]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const answerId = button.getAttribute('aria-controls')
+        const answer = answerId ? document.getElementById(answerId) : null
+        const expanded = button.getAttribute('aria-expanded') === 'true'
+        button.setAttribute('aria-expanded', String(!expanded))
+        if (answer) answer.hidden = expanded
+      })
+    })
+
+    updateProjectTypeButtons()
     updateExampleSubmitState()
   }
 
   async function loadPublicConfig() {
     if (!apiBaseUrl) {
-      setSourceMessage(`Базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+      setSourceMessage('Базовые тарифы для предварительного расчета.')
       setLeadStatus('Сохранение заявки требует подключенный backend API.')
       setExampleStatus('Выдача PDF-примеров требует подключенный backend API.')
       updateSubmitState()
@@ -894,13 +1223,13 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
         services = []
         selectedServiceIds = new Set()
         hasApiConfig = false
-        setSourceMessage('Нет опубликованных услуг в API')
+        setSourceMessage('Нет опубликованных услуг в API.')
       } else {
         services = publicServices
-        selectedServiceIds = new Set(publicServices.map((service) => service.id))
+        selectedServiceIds = new Set(defaultSelectedServiceIds(publicServices))
         hasApiConfig = true
-        setSourceMessage(`Публичные услуги из API · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
-        setLeadStatus('Заполните контакты: заявка сохранится, КП перейдет в подготовку.')
+        setSourceMessage('Тарифы загружены из админ-панели.')
+        setLeadStatus('Заполните контакты: заявка сохранится, КП будет подготовлено по расчету.')
       }
 
       render()
@@ -908,10 +1237,10 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       services = normalizeServices(data.fallbackServices)
       selectedServiceIds = new Set(data.selectedServiceIds)
       hasApiConfig = false
-      setSourceMessage(`API недоступен · базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
+      setSourceMessage('API недоступен, показаны базовые тарифы.')
       setLeadStatus('API недоступен: расчет можно посмотреть, но заявку сейчас нельзя сохранить.')
       if (error instanceof Error && error.message.includes('failed: 409')) {
-        setExampleStatus('Калькулятор ждет настройку курса, но PDF-примеры можно запросить после контакта.')
+        setExampleStatus('Калькулятор ждет настройку тарифа, но PDF-примеры можно запросить после контакта.')
       } else {
         setExampleStatus('API недоступен: PDF-примеры сейчас нельзя выдать по защищенной ссылке.', 'error')
       }
@@ -922,7 +1251,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   function normalizeServices(source: Array<CalculatorService | ServiceRecord>): CalculatorService[] {
     return source
       .filter((service) => service.isActive && supportedPricingTypes.has(service.pricingType))
-      .map((service, index) => ({
+      .map((service) => ({
         id: service.id,
         title: service.title,
         description: service.description ?? null,
@@ -934,7 +1263,6 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
         formulaVersion: service.formulaVersion ?? undefined,
         createdAt: service.createdAt,
         updatedAt: service.updatedAt,
-        code: 'code' in service && service.code ? service.code : makeServiceCode(service.title, index),
         isPublic: 'isPublic' in service ? service.isPublic : true,
       }))
       .sort((first, second) => first.sortOrder - second.sortOrder)
@@ -955,7 +1283,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 
     if (!canCalculate) {
       setCurrentCalculation(null)
-      renderServices(null, focusServiceId)
+      renderServices(focusServiceId, data.defaultAreaSqm)
       renderTotals(null)
       renderSummary(null)
       if (serviceEmpty) serviceEmpty.hidden = services.length > 0
@@ -971,31 +1299,41 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     })
 
     setCurrentCalculation(calculation)
-    renderServices(calculation, focusServiceId)
+    renderServices(focusServiceId, parsedArea.canonical)
     renderTotals(calculation)
     renderSummary(calculation)
     if (serviceEmpty) serviceEmpty.hidden = true
     updateSubmitState()
   }
 
-  function renderServices(calculation: CalculationResult | null, focusServiceId?: string) {
+  function renderServices(
+    focusServiceId?: string,
+    areaSqm = data.defaultAreaSqm,
+  ) {
     if (!serviceList) return
-    const displayRubles = calculation ? allocateDisplayBynRubles(calculation) : new Map<string, number>()
+    const allServiceRubles =
+      services.length > 0 && parseArea(areaSqm).valid
+        ? serviceRublesMap(
+            calculateEngineeringOffer({
+              areaSqm,
+              selectedServiceIds: services.map((service) => service.id),
+              services,
+              exchangeRate: data.exchangeRate,
+            }),
+          )
+        : new Map<string, number>()
 
     serviceList.innerHTML = services
       .map((service) => {
-        const line = calculation?.lineItems.find((item) => item.serviceId === service.id)
         const isSelected = selectedServiceIds.has(service.id)
         const buttonClass = isSelected ? 'service-row selected' : 'service-row'
-        const lineRubles = displayRubles.get(service.id)
+        const lineRubles = allServiceRubles.get(service.id) ?? 0
 
         return `
           <button type="button" class="${buttonClass}" data-service-id="${escapeHtml(service.id)}" role="switch" aria-checked="${isSelected}">
-            <span class="lever" aria-hidden="true"><span class="pipe"></span><span class="body"></span><span class="stem"></span><span class="handle"></span></span>
-            <span class="service-code">${escapeHtml(service.code ?? '')}</span>
             <span class="service-copy"><strong>${escapeHtml(service.title)}</strong><span>${escapeHtml(service.description ?? '')}</span></span>
-            <span class="rate">${escapeHtml(priceModeLabel(service))}</span>
-            <span class="row-price"><strong>${lineRubles !== undefined ? formatRubles(lineRubles) : isSelected ? '-' : 'выкл.'} Br</strong><span>${line ? `~${formatUsd(line.totalUsdCents)} $` : 'не в сумме'}</span></span>
+            <span class="row-price"><strong>${formatRubles(lineRubles)} ${currencyMarkup()}</strong></span>
+            <span class="toggle" aria-hidden="true"><span></span></span>
           </button>
         `
       })
@@ -1025,22 +1363,20 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   function renderTotals(calculation: CalculationResult | null) {
     if (totalByn) {
       totalByn.innerHTML = calculation
-        ? `${formatRubles(calculation.totals.totalBynRoundedRubles)} <span>Br</span>`
-        : `- <span>Br</span>`
-    }
-
-    if (totalUsd) {
-      totalUsd.textContent = calculation
-        ? `~${formatUsd(calculation.totals.totalUsdCents)} $ за выбранный состав`
-        : 'Укажите корректную площадь и выберите услуги'
+        ? `${formatRubles(calculation.totals.totalBynRoundedRubles)} ${currencyMarkup()}`
+        : `0 ${currencyMarkup()}`
     }
   }
 
   function renderSummary(calculation: CalculationResult | null) {
     if (!summaryList) return
 
+    if (summaryArea) {
+      summaryArea.textContent = calculation ? compactArea(calculation.areaSqm) : data.defaultAreaSqm
+    }
+
     if (!calculation || calculation.lineItems.length === 0) {
-      summaryList.innerHTML = '<div class="summary-row muted"><span>Разделы не выбраны</span><strong>0 Br</strong></div>'
+      summaryList.innerHTML = `<div class="summary-row muted"><span>Разделы не выбраны</span><strong>0 ${currencyMarkup()}</strong></div>`
       return
     }
 
@@ -1051,7 +1387,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
         (lineItem) => `
           <div class="summary-row" data-summary-service-id="${escapeHtml(lineItem.serviceId)}">
             <span>${escapeHtml(lineItem.serviceSnapshot.title)}</span>
-            <strong>${formatRubles(displayRubles.get(lineItem.serviceId) ?? 0)} Br</strong>
+            <strong>${formatRubles(displayRubles.get(lineItem.serviceId) ?? 0)} ${currencyMarkup()}</strong>
           </div>
         `,
       )
@@ -1080,7 +1416,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     }
 
     if (!apiBaseUrl || !hasApiConfig || !currentCalculation) {
-      setLeadStatus('Сохранение недоступно: публичный API или курс сейчас не подключены.', 'error')
+      setLeadStatus('Сохранение недоступно: публичный API сейчас не подключен.', 'error')
       return
     }
 
@@ -1099,6 +1435,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
           idempotencyKey: submissionIdempotencyKey,
           clientName: validation.clientName,
           clientPhone: validation.clientPhone,
+          objectName: leadObjectName(),
           calculation: {
             areaSqm: currentCalculation.areaSqm,
             selectedServiceIds: [...selectedServiceIds],
@@ -1263,7 +1600,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     const unavailable =
       isSubmitting || !apiBaseUrl || !hasApiConfig || currentCalculation === null || currentCalculation.lineItems.length === 0
     leadTrigger.disabled = unavailable
-    leadTrigger.textContent = isSubmitting ? 'Сохраняю...' : 'Получить КП'
+    leadTrigger.textContent = isSubmitting ? 'Сохраняю...' : 'Получить коммерческое предложение'
   }
 
   function updateExampleSubmitState() {
@@ -1309,7 +1646,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       leadSuccess.hidden = false
       leadSuccess.innerHTML = `
         <strong>${returnedExisting ? 'Этот расчет уже сохранен' : 'Заявка сохранена'}</strong>
-        <span>Итог: ${formatRubles(calculation.totalBynRoundedRubles)} Br · ~${formatUsd(calculation.totalUsdCents)} $</span>
+        <span>Итог: ${formatRubles(calculation.totalBynRoundedRubles)} ${currencyMarkup()}</span>
         <span>Телефон сохранен как ${escapeHtml(calculation.clientPhone)}.</span>
         <span>${proposalStateText}</span>
         ${
@@ -1435,7 +1772,7 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
         : undefined
 
     if (status === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
-    if (status === 409) return 'Тарифы или курс изменились. Обновите страницу и повторите расчет.'
+    if (status === 409) return 'Тарифы изменились. Обновите страницу и повторите расчет.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
     return serverMessage ?? 'Не удалось сохранить заявку. Попробуйте еще раз.'
   }
@@ -1513,7 +1850,8 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       return { valid: false, canonical: data.defaultAreaSqm }
     }
 
-    if (Number(canonical) <= 0) {
+    const numericValue = Number(canonical)
+    if (numericValue < data.areaLimits.min || numericValue > data.areaLimits.max) {
       return { valid: false, canonical: data.defaultAreaSqm }
     }
 
@@ -1524,22 +1862,34 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     if (serviceSource) serviceSource.textContent = message
   }
 
-  function priceModeLabel(service: CalculatorService) {
-    return service.pricingType === 'fixed'
-      ? `${formatUsd(service.priceUsdCents)} $`
-      : `${formatUsdUnit(service.priceUsdCents)} $/м²`
+  function updateProjectTypeButtons() {
+    projectTypeButtons.forEach((button) => {
+      const isSelected = button.dataset.projectType === selectedProjectType
+      button.classList.toggle('active', isSelected)
+      button.setAttribute('aria-pressed', String(isSelected))
+    })
+  }
+
+  function leadObjectName() {
+    const comment = leadObjectInput?.value.trim() ?? ''
+    const base = `Тип проекта: ${projectTypeLabels[selectedProjectType]}`
+    return comment ? `${base}. ${comment}`.slice(0, 160) : base
+  }
+
+  function defaultSelectedServiceIds(source: CalculatorService[]) {
+    return source.slice(0, Math.min(3, source.length)).map((service) => service.id)
   }
 
   function formatRubles(value: number) {
     return numberFormatter.format(value)
   }
 
-  function formatUsd(cents: number) {
-    return usdFormatter.format(Math.round(cents / 100))
+  function compactArea(value: string) {
+    return value.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
   }
 
-  function formatUsdUnit(cents: number) {
-    return usdUnitFormatter.format(cents / 100)
+  function currencyMarkup() {
+    return '<img class="currency-symbol" src="/landing-v4/byn-symbol.svg" alt="" aria-hidden="true"><span class="sr-only"> BYN</span>'
   }
 
   function allocateDisplayBynRubles(calculation: CalculationResult) {
@@ -1562,15 +1912,10 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
   }
 
-  function makeServiceCode(title: string, index: number) {
-    const letters = title
-      .split(/\s+/)
-      .map((part) => part[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase()
-
-    return letters || `Р${index + 1}`
+  function serviceRublesMap(calculation: CalculationResult) {
+    return new Map(
+      calculation.lineItems.map((lineItem) => [lineItem.serviceId, lineItem.totalBynRoundedRubles]),
+    )
   }
 
   function escapeHtml(value: string) {
@@ -1584,29 +1929,28 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 </script>
 
 <style is:global>
-  @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Montserrat:wght@600;700;800;900&display=swap");
-
   :root {
     color-scheme: light;
-    --navy: #0b2239;
-    --navy-2: #123452;
-    --navy-3: #071827;
-    --paper: #f9f7f4;
+    --navy: #081a2f;
+    --navy-2: #0d2b4c;
+    --blue: #0b5fb5;
+    --blue-2: #084d93;
+    --blue-soft: #edf5fc;
+    --ink: #102033;
+    --body: #4d5b6a;
+    --muted: #7a8794;
+    --line: #dbe3eb;
+    --line-strong: #c5d0db;
+    --paper: #f6f8fb;
     --surface: #ffffff;
-    --surface-2: #f0ebe4;
-    --ink: #15191d;
-    --body: #40484f;
-    --muted: #6c757d;
-    --line: #ded7cc;
-    --line-soft: #ece5da;
-    --steel: #2f5f7f;
-    --steel-soft: #e6edf3;
-    --steel-light: #a4b4d4;
-    --orange: #ff6b35;
-    --orange-2: #d95625;
-    --orange-soft: #fff0e8;
-    --graphite: #4a4a48;
-    --shadow: 0 32px 82px rgba(11, 34, 57, 0.18);
+    --selected: #f2f7fd;
+    --danger: #b6401a;
+    --success: #0b5f46;
+    --shadow: 0 18px 50px rgba(16, 32, 51, 0.1);
+    --radius: 12px;
+    --shell: 1240px;
+    --font-body: Inter, "Segoe UI", Arial, sans-serif;
+    --font-heading: Nunito, Inter, "Segoe UI", Arial, sans-serif;
   }
 
   * {
@@ -1619,17 +1963,28 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 
   body {
     margin: 0;
-    background: var(--paper);
+    background: var(--surface);
     color: var(--ink);
-    font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+    font-family: var(--font-body);
     font-size: 16px;
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
   }
 
-  body,
   button,
-  input {
-    font-variant-numeric: tabular-nums;
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
   }
 
   a {
@@ -1637,13 +1992,13 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     text-decoration: none;
   }
 
-  button,
-  input {
-    font: inherit;
+  img {
+    display: block;
+    max-width: 100%;
   }
 
-  button {
-    cursor: pointer;
+  [hidden] {
+    display: none !important;
   }
 
   h1,
@@ -1657,344 +2012,355 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 
   h1,
   h2,
-  h3,
-  .brand-mark,
-  .total {
-    font-family: "Montserrat", "IBM Plex Sans", sans-serif;
+  h3 {
+    font-family: var(--font-heading);
     letter-spacing: 0;
   }
 
-  .container {
-    width: min(100% - 40px, 1248px);
-    margin: 0 auto;
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
-  .top {
-    position: relative;
-    background:
-      linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-      var(--navy);
-    background-size: 72px 72px;
-    color: #ffffff;
+  .shell {
+    width: min(var(--shell), calc(100% - 48px));
+    margin-inline: auto;
   }
 
-  .nav {
-    min-height: 82px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid rgba(219, 227, 235, 0.95);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(14px);
   }
 
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .brand-mark {
-    width: 48px;
-    height: 48px;
+  .header-inner {
+    min-height: 74px;
     display: grid;
-    place-items: center;
-    border-radius: 14px;
-    background: #ffffff;
-    color: var(--navy);
-    font-weight: 900;
+    grid-template-columns: 220px 1fr auto;
+    align-items: center;
+    gap: 28px;
   }
 
   .brand strong,
-  .brand small {
+  .brand span {
     display: block;
   }
 
-  .brand small {
-    margin-top: 1px;
-    color: rgba(255, 255, 255, 0.62);
-    font-size: 12px;
-    font-weight: 500;
+  .brand strong {
+    font-size: 18px;
+    line-height: 1.1;
   }
 
-  .nav-links {
+  .brand span {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .nav {
     display: flex;
-    align-items: center;
-    gap: 28px;
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 14px;
-    font-weight: 700;
-  }
-
-  .nav-links a:hover {
-    color: #ffffff;
-  }
-
-  .hero {
-    padding: 68px 0 112px;
-  }
-
-  .eyebrow,
-  .section-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--steel-light);
+    justify-content: center;
+    gap: 30px;
+    color: var(--body);
     font-size: 13px;
-    font-weight: 800;
-    text-transform: uppercase;
   }
 
-  .eyebrow::before,
-  .section-kicker::before {
-    content: "";
-    width: 38px;
-    height: 2px;
-    border-radius: 999px;
-    background: var(--orange);
+  .nav a:hover {
+    color: var(--blue);
   }
 
-  h1 {
-    max-width: 980px;
-    margin-top: 22px;
-    font-size: clamp(40px, 7vw, 76px);
-    font-weight: 800;
-    line-height: 1.04;
-  }
-
-  .suboffer {
-    max-width: 760px;
-    margin-top: 22px;
-    color: rgba(255, 255, 255, 0.78);
-    font-size: clamp(18px, 2.1vw, 22px);
-    line-height: 1.45;
-  }
-
-  .hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    margin-top: 30px;
-  }
-
+  .top-cta,
   .button {
-    min-height: 48px;
+    min-height: 46px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
-    border-radius: 999px;
-    padding: 0 22px;
-    font-weight: 800;
+    border-radius: 8px;
+    padding: 0 20px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    line-height: 1.2;
     text-align: center;
-    white-space: nowrap;
+    transition: 0.18s ease;
   }
 
+  .top-cta,
   .button.primary {
-    background: var(--orange);
-    border-color: var(--orange);
+    background: var(--blue);
     color: #ffffff;
+    box-shadow: 0 10px 26px rgba(11, 95, 181, 0.16);
   }
 
+  .top-cta:hover,
   .button.primary:hover {
-    background: var(--orange-2);
-    border-color: var(--orange-2);
+    background: var(--blue-2);
   }
 
-  .button:disabled {
-    cursor: not-allowed;
-    opacity: 0.58;
-  }
-
-  .button.secondary {
-    border-color: rgba(255, 255, 255, 0.24);
-    color: #ffffff;
-  }
-
-  .button.light {
-    border-color: var(--line);
-    background: #ffffff;
-    color: var(--ink);
-  }
-
-  .button.small {
-    min-height: 40px;
-    padding: 0 14px;
-    font-size: 13px;
-  }
-
-  .hero-bullets {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-    margin-top: 38px;
-  }
-
-  .hero-bullet {
-    min-height: 132px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.075);
-    padding: 18px;
-  }
-
-  .symbol {
-    width: 44px;
-    height: 34px;
-    display: inline-grid;
-    place-items: center;
-    border-radius: 11px;
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
-    font-family: "Montserrat", sans-serif;
-    font-size: 13px;
-    font-weight: 900;
-  }
-
-  .symbol.light {
-    background: var(--steel-soft);
-    color: var(--steel);
-  }
-
-  .hero-bullet strong,
-  .hero-bullet span {
-    display: block;
-  }
-
-  .hero-bullet strong {
-    margin-top: 14px;
-  }
-
-  .hero-bullet span {
-    margin-top: 6px;
-    color: rgba(255, 255, 255, 0.66);
-    font-size: 14px;
-    line-height: 1.42;
-  }
-
-  .calculator-shell {
+  .hero {
     position: relative;
-    z-index: 2;
-    margin-top: -72px;
-    padding-bottom: 56px;
-  }
-
-  .calculator {
-    border: 1px solid var(--line);
-    border-radius: 28px;
-    background: var(--surface);
-    box-shadow: var(--shadow);
     overflow: hidden;
-  }
-
-  .calc-head {
-    min-height: 100px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    padding: 24px 28px;
     border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(circle at 12% 20%, rgba(11, 95, 181, 0.05), transparent 31%),
+      #ffffff;
   }
 
-  .calc-head .section-kicker {
-    color: var(--steel);
-    margin-bottom: 4px;
+  .hero-grid {
+    min-height: 460px;
+    display: grid;
+    grid-template-columns: 47% 53%;
+    align-items: stretch;
   }
 
-  .calc-head h2,
-  .section-head h2,
-  .contact-layout h2 {
-    font-size: clamp(31px, 4vw, 44px);
-    font-weight: 800;
-    line-height: 1.12;
+  .hero-copy {
+    align-self: center;
+    padding: 64px 52px 64px 0;
   }
 
-  .calc-head p:not(.section-kicker),
-  .section-head p,
-  .contact-layout p {
-    max-width: 740px;
-    color: var(--muted);
-    font-size: 17px;
-  }
-
-  .calc-status {
-    flex: 0 0 auto;
-    border: 1px solid rgba(255, 107, 53, 0.32);
-    border-radius: 999px;
-    background: var(--orange-soft);
-    padding: 9px 13px;
-    color: #8f3519;
+  .eyebrow,
+  .section-kicker {
+    color: var(--blue);
     font-size: 12px;
     font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
-  .calc-grid {
+  h1 {
+    max-width: 610px;
+    margin-top: 14px;
+    font-size: clamp(42px, 4.2vw, 66px);
+    line-height: 1.03;
+    font-weight: 800;
+  }
+
+  .hero-text {
+    max-width: 590px;
+    margin-top: 24px;
+    color: var(--body);
+    font-size: 19px;
+    line-height: 1.48;
+  }
+
+  .hero-list {
     display: grid;
-    grid-template-columns: minmax(240px, 286px) minmax(420px, 1fr) minmax(292px, 332px);
-    min-height: 648px;
+    gap: 12px;
+    margin-top: 25px;
   }
 
-  .calc-panel {
-    padding: 24px;
-    border-right: 1px solid var(--line);
-  }
-
-  .calc-panel:last-child {
-    border-right: 0;
-  }
-
-  .panel-title {
+  .hero-point {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 15px;
-    font-weight: 800;
-  }
-
-  .panel-title small {
-    color: var(--muted);
-    font-size: 12px;
+    gap: 11px;
+    color: var(--body);
+    font-size: 14px;
     font-weight: 600;
   }
 
-  .area-field {
-    display: block;
-    border: 1px solid var(--line);
-    border-radius: 19px;
-    background: var(--paper);
-    padding: 15px;
-  }
-
-  .area-field span {
-    display: block;
-    color: var(--muted);
+  .check {
+    width: 21px;
+    height: 21px;
+    flex: 0 0 21px;
+    display: grid;
+    place-items: center;
+    border: 1px solid #9bbfe3;
+    border-radius: 50%;
+    color: var(--blue);
     font-size: 12px;
-    font-weight: 800;
+    font-weight: 900;
   }
 
-  .area-field input {
+  .hero-image {
+    position: relative;
+    min-height: 460px;
+    margin-right: calc((var(--shell) - min(var(--shell), calc(100vw - 48px))) / -2);
+    overflow: hidden;
+  }
+
+  .hero-image::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.7) 8%, rgba(255, 255, 255, 0) 25%);
+    pointer-events: none;
+  }
+
+  .hero-image::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    z-index: 1;
+    height: 80px;
+    background: linear-gradient(transparent, rgba(8, 26, 47, 0.06));
+  }
+
+  .hero-image img {
     width: 100%;
-    margin-top: 4px;
-    border: 0;
-    outline: 0;
-    background: transparent;
-    color: var(--ink);
-    font-family: "Montserrat", sans-serif;
-    font-size: 46px;
-    font-weight: 800;
-    line-height: 1;
+    height: 100%;
+    min-height: 460px;
+    object-fit: cover;
+    object-position: center;
   }
 
-  .area-field input[aria-invalid] {
-    color: #b6401a;
+  .value-strip {
+    border-bottom: 1px solid var(--line);
+    background: #ffffff;
+  }
+
+  .value-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .value-item {
+    min-height: 126px;
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 15px;
+    align-content: center;
+    padding: 24px 28px;
+    border-left: 1px solid var(--line);
+  }
+
+  .value-item:first-child {
+    border-left: 0;
+  }
+
+  .icon-box {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(11, 95, 181, 0.18);
+    border-radius: 12px;
+    color: var(--blue);
+    background: linear-gradient(180deg, #ffffff, #f3f8fd);
+    box-shadow: 0 10px 24px rgba(11, 95, 181, 0.08);
+  }
+
+  .icon-box svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .value-item strong {
+    display: block;
+    font-size: 15px;
+  }
+
+  .value-item p {
+    margin-top: 4px;
+    color: var(--body);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .section {
+    padding: 76px 0;
+  }
+
+  .section.soft {
+    background: var(--paper);
+  }
+
+  .section-head {
+    margin-bottom: 34px;
+  }
+
+  h2 {
+    margin-top: 8px;
+    font-size: clamp(32px, 3vw, 46px);
+    line-height: 1.1;
+    font-weight: 800;
+  }
+
+  .section-head p {
+    max-width: 740px;
+    margin-top: 12px;
+    color: var(--body);
+    font-size: 16px;
+  }
+
+  .calculator-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 42px;
+    align-items: start;
+  }
+
+  .calculator-panel {
+    min-width: 0;
+    padding: 34px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: var(--shadow);
+  }
+
+  .field-label {
+    display: block;
+    margin-bottom: 9px;
+    font-size: 14px;
+    font-weight: 750;
+  }
+
+  .area-input-wrap {
+    width: 210px;
+    position: relative;
+  }
+
+  .area-input {
+    width: 100%;
+    height: 66px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0 54px 0 20px;
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-size: 22px;
+    font-weight: 800;
+  }
+
+  .area-input[aria-invalid] {
+    border-color: var(--danger);
+  }
+
+  .area-unit {
+    position: absolute;
+    right: 17px;
+    top: 50%;
+    color: var(--muted);
+    font-weight: 700;
+    transform: translateY(-50%);
   }
 
   .area-range {
     width: 100%;
-    accent-color: var(--orange);
-    margin-top: 16px;
+    margin-top: 18px;
+    accent-color: var(--blue);
+  }
+
+  .range-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 11px;
   }
 
   .field-help,
@@ -2005,169 +2371,93 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   }
 
   .field-error {
-    color: #b6401a;
+    color: var(--danger);
     font-weight: 700;
   }
 
-  .area-presets {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 14px;
+  .type-block {
+    margin-top: 32px;
   }
 
-  .area-presets button {
-    min-height: 40px;
+  .type-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .type-button {
+    min-height: 62px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 8px;
     background: #ffffff;
-    color: var(--body);
-    font-weight: 800;
+    color: var(--ink);
+    padding: 0 20px;
+    font-weight: 750;
+    text-align: left;
   }
 
-  .terms-list {
-    display: grid;
-    gap: 12px;
-    margin-top: 20px;
+  .type-button svg {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
-  .terms-list div {
-    border-top: 1px solid var(--line-soft);
-    padding-top: 12px;
+  .type-button.active {
+    border-color: var(--blue);
+    background: var(--selected);
+    color: var(--blue);
+    box-shadow: 0 0 0 1px rgba(11, 95, 181, 0.08);
   }
 
-  .terms-list dt {
+  .services-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: 32px;
+    margin-bottom: 12px;
+  }
+
+  .services-head strong {
+    font-size: 16px;
+  }
+
+  .services-head span {
     color: var(--muted);
     font-size: 12px;
-    font-weight: 800;
-    text-transform: uppercase;
-  }
-
-  .terms-list dd {
-    margin-top: 3px;
-    color: var(--ink);
-    font-weight: 700;
   }
 
   .services {
     display: grid;
-    gap: 10px;
   }
 
   .service-row {
     width: 100%;
-    min-height: 66px;
+    min-height: 56px;
     display: grid;
-    grid-template-columns: 90px 58px minmax(0, 1fr) 92px 104px;
+    grid-template-columns: minmax(0, 1fr) 90px 42px;
     align-items: center;
-    gap: 10px;
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    background: #ffffff;
-    padding: 10px;
+    gap: 16px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    background: transparent;
+    padding: 9px 0;
     color: inherit;
     text-align: left;
   }
 
   .service-row.selected {
-    border-color: rgba(255, 107, 53, 0.42);
-    background: #fffaf7;
-  }
-
-  .service-row:focus-visible,
-  .area-presets button:focus-visible,
-  .button:focus-visible,
-  input:focus-visible,
-  summary:focus-visible {
-    outline: 3px solid rgba(255, 107, 53, 0.5);
-    outline-offset: 2px;
-  }
-
-  .lever {
-    position: relative;
-    width: 88px;
-    height: 44px;
-  }
-
-  .lever .pipe,
-  .lever .body,
-  .lever .stem,
-  .lever .handle {
-    position: absolute;
-    display: block;
-  }
-
-  .lever .pipe {
-    left: 4px;
-    right: 4px;
-    top: 24px;
-    height: 8px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #c7d0d8, #f1f4f6);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
-  }
-
-  .lever .body {
-    left: 33px;
-    top: 14px;
-    width: 28px;
-    height: 25px;
-    border: 2px solid #aeb9c2;
-    border-radius: 7px;
-    background: #d8dee3;
-  }
-
-  .lever .stem {
-    left: 44px;
-    top: 7px;
-    width: 6px;
-    height: 16px;
-    border-radius: 999px;
-    background: #9ba7af;
-  }
-
-  .lever .handle {
-    left: 42px;
-    top: 2px;
-    width: 44px;
-    height: 12px;
-    border-radius: 999px 6px 6px 999px;
-    background: #9ba7af;
-    transform: rotate(82deg);
-    transform-origin: 6px 50%;
-    transition: transform 160ms ease, background 160ms ease;
-  }
-
-  .selected .lever .body {
-    border-color: var(--orange);
-    background: #fff0e8;
-  }
-
-  .selected .lever .stem,
-  .selected .lever .handle {
-    background: var(--orange);
-  }
-
-  .selected .lever .handle {
-    transform: rotate(0deg);
-  }
-
-  .service-code {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 46px;
-    height: 30px;
-    border-radius: 10px;
-    background: var(--steel-soft);
-    color: var(--steel);
-    font-size: 12px;
-    font-weight: 900;
-  }
-
-  .selected .service-code {
-    background: var(--orange-soft);
-    color: #8f3519;
+    background: var(--selected);
+    margin-inline: -12px;
+    padding-inline: 12px;
+    border-radius: 8px;
   }
 
   .service-copy {
@@ -2180,109 +2470,120 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   }
 
   .service-copy strong {
+    overflow-wrap: anywhere;
+    font-size: 14px;
     font-weight: 800;
   }
 
   .service-copy span {
-    margin-top: 2px;
+    margin-top: 1px;
     color: var(--muted);
-    font-size: 12px;
-  }
-
-  .rate,
-  .row-price {
-    color: var(--body);
-    font-size: 13px;
-    font-weight: 800;
+    font-size: 11px;
   }
 
   .row-price {
     text-align: right;
   }
 
-  .row-price strong,
-  .row-price span {
-    display: block;
-  }
-
   .row-price strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
     color: var(--ink);
-    font-family: "Montserrat", sans-serif;
-    font-size: 16px;
+    font-family: var(--font-heading);
+    font-size: 14px;
+    font-weight: 800;
+    white-space: nowrap;
   }
 
-  .row-price span {
-    margin-top: 2px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 600;
+  .currency-symbol {
+    width: 0.72em;
+    height: 0.72em;
+    display: inline-block;
+    object-fit: contain;
+    vertical-align: -0.04em;
+  }
+
+  .toggle {
+    width: 38px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    border: 1px solid #c8d2dc;
+    border-radius: 999px;
+    background: #d4dbe2;
+    padding: 2px;
+    transition: 0.16s ease;
+  }
+
+  .toggle span {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(16, 32, 51, 0.22);
+    transition: 0.16s ease;
+  }
+
+  .selected .toggle {
+    justify-content: flex-end;
+    border-color: var(--blue);
+    background: var(--blue);
   }
 
   .service-empty {
     border: 1px dashed var(--line);
-    border-radius: 18px;
+    border-radius: 8px;
     background: var(--paper);
     padding: 18px;
     color: var(--body);
     font-weight: 700;
   }
 
-  .result-card {
-    border-radius: 22px;
-    background: var(--navy);
-    color: #ffffff;
-    padding: 20px;
-  }
-
-  .result-label {
-    color: rgba(255, 255, 255, 0.68);
-    font-size: 12px;
-    font-weight: 800;
-    text-transform: uppercase;
-  }
-
-  .total {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-top: 10px;
-    font-size: clamp(44px, 5vw, 58px);
-    line-height: 1;
-    font-weight: 800;
-  }
-
-  .total span {
-    font-size: 0.5em;
-  }
-
-  .usd-line {
-    margin-top: 8px;
-    color: rgba(255, 255, 255, 0.72);
-    font-weight: 600;
-  }
-
-  .summary-list,
-  .calc-note,
-  .lead-shell,
-  .example-request-form {
-    display: grid;
-    gap: 9px;
+  .calc-footnote {
     margin-top: 18px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .result-card {
+    position: sticky;
+    top: 96px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 28px;
+    box-shadow: var(--shadow);
+  }
+
+  .result-card h3 {
+    color: var(--blue);
+    font-size: 14px;
+    margin-bottom: 18px;
+  }
+
+  .selected-list {
+    display: grid;
+    gap: 12px;
   }
 
   .summary-row {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 18px;
-    border-bottom: 1px solid var(--line-soft);
-    padding-bottom: 8px;
+    gap: 16px;
     color: var(--body);
     font-size: 13px;
   }
 
   .summary-row strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     color: var(--ink);
+    font-family: var(--font-heading);
+    font-weight: 800;
     white-space: nowrap;
   }
 
@@ -2290,112 +2591,293 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     color: var(--muted);
   }
 
-  .calc-note div {
-    border-radius: 15px;
-    background: var(--paper);
-    padding: 11px 12px;
+  .area-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin-top: 26px;
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
     color: var(--body);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 14px;
   }
 
-  .lead-shell label,
-  .example-request-form label {
-    display: grid;
-    gap: 5px;
-  }
-
-  .lead-shell label span,
-  .example-request-form label span {
-    color: var(--muted);
-    font-size: 12px;
+  .area-summary strong {
+    color: var(--ink);
+    font-family: var(--font-heading);
     font-weight: 800;
   }
 
-  .lead-shell input:not([type="checkbox"]),
-  .example-request-form input:not([type="checkbox"]) {
-    min-height: 44px;
+  .total-box {
+    margin-top: 28px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f7f9fc, #eef3f8);
+    padding: 28px 24px;
+  }
+
+  .total-label {
+    color: var(--body);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .total {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 7px;
+    font-family: var(--font-heading);
+    font-size: clamp(34px, 4vw, 42px);
+    line-height: 1;
+    font-weight: 800;
+  }
+
+  .total .currency-symbol {
+    width: 0.62em;
+    height: 0.62em;
+  }
+
+  .result-cta {
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .result-note {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .benefits-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 36px;
+    align-items: start;
+  }
+
+  .benefit {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    text-align: center;
+  }
+
+  .benefit svg {
+    width: 62px;
+    height: 62px;
+    border: 1px solid rgba(11, 95, 181, 0.18);
+    border-radius: 16px;
+    padding: 15px;
+    background: linear-gradient(180deg, #ffffff, #f3f8fd);
+    box-shadow: 0 12px 28px rgba(11, 95, 181, 0.08);
+    fill: none;
+    stroke: var(--blue);
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .benefit strong {
+    max-width: 190px;
+    font-size: 14px;
+    line-height: 1.38;
+  }
+
+  .docs-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 22px;
+  }
+
+  .doc-card {
+    min-width: 0;
+  }
+
+  .doc-image {
+    width: 100%;
+    aspect-ratio: 1.43;
     border: 1px solid var(--line);
-    border-radius: 999px;
+    border-radius: 8px;
     background: #ffffff;
-    padding: 0 14px;
+    object-fit: cover;
+    object-position: center;
   }
 
-  .lead-shell input[aria-invalid],
-  .example-request-form input[aria-invalid] {
-    border-color: #b6401a;
-    background: #fff8f4;
+  .doc-body {
+    padding: 14px 8px 0;
   }
 
-  .lead-shell .field-error,
-  .example-request-form .field-error {
-    margin-top: -2px;
+  .doc-body strong {
+    color: var(--blue);
+    font-size: 15px;
+  }
+
+  .doc-body p {
+    margin-top: 7px;
+    color: var(--body);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .text-button {
+    margin-top: 10px;
+    border: 0;
+    background: transparent;
+    color: var(--blue);
+    padding: 0;
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .example-request-form {
+    display: grid;
+    grid-template-columns: minmax(230px, 0.78fr) minmax(320px, 1fr) minmax(430px, 1.22fr);
+    gap: 28px;
+    align-items: stretch;
+    margin-top: 34px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 26px;
+    box-shadow: 0 18px 42px rgba(16, 32, 51, 0.07);
+  }
+
+  .example-form-copy {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    border-right: 1px solid var(--line);
+    padding-right: 26px;
+  }
+
+  .example-form-copy strong {
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.18;
+  }
+
+  .example-form-copy span,
+  .example-request-form p,
+  .lead-form p {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
   }
 
   .example-choice-group {
     display: grid;
-    gap: 8px;
+    align-content: start;
+    gap: 10px;
     margin: 0;
     border: 0;
     padding: 0;
   }
 
-  .example-choice-group legend {
-    margin-bottom: 2px;
+  .example-choice-group legend,
+  .example-request-form label span,
+  .lead-form label span {
+    margin-bottom: 7px;
     color: var(--muted);
     font-size: 12px;
     font-weight: 800;
   }
 
   .example-choice {
-    grid-template-columns: 18px 36px minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: 20px 40px minmax(0, 1fr);
     align-items: center;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: #ffffff;
-    padding: 9px 10px;
+    gap: 11px;
+    min-height: 48px;
+    border: 1px solid rgba(219, 227, 235, 0.85);
+    border-radius: 10px;
+    background: #f8fbfe;
+    padding: 9px 11px;
   }
 
-  .example-choice input {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--orange);
+  .example-choice input,
+  .consent-row input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--blue);
   }
 
   .example-choice span {
     display: inline-grid;
     place-items: center;
-    width: 30px;
-    min-height: 24px;
-    border-radius: 9px;
-    background: var(--orange-soft);
-    color: #8f3519;
-    font-size: 11px;
-    font-weight: 900;
+    width: 36px;
+    min-height: 26px;
+    border-radius: 999px;
+    background: #e7f1fb;
+    color: var(--blue);
+    font-family: var(--font-heading);
+    font-size: 12px;
+    font-weight: 800;
   }
 
   .example-choice strong {
     min-width: 0;
-    color: var(--ink);
-    font-size: 12px;
-    line-height: 1.25;
+    font-size: 13px;
+    line-height: 1.3;
+  }
+
+  .example-fields {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 13px;
+  }
+
+  .example-input-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .example-request-form label,
+  .lead-form label {
+    display: grid;
+    gap: 5px;
+  }
+
+  .example-request-form input:not([type="checkbox"]),
+  .lead-form input:not([type="checkbox"]),
+  .lead-form textarea {
+    width: 100%;
+    min-height: 52px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0 16px;
+  }
+
+  .lead-form textarea {
+    min-height: 98px;
+    padding: 12px 14px;
+    resize: vertical;
+  }
+
+  .example-request-form input[aria-invalid],
+  .lead-form input[aria-invalid] {
+    border-color: var(--danger);
+    background: #fff8f4;
   }
 
   .consent-row {
+    display: grid;
     grid-template-columns: 18px minmax(0, 1fr);
     align-items: start;
-    border-radius: 16px;
-    background: var(--paper);
+    gap: 11px;
+    border: 1px solid rgba(219, 227, 235, 0.85);
+    border-radius: 10px;
+    background: #f8fbfe;
     padding: 11px 12px;
   }
 
   .consent-row input {
-    width: 16px;
-    height: 16px;
-    min-height: 0;
-    margin: 3px 0 0;
-    padding: 0;
-    accent-color: var(--orange);
+    margin: 1px 0 0;
   }
 
   .consent-row span {
@@ -2404,45 +2886,32 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     line-height: 1.35;
   }
 
-  .lead-shell .button,
-  .example-request-form .button {
+  .example-action-row {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    margin-top: 2px;
+  }
+
+  .example-action-row .button {
+    min-height: 52px;
     width: 100%;
-    padding-inline: 10px;
+    white-space: nowrap;
   }
 
-  .lead-shell p,
-  .example-request-form p {
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .lead-shell p.is-ready,
-  .example-request-form p.is-ready {
-    color: #8f3519;
-  }
-
-  .lead-shell p.is-error,
-  .example-request-form p.is-error {
-    color: #b6401a;
-  }
-
-  .lead-shell p.is-loading,
-  .example-request-form p.is-loading {
-    color: var(--steel);
-  }
-
-  .privacy-note {
-    border-top: 1px solid var(--line-soft);
-    padding-top: 10px;
+  .example-action-row p {
+    border-radius: 10px;
+    background: #eef5fb;
+    padding: 11px 12px;
   }
 
   .lead-success {
     display: grid;
     gap: 5px;
-    border: 1px solid rgba(47, 95, 127, 0.24);
-    border-radius: 16px;
-    background: #eef5f8;
+    border: 1px solid rgba(11, 95, 181, 0.22);
+    border-radius: 10px;
+    background: #eef5fb;
     padding: 12px;
     color: var(--body);
     font-size: 12px;
@@ -2459,11 +2928,9 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     font-size: 13px;
   }
 
-  .proposal-link {
-    width: fit-content;
-    border-bottom: 1px solid var(--steel);
-    color: var(--steel);
-    font-weight: 800;
+  .lead-success .currency-symbol {
+    width: 0.7em;
+    height: 0.7em;
   }
 
   .proposal-actions {
@@ -2472,404 +2939,463 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     gap: 8px 14px;
   }
 
-  .section {
-    padding: 76px 0;
-  }
-
-  .section.white {
-    background: #ffffff;
-  }
-
-  .section.dark {
-    background: var(--navy);
-    color: #ffffff;
-  }
-
-  .section-head {
-    display: grid;
-    grid-template-columns: minmax(220px, 390px) minmax(0, 1fr);
-    gap: 58px;
-    margin-bottom: 30px;
-  }
-
-  .section-head .section-kicker {
-    color: var(--steel);
-    grid-column: 1 / -1;
-    margin-bottom: -12px;
-  }
-
-  .dark .section-kicker,
-  .dark .section-head p,
-  .dark .contact-layout p {
-    color: rgba(255, 255, 255, 0.7);
-  }
-
-  .deliverables {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .tile,
-  .object-card,
-  .step,
-  details,
-  .contact-card {
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.88);
-  }
-
-  .tile {
-    min-height: 190px;
-    padding: 20px;
-  }
-
-  .tile h3,
-  .object-card h3,
-  .step h3 {
-    margin-top: 13px;
-    font-size: 20px;
+  .proposal-link {
+    width: fit-content;
+    border-bottom: 1px solid var(--blue);
+    color: var(--blue);
     font-weight: 800;
   }
 
-  .tile p,
-  .object-card p,
-  .step p,
-  details p {
-    margin-top: 8px;
-    color: var(--muted);
-    font-size: 14px;
-  }
-
-  .objects {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1.12fr;
-    gap: 16px;
-  }
-
-  .object-card {
-    overflow: hidden;
-  }
-
-  .object-card.accent {
-    border-color: rgba(255, 107, 53, 0.36);
-  }
-
-  .blueprint {
+  .process {
     position: relative;
-    height: 190px;
-    overflow: hidden;
-    background:
-      linear-gradient(rgba(47, 95, 127, 0.13) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(47, 95, 127, 0.13) 1px, transparent 1px),
-      #f7fbff;
-    background-size: 20px 20px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 30px;
   }
 
-  .blueprint::before {
-    content: attr(data-title);
+  .process::before {
+    content: "";
     position: absolute;
-    left: 18px;
     top: 15px;
-    color: var(--steel);
-    font-size: 13px;
-    font-weight: 900;
-  }
-
-  .room,
-  .pipe-line,
-  .node {
-    position: absolute;
-  }
-
-  .room {
-    border: 2px solid var(--steel);
-    border-radius: 6px;
-  }
-
-  .room.r1 {
-    left: 38px;
-    top: 55px;
-    width: 146px;
-    height: 84px;
-  }
-
-  .room.r2 {
-    right: 42px;
-    top: 70px;
-    width: 116px;
-    height: 72px;
-    border-left-width: 8px;
-  }
-
-  .pipe-line {
-    height: 3px;
-    border-radius: 999px;
-    background: var(--steel);
-  }
-
-  .pipe-line.l1 {
-    left: 64px;
-    top: 124px;
-    width: 260px;
-  }
-
-  .pipe-line.l2 {
-    left: 112px;
-    top: 100px;
-    width: 216px;
-    transform: rotate(-14deg);
-    transform-origin: left center;
-  }
-
-  .node {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    border: 2px solid var(--orange);
-    border-radius: 999px;
-    background: #ffffff;
-    color: #8f3519;
-    font-size: 11px;
-    font-weight: 900;
-  }
-
-  .node.n1 {
-    left: 188px;
-    top: 108px;
-  }
-
-  .node.n2 {
-    right: 86px;
-    top: 118px;
-  }
-
-  .object-body {
-    display: grid;
-    gap: 12px;
-    padding: 18px;
-  }
-
-  .example-meta {
-    color: var(--steel);
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-
-  .object-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-    margin-top: 2px;
-  }
-
-  .text-link {
-    color: var(--steel);
-    font-size: 13px;
-    font-weight: 900;
-    text-decoration: none;
-  }
-
-  .text-link:hover {
-    color: var(--orange);
-  }
-
-  .steps {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    left: 7%;
+    right: 7%;
+    height: 1px;
+    background: var(--line-strong);
   }
 
   .step {
-    min-height: 180px;
-    padding: 20px;
+    position: relative;
+    display: grid;
+    gap: 10px;
+    align-content: start;
   }
 
-  .step span {
-    color: var(--steel);
-    font-size: 12px;
-    font-weight: 900;
-    text-transform: uppercase;
+  .step-number {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #ffffff;
+    font-family: var(--font-heading);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .step-icon {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(11, 95, 181, 0.18);
+    border-radius: 12px;
+    color: var(--blue);
+    background: linear-gradient(180deg, #ffffff, #f3f8fd);
+    box-shadow: 0 10px 24px rgba(11, 95, 181, 0.08);
+  }
+
+  .step-icon svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .step strong {
+    font-size: 15px;
+  }
+
+  .step p {
+    color: var(--body);
+    font-size: 13px;
+    line-height: 1.5;
   }
 
   .faq-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    gap: 14px 24px;
   }
 
-  details {
-    padding: 20px;
+  .faq-item h3 {
+    margin: 0;
   }
 
-  summary {
-    cursor: pointer;
+  .faq-question {
+    width: 100%;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
     color: var(--ink);
-    font-weight: 800;
+    padding: 0 18px;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: left;
   }
 
-  .contact-layout {
+  .faq-question span:last-child {
+    color: var(--blue);
+    font-size: 18px;
+    transition: transform 0.16s ease;
+  }
+
+  .faq-question[aria-expanded="true"] span:last-child {
+    transform: rotate(180deg);
+  }
+
+  .faq-answer {
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    background: #ffffff;
+    padding: 14px 18px 18px;
+    color: var(--body);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .cta-section {
+    background: var(--navy);
+    color: #ffffff;
+    padding: 72px 0 0;
+  }
+
+  .cta-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 420px;
-    gap: 48px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px) minmax(240px, 310px);
+    gap: 52px;
     align-items: start;
   }
 
-  .contact-layout .section-kicker {
-    margin-bottom: 16px;
+  .cta-copy h2 {
+    max-width: 480px;
+    font-size: clamp(30px, 3vw, 40px);
+    line-height: 1.1;
   }
 
-  .contact-layout h2 {
-    max-width: 620px;
-  }
-
-  .contact-layout p {
-    max-width: 680px;
+  .cta-copy p {
+    max-width: 520px;
     margin-top: 16px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 16px;
   }
 
-  .contact-card {
-    padding: 22px;
-    color: var(--ink);
-  }
-
-  .contact-card dl {
+  .cta-facts {
     display: grid;
-    gap: 12px;
-    margin-bottom: 18px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: 46px;
   }
 
-  .contact-card dt {
-    color: var(--muted);
+  .cta-fact {
+    color: rgba(255, 255, 255, 0.7);
     font-size: 12px;
-    font-weight: 900;
-    text-transform: uppercase;
   }
 
-  .contact-card dd {
-    margin-top: 3px;
-    font-weight: 800;
+  .cta-fact strong,
+  .cta-fact span {
+    display: block;
   }
 
-  @media (max-width: 1080px) {
-    .nav-links {
-      display: none;
-    }
-
-    .hero-bullets,
-    .deliverables,
-    .steps {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .calc-head {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-
-    .calc-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .calc-panel {
-      border-right: 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .result-panel {
-      order: -1;
-    }
-
-    .objects,
-    .contact-layout {
-      grid-template-columns: 1fr;
-    }
-
-    .section-head {
-      grid-template-columns: 1fr;
-      gap: 14px;
-    }
+  .cta-fact strong {
+    margin-bottom: 4px;
+    color: #ffffff;
+    font-size: 13px;
   }
 
-  @media (max-width: 720px) {
-    .container {
-      width: min(100% - 28px, 1248px);
+  .lead-form {
+    display: grid;
+    gap: 10px;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 20px;
+    color: var(--ink);
+    box-shadow: 0 24px 58px rgba(0, 0, 0, 0.22);
+  }
+
+  .lead-form .button {
+    width: 100%;
+  }
+
+  .lead-form p.is-ready,
+  .example-request-form p.is-ready {
+    color: var(--success);
+  }
+
+  .lead-form p.is-error,
+  .example-request-form p.is-error {
+    color: var(--danger);
+  }
+
+  .lead-form p.is-loading,
+  .example-request-form p.is-loading {
+    color: var(--blue);
+  }
+
+  .privacy-note {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+
+  .contacts h3 {
+    font-size: 24px;
+  }
+
+  .contact-list {
+    display: grid;
+    gap: 15px;
+    margin-top: 20px;
+  }
+
+  .contact-row {
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 14px;
+  }
+
+  .contact-row svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    fill: none;
+    stroke: #9bbfe3;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .contacts-note {
+    margin-top: 30px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 14px;
+  }
+
+  .footer {
+    min-height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-top: 54px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+  }
+
+  .service-row:focus-visible,
+  .type-button:focus-visible,
+  .button:focus-visible,
+  .top-cta:focus-visible,
+  .text-button:focus-visible,
+  .faq-question:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid rgba(11, 95, 181, 0.35);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 1100px) {
+    .header-inner {
+      grid-template-columns: 220px 1fr;
     }
 
     .nav {
-      min-height: 74px;
-    }
-
-    .brand small {
       display: none;
     }
 
-    .hero {
-      padding: 44px 0 96px;
+    .top-cta {
+      justify-self: end;
     }
 
-    .hero-actions .button {
-      width: 100%;
-    }
-
-    .hero-bullets,
-    .deliverables,
-    .steps,
-    .faq-grid {
+    .calculator-layout,
+    .cta-grid {
       grid-template-columns: 1fr;
     }
 
-    .calculator-shell {
-      margin-top: -58px;
+    .result-card {
+      position: static;
     }
 
-    .calc-head,
-    .calc-panel {
-      padding: 18px;
+    .benefits-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .calc-status {
-      border-radius: 14px;
+    .docs-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .service-row {
-      grid-template-columns: 88px minmax(0, 1fr);
-      grid-template-areas:
-        "lever copy"
-        "code rate"
-        "code price";
-      min-height: 120px;
-      gap: 8px 12px;
+    .example-request-form {
+      grid-template-columns: 1fr;
     }
 
-    .service-row .lever {
-      grid-area: lever;
+    .example-form-copy {
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+      padding-right: 0;
+      padding-bottom: 22px;
     }
 
-    .service-code {
-      grid-area: code;
+    .process {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .service-copy {
-      grid-area: copy;
+    .process::before {
+      display: none;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .shell {
+      width: min(100% - 28px, var(--shell));
     }
 
-    .rate {
-      grid-area: rate;
+    .header-inner {
+      min-height: 66px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
     }
 
-    .row-price {
-      grid-area: price;
-      text-align: left;
+    .brand strong {
+      font-size: 14px;
+    }
+
+    .brand span {
+      max-width: 160px;
+      font-size: 10px;
+      line-height: 1.25;
+    }
+
+    .top-cta {
+      min-height: 38px;
+      padding: 0 13px;
+      font-size: 12px;
+    }
+
+    .hero-grid {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hero-copy {
+      padding: 34px 0 22px;
+    }
+
+    h1 {
+      font-size: clamp(32px, 11vw, 42px);
+    }
+
+    .hero-text {
+      font-size: 16px;
+    }
+
+    .hero-image {
+      min-height: 0;
+      margin: 0 -14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .hero-image::before {
+      display: none;
+    }
+
+    .hero-image img {
+      min-height: 0;
+      aspect-ratio: 1.15;
+    }
+
+    .value-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .value-item {
+      min-height: 98px;
+      border-left: 0;
+      border-top: 1px solid var(--line);
+      padding: 20px 0;
     }
 
     .section {
-      padding: 56px 0;
+      padding: 52px 0;
+    }
+
+    .calculator-panel,
+    .result-card {
+      padding: 18px;
+    }
+
+    .type-switch,
+    .docs-grid,
+    .faq-grid,
+    .example-request-form,
+    .example-input-grid,
+    .example-action-row,
+    .process,
+    .benefits-grid,
+    .cta-facts {
+      grid-template-columns: 1fr;
+    }
+
+    .area-input-wrap {
+      width: 100%;
+    }
+
+    .service-row {
+      grid-template-columns: minmax(0, 1fr) 74px 42px;
+      gap: 10px;
+    }
+
+    .service-copy strong,
+    .row-price strong {
+      font-size: 12px;
+    }
+
+    .service-copy span {
+      font-size: 10px;
+    }
+
+    .total-box {
+      padding: 22px 18px;
+    }
+
+    .process {
+      gap: 22px;
+    }
+
+    .step {
+      grid-template-columns: 48px minmax(0, 1fr);
+      gap: 8px 12px;
+    }
+
+    .step-icon {
+      grid-column: 1;
+    }
+
+    .step strong,
+    .step p {
+      grid-column: 2;
+    }
+
+    .cta-section {
+      padding-top: 52px;
+    }
+
+    .footer {
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 18px 0;
     }
   }
 </style>
