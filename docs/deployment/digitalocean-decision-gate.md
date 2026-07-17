@@ -4,12 +4,12 @@ Date: 2026-07-10
 Task: PZK-013
 DigitalOcean Project: `engineering-calculator`
 Project ID: `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`
-Project environment: Development
-Current DigitalOcean resources in this Project: 0
+Project environment: Development in DigitalOcean Project metadata; the production launch intentionally uses this existing Project container for now.
+Current DigitalOcean resources in this Project after PZK-015: three App Platform apps and one Managed PostgreSQL 18 cluster
 
-No DigitalOcean App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, or other paid resource was created for PZK-013. This document is a decision record only.
+PZK-013 was a decision record only and did not create resources. PZK-015 later applied this decision after explicit user approval for paid DigitalOcean resources.
 
-PZK-014 deployment preparation is documented in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md). That follow-up is still preparation only; it does not approve or create paid resources.
+PZK-014 deployment preparation is documented in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md). That runbook is now historical prep plus the current PZK-015 production overlay. Current production URLs are `https://poznyak.by`, `https://admin.poznyak.by`, and `https://api.poznyak.by`.
 
 ## Decision
 
@@ -25,9 +25,9 @@ Reject Droplet + Docker Compose for the first production launch. A Droplet is ch
 
 ## Resource Boundary
 
-PZK-013 does not approve spend.
+PZK-013 did not approve spend. PZK-015 approval covered the first production App Platform plus Managed PostgreSQL 18 launch.
 
-Future provisioning remains blocked until the user explicitly confirms paid resource creation. When provisioning is approved, App Platform resources must be created under Project ID `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`, for example with `doctl apps create --project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3 --spec <spec.yaml>`.
+Future additional provisioning remains blocked until the user explicitly confirms paid resource creation. Any new App Platform resources must be created under Project ID `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`, for example with `doctl apps create --project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3 --spec <spec.yaml>`.
 
 DigitalOcean Projects are organizational containers. The Project itself is free; billing starts from resources such as app services, managed databases, Spaces, Droplets, outbound transfer overages, and add-ons.
 
@@ -97,7 +97,7 @@ Current repo expectations:
 - PDF generation: Chromium/headless browser is required. `backend/Dockerfile` runs `bun x playwright install --with-deps chromium`.
 - Backend production env: `NODE_ENV=production`, `COOKIE_SECURE=true`, `TRUST_PROXY_HEADERS=true`.
 
-PZK-014 must verify DigitalOcean's build/runtime output for Bun, Node, Prisma Client generation, and Chromium PDF generation before real traffic.
+PZK-015 verified DigitalOcean build/runtime output for the first launch, including Bun-pinned static builds, backend Docker deployment, Prisma migrations, and Chromium PDF generation. Re-check these after runtime, Dockerfile, or App Platform buildpack changes.
 
 ## Health Checks And Smoke Checks
 
@@ -127,14 +127,14 @@ Backend runtime:
 
 - `DATABASE_URL` as a secret from Managed PostgreSQL binding.
 - `JWT_SECRET` as a secret, at least 32 random characters, not the example placeholder.
-- `CORS_ORIGINS=https://www.<domain>` after domain cutover.
+- `CORS_ORIGINS=https://<canonical-public-domain>` after domain cutover.
 - `AUTH_CORS_ORIGINS=https://admin.<domain>`.
 - `ACCESS_TOKEN_TTL_SECONDS=900`.
 - `REFRESH_TOKEN_TTL_DAYS=30`.
 - `COOKIE_SECURE=true`.
 - `TRUST_PROXY_HEADERS=true`.
 - `PUBLIC_API_URL=https://api.<domain>`.
-- `PUBLIC_WEBSITE_URL=https://www.<domain>`.
+- `PUBLIC_WEBSITE_URL=https://<canonical-public-domain>`.
 - `PUBLIC_WEBAPP_URL=https://admin.<domain>`.
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` only after the approved internal chat is confirmed.
 - `PDF_CHROMIUM_EXECUTABLE_PATH` only if production needs a non-default Chromium executable.
@@ -144,7 +144,7 @@ Website build-time:
 
 - `PUBLIC_API_URL=https://api.<domain>`.
 - `PUBLIC_WEBAPP_URL=https://admin.<domain>`.
-- `PUBLIC_WEBSITE_URL=https://www.<domain>`.
+- `PUBLIC_WEBSITE_URL=https://<canonical-public-domain>`.
 
 Webapp build-time:
 
@@ -156,15 +156,15 @@ Do not place backend secrets, database URLs, JWT secrets, Telegram secrets, or s
 
 DNS management stays at the current registrar. Do not move nameservers to DigitalOcean unless the user explicitly changes this decision.
 
-Chosen hostname pattern:
+Current production hostname pattern:
 
-- Canonical public website: `www.<production-domain>`.
-- Apex/root domain: redirect to `www.<production-domain>` after both hosts are attached and TLS is valid.
+- Canonical public website: apex `https://poznyak.by`.
+- `www.poznyak.by`: redirect to `https://poznyak.by` after both hosts are attached and TLS is valid.
 - Admin webapp: `admin.<production-domain>`.
 - Backend/API: `api.<production-domain>`.
 - Future Spaces CDN or public files, if approved: `files.<production-domain>` or `cdn.<production-domain>`.
 
-The exact base domain is still an open user decision. No DNS cutover can happen until the base domain and registrar access are confirmed.
+For future projects or domains, confirm the exact base domain and registrar access before DNS cutover. This production deployment uses `poznyak.by` at HB.BY.
 
 Domain attach sequence:
 
@@ -209,9 +209,9 @@ If a Cloudflare or external CDN layer is introduced later, treat it as a separat
 Baseline:
 
 - Use Managed PostgreSQL automated backups for routine recovery.
-- Confirm the exact backup retention, point-in-time restore capability, and restore procedure in the DigitalOcean dashboard before provisioning.
+- Confirm the exact backup retention, point-in-time restore capability, and restore procedure in the DigitalOcean dashboard after the first production billing/ops review.
 - Take manual backups/snapshots before destructive migrations, bulk imports, or cleanup scripts.
-- Store restore notes in the deployment runbook after the first production DB exists.
+- The first production DB is `engineering-calculator-pg` in `fra1`; restore notes should now reference this cluster and must include proposal `pdfBytes` recovery checks.
 
 Restore drill target:
 
@@ -250,11 +250,11 @@ Baseline:
 - Monitor App Platform CPU, memory, restarts, deployment failures, health-check failures, and outbound transfer.
 - Keep application logs free of secrets and avoid printing full Telegram tokens, database URLs, JWTs, or lead payload dumps.
 
-PZK-014 added the concrete post-deploy smoke checklist in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md). After resources exist, extend that runbook with the exact App Platform log and alert locations used by the production app.
+PZK-014 added the concrete post-deploy smoke checklist in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md). PZK-015 executed the first production smoke; future tasks should extend that runbook with the exact App Platform log and alert locations used by the production app.
 
 ## Expected Monthly Cost
 
-Pricing checked on 2026-07-10 against DigitalOcean pricing pages. Verify again before provisioning.
+Pricing checked on 2026-07-10 against DigitalOcean pricing pages before the first approval. Verify again before additional provisioning or resizing.
 
 Starter App Platform path:
 
@@ -279,7 +279,7 @@ Rejected Droplet path:
 
 Implemented in [digitalocean-app-platform-prep.md](digitalocean-app-platform-prep.md) and kept here as the original decision-gate handoff checklist.
 
-Before provisioning:
+Historical preflight, satisfied for PZK-015 and still required before future provisioning:
 
 - Confirm exact base domain and registrar access.
 - Confirm the user explicitly approves paid resources and expected monthly baseline.
@@ -293,7 +293,7 @@ Before provisioning:
 - Prepare production env values and secrets outside the repo.
 - Generate specs only into `.scratch/deploy` from a clean, pushed release branch.
 - Validate specs with `doctl apps spec validate` before create/update.
-- Do not run `doctl apps create`, create DBs, create Spaces, create Droplets, or change DNS until the user separately approves paid provisioning.
+- Do not run additional `doctl apps create`, create DBs, create Spaces, create Droplets, or change DNS until the user separately approves paid provisioning.
 
 After provisioning but before real leads:
 

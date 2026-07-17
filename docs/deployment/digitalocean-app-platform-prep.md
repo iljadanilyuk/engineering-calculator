@@ -2,11 +2,11 @@
 
 Date: 2026-07-11
 Task: PZK-014
-Status: preparation only
+Status: preparation-only runbook, applied by PZK-015
 DigitalOcean Project: `engineering-calculator`
 Project ID: `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`
 
-No DigitalOcean App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, domain attachment, or other paid resource has been created for PZK-014. This runbook is safe preparation only. Do not run `doctl apps create`, `doctl apps update`, create databases, create Spaces, create Droplets, or change DNS until the user separately approves provisioning and DNS work.
+Historical note: PZK-014 itself did not create or update DigitalOcean resources. PZK-015 later applied this runbook after explicit user approval for paid resources. The current production deployment uses `https://poznyak.by` as the canonical public website, `https://admin.poznyak.by` for the admin webapp, and `https://api.poznyak.by` for the backend API. Do not create additional App Platform apps, databases, Spaces buckets, Droplets, DNS changes, or other paid resources without a new explicit approval.
 
 ## Provider Docs Checked
 
@@ -30,7 +30,7 @@ Current provider facts that matter for this repo:
 
 ## Release Boundary
 
-Provisioning remains blocked until all of these are true:
+Future provisioning or production-shape changes remain blocked until all of these are true:
 
 - User approves the expected paid resources.
 - Base production domain is confirmed.
@@ -56,7 +56,7 @@ The committed draft templates intentionally use three App Platform apps, each wi
 | --- | --- | --- | --- | --- |
 | Backend/API | `.do/backend-app.yaml.example` | `services[0].name: api` | `api.<production-domain>` | Dockerfile `backend/Dockerfile`, `PORT=8080`, `/health` checks, `bun run start` from Docker CMD |
 | Admin webapp | `.do/webapp-static-app.yaml.example` | `static_sites[0].name: webapp` | `admin.<production-domain>` | `bun install --frozen-lockfile && bun run build:webapp`, output `webapp/dist`, catch-all `index.html` |
-| Public website | `.do/website-static-app.yaml.example` | `static_sites[0].name: website` | `www.<production-domain>` | `bun install --frozen-lockfile && bun run build:website`, output `website/dist` |
+| Public website | `.do/website-static-app.yaml.example` | `static_sites[0].name: website` | canonical `<production-domain>` | `bun install --frozen-lockfile && bun run build:website`, output `website/dist` |
 | Database | backend spec `databases[0]` | Managed PostgreSQL | attached to backend app | `engine: PG`, `version: "18"`, `production: true` |
 
 Static sites are build-time configured. Any change to `VITE_API_URL`, `PUBLIC_API_URL`, `PUBLIC_WEBAPP_URL`, or `PUBLIC_WEBSITE_URL` requires rebuilding/redeploying the static site.
@@ -91,7 +91,7 @@ bun run deploy:do:specs website
 doctl apps spec validate .scratch/deploy/website-static-app.yaml
 
 # 4. Backend final draft after all public origins are known.
-export DO_WEBSITE_URL=https://<www-default-ingress-or-www-custom-domain>
+export DO_WEBSITE_URL=https://<website-default-ingress-or-canonical-custom-domain>
 export DO_BACKEND_URL=https://<api-default-ingress-or-api-custom-domain>
 bun run deploy:do:specs backend-final
 doctl apps spec validate .scratch/deploy/backend-app.yaml
@@ -102,7 +102,7 @@ For the custom-domain cutover, use final values:
 ```bash
 DO_BACKEND_URL=https://api.<production-domain>
 DO_WEBAPP_URL=https://admin.<production-domain>
-DO_WEBSITE_URL=https://www.<production-domain>
+DO_WEBSITE_URL=https://<production-domain>
 ```
 
 Do not accept real leads while final URL env vars still point at `placeholder.invalid`, `localhost`, or temporary `*.ondigitalocean.app` origins. Proposal HTML/PDF snapshots are immutable and can permanently embed these URLs.
@@ -127,10 +127,10 @@ Backend App Platform service env:
 | `NODE_ENV` | run time | general | `production` |
 | `DATABASE_URL` | run time | secret | `${<db-component>.DATABASE_URL}` for baseline; consider `${<db-component>.DATABASE_PRIVATE_URL}` after validating same-VPC private connectivity |
 | `JWT_SECRET` | run time | secret | random 32+ chars, never the example placeholder |
-| `CORS_ORIGINS` | run time | general | `https://www.<production-domain>` |
+| `CORS_ORIGINS` | run time | general | `https://<production-domain>` |
 | `AUTH_CORS_ORIGINS` | run time | general | `https://admin.<production-domain>` |
 | `PUBLIC_API_URL` | run time | general | `https://api.<production-domain>` |
-| `PUBLIC_WEBSITE_URL` | run time | general | `https://www.<production-domain>` |
+| `PUBLIC_WEBSITE_URL` | run time | general | `https://<production-domain>` |
 | `PUBLIC_WEBAPP_URL` | run time | general | `https://admin.<production-domain>` |
 | `ACCESS_TOKEN_TTL_SECONDS` | run time | general | `900` |
 | `REFRESH_TOKEN_TTL_DAYS` | run time | general | `30` |
@@ -158,7 +158,7 @@ Website static site:
 | `BUN_VERSION` | build time | `1.3.14` |
 | `PUBLIC_API_URL` | build time | `https://api.<production-domain>` |
 | `PUBLIC_WEBAPP_URL` | build time | `https://admin.<production-domain>` |
-| `PUBLIC_WEBSITE_URL` | build time | `https://www.<production-domain>` |
+| `PUBLIC_WEBSITE_URL` | build time | `https://<production-domain>` |
 
 ## Prisma Migration Flow
 
@@ -201,8 +201,8 @@ Required host plan:
 
 | Host | Purpose | Registrar placeholder | Notes |
 | --- | --- | --- | --- |
-| `www.<production-domain>` | canonical public website | CNAME to App Platform alias, or A/AAAA records if DigitalOcean supplies them | Primary public host. Attach to website app. |
-| `<production-domain>` apex | redirect to `www` | CNAME flattening/ALIAS/ANAME if registrar supports it, otherwise DigitalOcean-provided A/AAAA records | Attach apex only after DNSSEC/CAA preflight; configure redirect to `www`. |
+| `<production-domain>` apex | canonical public website | DigitalOcean-provided A/AAAA records, or CNAME flattening/ALIAS/ANAME if registrar supports it | Primary public host. Attach to website app after DNSSEC/CAA preflight. |
+| `www.<production-domain>` | redirect to apex | CNAME to App Platform alias | Attach to website app and configure redirect to canonical apex. |
 | `admin.<production-domain>` | admin webapp | CNAME to App Platform alias | Attach to webapp static app. |
 | `api.<production-domain>` | backend API | CNAME to App Platform alias | Attach to backend API app. |
 | `_digitalocean...` or provider-supplied TXT | verification | TXT name/value copied from App Platform | Use exact name/value from dashboard/spec output. |
@@ -224,7 +224,7 @@ Before adding or changing records:
 - App Platform terminates HTTPS for custom domains.
 - Backend cookies must be `Secure`, `HttpOnly`, `SameSite=None`, and scoped to auth paths.
 - `AUTH_CORS_ORIGINS` must contain only `https://admin.<production-domain>`.
-- `CORS_ORIGINS` must contain public non-credentialed browser origins such as `https://www.<production-domain>`.
+- `CORS_ORIGINS` must contain public non-credentialed browser origins such as `https://<production-domain>`.
 - No wildcard origins, empty origins, HTTP origins, or URL paths in CORS lists.
 - `TRUST_PROXY_HEADERS=true` is allowed only behind App Platform or another explicitly trusted proxy.
 - If Cloudflare or another CDN is later introduced, re-check forwarded host/IP headers, TLS mode, caching, and whether the custom domain should be attached to CDN instead of App Platform.
@@ -234,9 +234,9 @@ Before adding or changing records:
 Baseline:
 
 - Use Managed PostgreSQL automated backups.
-- Confirm exact backup retention and point-in-time restore options in the DigitalOcean dashboard before provisioning.
+- Confirm exact backup retention and point-in-time restore options in the DigitalOcean dashboard during the first production ops review.
 - Before destructive changes, create a manual backup/snapshot and record the backup timestamp.
-- Keep restore notes after the first production DB exists.
+- The first production DB is `engineering-calculator-pg` in `fra1`; restore notes must include the `proposals` table, PDF bytes, checksums, and immutable proposal link recovery.
 
 Restore drill:
 
@@ -272,7 +272,8 @@ Run only after resources are approved, provisioned, custom domains are attached,
 - `https://api.<production-domain>/health` returns 200.
 - Backend logs show `NODE_ENV=production`, `COOKIE_SECURE=true`, and no secret values printed.
 - `GET /api/public/calculator-config` returns services and exchange-rate config from PostgreSQL.
-- `https://www.<production-domain>` loads with working static assets.
+- `https://<production-domain>` loads with working static assets.
+- `https://www.<production-domain>` redirects to the canonical public website origin.
 - Calculator submission creates a lead with a real exchange-rate snapshot.
 - Proposal HTML opens through `/api/public/proposals/{token}` with `Cache-Control: private, max-age=0, no-store` and `X-Robots-Tag: noindex, nofollow`.
 - Proposal PDF opens through `/api/public/proposals/{token}/pdf`.

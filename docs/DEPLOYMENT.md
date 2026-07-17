@@ -2,9 +2,15 @@
 
 Use this document only after the user has asked for deployment. Read the root [README.md](../README.md), [deployment decision gate](deployment/digitalocean-decision-gate.md), [DigitalOcean App Platform prep runbook](deployment/digitalocean-app-platform-prep.md), and active surface READMEs first; they record the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
 
-PZK-013 selected DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18 as the production deployment shape. This is a decision record only. No App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, or other paid resource has been created. Future provisioning must be separately approved by the user and must use DigitalOcean Project ID `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`.
+PZK-013 selected DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18 as the production deployment shape. PZK-015 applied that plan after explicit user approval for paid DigitalOcean resources. The active production URLs are:
 
-PZK-014 prepared safe draft App Platform templates and a DNS/deployment runbook only. It did not create or update cloud resources. Use [deployment/digitalocean-app-platform-prep.md](deployment/digitalocean-app-platform-prep.md) as the concrete pre-provisioning checklist.
+- Public website: `https://poznyak.by`
+- Admin webapp: `https://admin.poznyak.by`
+- Backend API: `https://api.poznyak.by`
+
+The production resources are grouped under DigitalOcean Project `engineering-calculator` (`e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`): three App Platform apps and one Managed PostgreSQL 18 cluster. Spaces, Droplets, Valkey, and other optional paid resources are not active for v1.
+
+PZK-014 prepared safe draft App Platform templates and a DNS/deployment runbook. Use [deployment/digitalocean-app-platform-prep.md](deployment/digitalocean-app-platform-prep.md) as the concrete pre-provisioning or change-management checklist for future deploy changes.
 
 The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
 
@@ -39,14 +45,14 @@ Do not store secrets in the repository. Minimum backend production env:
 ```bash
 DATABASE_URL=postgresql://...
 JWT_SECRET=<at-least-32-random-characters>
-CORS_ORIGINS=https://www.example.com
+CORS_ORIGINS=https://example.com
 AUTH_CORS_ORIGINS=https://admin.example.com
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SECURE=true
 TRUST_PROXY_HEADERS=true
 PUBLIC_API_URL=https://api.example.com
-PUBLIC_WEBSITE_URL=https://www.example.com
+PUBLIC_WEBSITE_URL=https://example.com
 PUBLIC_WEBAPP_URL=https://admin.example.com
 ```
 
@@ -168,7 +174,7 @@ doctl apps spec validate .scratch/deploy/backend-app.yaml
 doctl apps update <backend-app-id> --spec .scratch/deploy/backend-app.yaml
 ```
 
-Do not accept real leads on temporary `*.ondigitalocean.app` URLs. Proposal snapshots embed `PUBLIC_API_URL`, `PUBLIC_WEBSITE_URL`, and `PUBLIC_WEBAPP_URL`; incorrect bootstrap URLs can become durable proposal artifacts. Attach final custom domains, update env vars, redeploy static sites, and run smoke checks before real traffic.
+Do not accept real leads on temporary `*.ondigitalocean.app` URLs. Proposal snapshots embed `PUBLIC_API_URL`, `PUBLIC_WEBSITE_URL`, and `PUBLIC_WEBAPP_URL`; incorrect bootstrap URLs can become durable proposal artifacts. For the current production deployment these are `https://api.poznyak.by`, `https://poznyak.by`, and `https://admin.poznyak.by`.
 
 Static Sites build from the connected Git branch, not from local `dist` folders. The branch must contain the full web/backend monorepo: root `package.json`, `bun.lock`, `backend`, `webapp`, `website`, and `packages/contracts`.
 
@@ -195,7 +201,7 @@ Backend service requirements:
 - Set both the service `http_port` and `PORT` env to `8080` unless the project has a reason to choose another port.
 - Use `instance_size_slug: apps-s-1vcpu-1gb` and `instance_count: 1` as the default production API starter shape. This is one shared 1 vCPU / 1 GiB App Platform container, which is the $12/month single-container option as of May 2026.
 - Configure health checks to hit `/health`.
-- Set `NODE_ENV=production`, `PUBLIC_API_URL=https://api.<domain>`, `PUBLIC_WEBSITE_URL=https://www.<domain>`, and `PUBLIC_WEBAPP_URL=https://admin.<domain>` before real leads.
+- Set `NODE_ENV=production`, `PUBLIC_API_URL=https://api.<domain>`, `PUBLIC_WEBSITE_URL=https://<canonical-public-domain>`, and `PUBLIC_WEBAPP_URL=https://admin.<domain>` before real leads.
 - Set `COOKIE_SECURE=true` for HTTPS production traffic.
 - Set `TRUST_PROXY_HEADERS=true` only when the backend is behind DigitalOcean App Platform or another trusted proxy; login throttling uses the proxy-normalized `X-Forwarded-For` client IP only in that mode.
 - Set `CORS_ORIGINS` to the exact public browser origins, and `AUTH_CORS_ORIGINS` to the exact admin webapp origins. Do not use `*`, empty values, or URLs with paths.
@@ -299,7 +305,7 @@ Required component shape (static build):
 
 Keep website independent from authenticated browser-app flows unless the product explicitly needs shared API data.
 
-The backend also needs runtime `PUBLIC_WEBSITE_URL=https://www.example.com` so newly generated proposal HTML/PDF snapshots can embed absolute links to public project example PDFs. `PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
+The backend also needs runtime `PUBLIC_WEBSITE_URL=https://example.com` or the project's canonical public website origin so newly generated proposal HTML/PDF snapshots can embed absolute links to public project example PDFs. `PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
 
 ## Managed PostgreSQL
 

@@ -9,15 +9,21 @@ The project is scaffolded from the Vibe template (`https://github.com/di-sukhare
 - `backend` - Hono API with Prisma/PostgreSQL, auth, proposal/PDF generation, Telegram notifications, and integrations.
 - `packages/contracts` - shared Zod contracts and API/domain types.
 
-Mobile is deferred. DigitalOcean deployment is deferred until the deployment preparation/provisioning gates are explicitly approved.
+Mobile is deferred. DigitalOcean production deployment is active for the v1 full-stack release.
 
-DigitalOcean Project: `engineering-calculator` (`e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`) exists as an organizational container only. DigitalOcean billing is based on actual team/account resource usage, not the number of Projects. This Project currently contains no paid resources.
+Production URLs:
 
-Domain DNS decision: keep DNS at the current registrar. After a DigitalOcean app exists, add the required App Platform CNAME/A/AAAA/TXT records at the registrar to point the production domain or subdomain to the DigitalOcean app target. Do not move nameservers to DigitalOcean unless that decision changes explicitly. See [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md) for the domain cutover checklist, including apex vs `www`, API/admin hostnames, CORS/public URL env updates, and preserving MX/SPF/DKIM/DMARC records.
+- Public website: `https://poznyak.by`
+- Admin webapp: `https://admin.poznyak.by`
+- Backend API: `https://api.poznyak.by`
 
-PZK-013 selected the production deployment shape: DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18, with `website` and `webapp` as static sites, `backend` as one App Platform service, and generated proposal/PDF artifacts stored in PostgreSQL for v1. See [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md). This is documentation only; no App Platform app, database, Spaces bucket, Droplet, DNS record, or other paid resource has been created.
+DigitalOcean Project: `engineering-calculator` (`e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`) contains the production App Platform apps and Managed PostgreSQL 18 cluster. DigitalOcean billing is based on actual team/account resource usage, not the number of Projects.
 
-PZK-014 prepared safe draft App Platform templates and the concrete DNS/deployment runbook in [docs/deployment/digitalocean-app-platform-prep.md](docs/deployment/digitalocean-app-platform-prep.md). These are preparation artifacts only; they were not applied to DigitalOcean.
+Domain DNS decision: DNS stays at HB.BY. The registrar zone points `poznyak.by` to DigitalOcean App Platform static ingress A/AAAA records and points `api`, `admin`, and `www` CNAME records to the App Platform starter domains. `www.poznyak.by` redirects to canonical `https://poznyak.by`.
+
+PZK-013 selected the production deployment shape: DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL 18, with `website` and `webapp` as static sites, `backend` as one App Platform service, and generated proposal/PDF artifacts stored in PostgreSQL for v1. See [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md).
+
+PZK-014 prepared safe draft App Platform templates and the concrete DNS/deployment runbook in [docs/deployment/digitalocean-app-platform-prep.md](docs/deployment/digitalocean-app-platform-prep.md). PZK-015 applied that plan to production after explicit user approval for paid DigitalOcean resources.
 
 ## Product Direction
 
@@ -202,7 +208,7 @@ CI:
 
 ## Deployment Notes
 
-No DigitalOcean paid resources, apps, databases, Spaces buckets, or DNS records have been created for this product. PZK-013 is complete as a decision record and PZK-014 is deploy-prep only; provisioning remains behind a separate explicit user approval.
+DigitalOcean production resources are active after PZK-015. App Platform serves the public website, admin webapp, and backend API from `main`, with Managed PostgreSQL 18 attached to the backend. Do not create additional paid resources such as Spaces, Droplets, Valkey, or extra App Platform components without a separate explicit approval.
 
 Use [docs/deployment/digitalocean-decision-gate.md](docs/deployment/digitalocean-decision-gate.md) for the selected deployment shape, [docs/deployment/digitalocean-app-platform-prep.md](docs/deployment/digitalocean-app-platform-prep.md) for the PZK-014 App Platform/DNS prep checklist, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the broader deployment runbook, [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) for local PostgreSQL, [docs/TESTING.md](docs/TESTING.md) for verification details, and [docs/STORAGE.md](docs/STORAGE.md) when generated files or media need persistent storage.
 

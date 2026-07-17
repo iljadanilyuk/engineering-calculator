@@ -11,6 +11,8 @@ The supported DigitalOcean-first storage path is:
 
 Do not store user uploads or durable generated assets on the App Platform container filesystem. App Platform containers can be replaced during deployments and scaling, and their local filesystem is not durable.
 
+Current PZK v1 exception: commercial proposal HTML/PDF artifacts are intentionally stored in PostgreSQL as immutable snapshots/bytes. This keeps v1 launch simple and makes Managed PostgreSQL backups cover proposal recovery. DigitalOcean Spaces remains the future path for larger media, uploads, CDN-delivered files, or high-volume proposal storage after separate approval.
+
 ## Intake Before Building File Features
 
 Ask product-level questions before implementation:

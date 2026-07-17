@@ -283,8 +283,8 @@ DigitalOcean billing/project decision:
 - A new DigitalOcean Project named `engineering-calculator` was created on 2026-07-08 for organization only.
 - DigitalOcean Project ID: `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`.
 - Environment: `Development`.
-- Current resources in this Project: none.
-- No paid App Platform app, database, storage, Droplet, or other billable resource has been created for this calculator yet.
+- Resources at organizer creation time: none.
+- Current resources after PZK-015: three DigitalOcean App Platform apps and one Managed PostgreSQL 18 cluster. Spaces, Droplets, Valkey, and additional paid resources remain not created.
 - When creating future DigitalOcean App Platform resources for this product, pass this Project ID explicitly so resources do not land in the default project by accident.
 - Moving resources between Projects is separate approved work and does not stop billing for those resources; deleting or scaling down resources is what changes resource billing.
 
@@ -425,7 +425,7 @@ Completion notes:
 - Push status: `main` is pushed and tracks `origin/main`.
 - Docker status after verification: project-specific Compose/smoke containers were stopped/removed.
 - No paid DigitalOcean/cloud resources were created or changed.
-- DigitalOcean Project organizer created later: `engineering-calculator` / `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`; it currently contains no resources.
+- DigitalOcean Project organizer created later: `engineering-calculator` / `e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`; at the time of this scaffold task it contained no resources. PZK-015 later added production App Platform apps and Managed PostgreSQL 18.
 
 Verification:
 
@@ -990,7 +990,7 @@ Completion notes:
 - Selected PostgreSQL-backed immutable proposal/PDF storage for v1. `Proposal.htmlSnapshot`, `Proposal.pdfBytes`, checksum, storage key, and calculation snapshots remain the durable source until Spaces is explicitly approved later.
 - Deferred DigitalOcean Spaces to future media/file-volume needs; App Platform container filesystem remains temporary only.
 - Documented `prisma:deploy` migration flow, `/health` plus post-deploy smoke checks, required backend/frontend env vars, runtime/Chromium notes, HTTPS/proxy assumptions, backups, restore, rollback, monitoring/logging, and expected monthly cost.
-- Documented registrar-managed DNS with no nameserver migration: canonical `www.<production-domain>`, apex redirect to `www`, `admin.<production-domain>` for webapp, and `api.<production-domain>` for backend.
+- Documented registrar-managed DNS with no nameserver migration. PZK-013 originally considered a `www`-primary public host pattern; PZK-015 production deployment later changed the canonical public host to apex `https://poznyak.by` per user direction.
 - Documented DNS cutover safeguards for CAA, DNSSEC as a PZK-014 preflight blocker, TLS propagation, and preservation of MX/SPF/DKIM/DMARC/TXT records.
 - Updated `README.md` and `docs/DEPLOYMENT.md` to point to the decision gate, require `--project-id e0c43cc8-3ea8-4c16-a390-738e56d9c3e3` for future App Platform creates, and align examples with the `www`/`admin`/`api` hostname pattern.
 - Added a PZK-014 checklist covering domain confirmation, paid-resource approval, `fra` region confirmation, PostgreSQL 18 spec pinning, exact Bun runtime pinning, final env values, spec validation, and no provisioning before approval.
@@ -1039,9 +1039,9 @@ Completion notes:
 
 - Added `docs/deployment/digitalocean-app-platform-prep.md` as the concrete PZK-014 App Platform and registrar DNS prep runbook.
 - Kept PZK-014 preparation-only: no App Platform app, Managed PostgreSQL cluster, Spaces bucket, Droplet, DNS record, domain attachment, or other paid DigitalOcean resource was created or updated.
-- Documented the approved target shape as three safe draft App Platform apps/components: backend/API at `api.<domain>`, admin webapp static site at `admin.<domain>`, and public website static site at canonical `www.<domain>`.
+- Documented the approved prep target shape as three safe draft App Platform apps/components: backend/API at `api.<domain>`, admin webapp static site at `admin.<domain>`, and a public website static site. PZK-014 used a `www`-primary placeholder pattern; PZK-015 later changed production canonical public host to apex `https://poznyak.by`.
 - Documented the Managed PostgreSQL 18 attachment, Prisma `prisma:deploy` pre-deploy job, first-admin setup flow, backup/restore notes, rollback plan, CORS/auth/cookie/proxy settings, final public/API/admin URL settings, proposal/PDF URL immutability risks, and full post-deploy smoke checklist.
-- Added registrar-side DNS runbook placeholders for `www`, apex redirect to `www`, `admin`, `api`, verification TXT, CAA, DNSSEC, TLS propagation, and preserving MX/SPF/DKIM/DMARC/existing TXT records.
+- Added registrar-side DNS runbook placeholders for public website, `www` redirect, `admin`, `api`, verification TXT, CAA, DNSSEC, TLS propagation, and preserving MX/SPF/DKIM/DMARC/existing TXT records. PZK-015 later applied apex canonical `https://poznyak.by` with `www` redirecting to apex.
 - Updated `.do` App Platform draft templates so backend pins PostgreSQL `version: "18"`, sets `NODE_ENV=production`, includes `PUBLIC_API_URL`, `PUBLIC_WEBSITE_URL`, and `PUBLIC_WEBAPP_URL`, and uses generated provider-valid app names.
 - Updated static-site draft templates to pin `BUN_VERSION=1.3.14`; added root `.bun-version`; pinned backend Docker runtime to `oven/bun:1.3.14`.
 - Updated `scripts/prepare-do-specs.mjs` so the default region is `fra`, backend final specs require `DO_BACKEND_URL`, website specs can use a final `DO_WEBSITE_URL` or safe `${_self.PUBLIC_URL}` bootstrap fallback, and generated app names satisfy DigitalOcean's 32-character app-name limit.
@@ -1065,23 +1065,86 @@ Verification:
 - `git diff --check` passed with only expected Windows LF/CRLF working-copy warnings.
 - Post-task review gate cleared with reviewer score 9.6/10 and no required changes.
 
-## 11. Open Questions
+### PZK-015 - Production DigitalOcean Deployment
 
-These do not block PZK-001, but should be resolved before final public launch:
+Status: complete
+
+Goal:
+
+- Provision the approved DigitalOcean production resources, connect the production domain, bootstrap admins/settings, and verify the full public lead/proposal/admin flow.
+
+Acceptance criteria:
+
+- Paid DigitalOcean resources are created only after explicit user approval.
+- Resources are assigned to the existing DigitalOcean Project `engineering-calculator`.
+- Production domain uses registrar-managed DNS without moving nameservers to DigitalOcean.
+- Canonical public website is `https://poznyak.by`; `www.poznyak.by` redirects to it.
+- Backend API is available at `https://api.poznyak.by`.
+- Admin webapp is available at `https://admin.poznyak.by`.
+- Managed PostgreSQL 18 is online and migrations are applied.
+- First admin accounts are created without committing passwords or secrets.
+- Public calculator config loads real services and exchange rate.
+- Public lead submit creates an immutable proposal HTML/PDF artifact.
+- Admin can find the submitted lead and change its status.
+- Telegram may remain disabled if bot token/chat env are not configured; missing Telegram env must not block lead creation.
+- Temporary generated specs/secrets under `.scratch` are not committed.
+
+Completion notes:
+
+- User approved paid DigitalOcean resources for the `engineering-calculator` Project and provided the production domain `poznyak.by`.
+- Created/used DigitalOcean Project `engineering-calculator` (`e0c43cc8-3ea8-4c16-a390-738e56d9c3e3`).
+- Created DigitalOcean Managed PostgreSQL 18 cluster `engineering-calculator-pg` (`32baabc3-4906-4821-9079-0039916f72ad`) in `fra1`; assigned it to the Project.
+- Created App Platform apps:
+  - backend/API `engineering-calculator-api` (`80627a45-9b66-442e-8796-f60750a49efd`);
+  - admin webapp `engineering-calculator-webapp` (`25facd71-0b33-4d55-881e-c706dea9bf48`);
+  - public website `engineering-calculator-website` (`288490f4-26d6-4b90-a5ed-9c407c5797a3`).
+- Connected final production URLs:
+  - public website: `https://poznyak.by`;
+  - admin webapp: `https://admin.poznyak.by`;
+  - backend API: `https://api.poznyak.by`;
+  - `https://www.poznyak.by` redirects to `https://poznyak.by`.
+- Registrar DNS remains at HB.BY. The zone contains App Platform static ingress A/AAAA records for apex and CNAME records for `api`, `admin`, and `www`, all with 300-second TTL.
+- App Platform domain validation initially left the apex certificate in a stale `1970` state. The website domain binding was safely removed/re-added through app spec updates, after which `poznyak.by` became `ACTIVE` with a valid certificate.
+- Created two production admin accounts for the user-provided admin emails. Temporary passwords were handed off out-of-band only and were not committed.
+- Bootstrapped production calculator data: manual USD/BYN rate `2.8668`, seven public services, and two public project examples.
+- Telegram notifications are left disabled for launch because production `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` env is not configured in App Platform yet. Missing Telegram env was covered by existing backend behavior and does not block lead/proposal creation.
+- Fixed backend Docker/App Platform Chromium discovery in `backend/src/engineering/proposal.ts` after production PDF generation exposed the runtime path difference. Commit `44ec043 Fix App Platform Chromium discovery` was pushed before the final smoke.
+- Removed no production data except marking deployment smoke leads as `spam_test`; no Spaces bucket, Droplet, Valkey, or additional paid resource was created.
+
+Verification:
+
+- PZK-015 pre-task `gpt-5.5 xhigh` review completed and recommendations incorporated.
+- `doctl` authenticated account was verified before provisioning.
+- `doctl projects resources list e0c43cc8-3ea8-4c16-a390-738e56d9c3e3` confirmed the three apps and PostgreSQL cluster are assigned to the intended Project.
+- `doctl apps spec validate` passed for backend, webapp, and website specs before app updates.
+- DNS was verified against Google DNS and authoritative `ns1.hb.by`: apex A/AAAA, `api` CNAME, `admin` CNAME, and `www` CNAME resolve with TTL `300`.
+- App Platform domains reached `ACTIVE` for `poznyak.by`, `www.poznyak.by`, `api.poznyak.by`, and `admin.poznyak.by`.
+- HTTPS smoke passed:
+  - `https://poznyak.by/` -> `200`;
+  - `https://www.poznyak.by/` -> `301` to `https://poznyak.by/`;
+  - `https://api.poznyak.by/health` -> `200`;
+  - `https://api.poznyak.by/api/public/calculator-config` -> `200`;
+  - `https://admin.poznyak.by/` -> `200`.
+- Production full-flow smoke created a redacted public proposal token; proposal HTML returned `200`; proposal PDF returned `200` with `146289` bytes.
+- The smoke lead was found through the admin API as calculation `019f6ef0-34eb-7809-b6a6-00dd582ef424` and updated to status `spam_test`.
+- Hotfix verification before `44ec043`: `bun run typecheck:backend`, `bun run test:backend:unit`, `bun run test:deploy`, `bun run smoke:backend:docker`, and a Docker PDF render smoke passed.
+- `git status --short --branch` was clean before deployment spec generation. Generated `.scratch/deploy` specs were not committed.
+- PZK-015 post-task review gate cleared with reviewer Feynman score 9.7/10 and no required blockers.
+
+## 11. Post-Launch Follow-Ups
+
+These do not block the PZK-015 production launch, but should be resolved for polish, operations, or v2 work:
 
 - Exact brand name to show: `ИП Позняк`, another name, or a future studio/bureau name?
 - Exact contact phone/email/Telegram for production.
 - Current sample PDFs are public downloads. Decide later whether future/larger sample PDFs should stay public, move to CDN/Spaces, or be gated by phone.
-- Which Telegram chat should receive lead notifications?
+- Configure production Telegram env when notifications should be turned on.
 - Should PDF offers have an expiration period, for example 7 or 14 days?
-- Should admin support multiple users in v1 or only one owner account?
 - Should leads be exportable to CSV in v1?
 - Exact BYN symbol/notation to use everywhere: confirm final glyph/mark before UI/PDF polish.
 - Confirm privacy policy text and retention period for public lead data.
 - Confirm whether public PDF/proposal links should expire or remain permanently accessible by token.
-- Confirm the exact production domain/subdomain and registrar account access before attaching it to DigitalOcean.
-- Confirm the chosen production domain's DNSSEC state before App Platform domain attachment; current DigitalOcean docs say App Platform does not support adding DNSSEC-enabled domains to apps.
-- Confirm the exact monthly-cost approval threshold before any DigitalOcean provisioning. Current documented baseline is about `$27.15/mo` before taxes/overages, excluding optional Spaces.
+- Monitor first production billing after App Platform and Managed PostgreSQL settle, especially taxes/overages beyond the documented baseline.
 
 ## 12. Known Risks And Edge Cases
 
@@ -1117,7 +1180,7 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Nash: 9.6/10; no scaffold/code-quality blockers. Confirmed PZK-001 can be marked complete after tracker update and commit.
 - 2026-07-08 DigitalOcean Project organizer update:
   - Pre-task reviewer Helmholtz: recommended idempotent project creation, no paid resources, zero-resource verification, explicit future project ID usage, and separating Project organization from deployment/billing changes. Recommendations incorporated.
-  - Post-task reviewer Sartre: 9.8/10; confirmed `engineering-calculator` Project exists, contains no resources, and documentation correctly states billing is based on team/account resource usage rather than Project count.
+  - Post-task reviewer Sartre: 9.8/10; confirmed `engineering-calculator` Project existed as an organizer with no resources at that time, and documentation correctly stated billing is based on team/account resource usage rather than Project count. PZK-015 later added production resources to the same Project.
 - 2026-07-08 PZK-002 pre-task review:
   - Reviewer Tesla: `gpt-5.5 xhigh`; flagged integer money/area scaling, unified BYN rounding, inactive/empty-service semantics, immutable-friendly snapshots, proposal-token safety, and keeping backend wiring for later tasks. Recommendations incorporated.
 - 2026-07-08 PZK-002 post-task review round 1:
@@ -1228,3 +1291,13 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Godel: `gpt-5.5 xhigh`; flagged missing backend `PUBLIC_API_URL`/`PUBLIC_WEBAPP_URL`, unpinned PostgreSQL 18 in the app spec, region default drift, loose Bun runtime pinning, need for concrete registrar DNS placeholders, separate-app shape clarity, `DATABASE_URL` vs `DATABASE_PRIVATE_URL` validation, and proposal/PDF smoke risks. Recommendations incorporated.
 - 2026-07-11 PZK-014 post-task review round 1:
   - Reviewer Erdos: 9.6/10; confirmed draft App Platform specs/templates, PostgreSQL 18 pinning, runtime/env coverage, DNS runbook, rollback/backup/smoke checklists, Project ID usage, and explicit no-resource-creation language. No required changes remained; PZK-014 gate cleared after tracker update.
+- 2026-07-17 PZK-015 pre-task review:
+  - Reviewer Faraday: `gpt-5.5 xhigh`; flagged paid-resource approval, apex-vs-`www` canonical choice, DNSSEC/CAA checks, custom-domain env ordering, no real leads on temporary App Platform URLs, first-admin setup, Telegram optional env, and post-deploy smoke. Recommendations incorporated.
+- 2026-07-17 PZK-015 production Chromium hotfix review:
+  - Reviewer Sagan: 9.7/10; confirmed the App Platform Chromium discovery fix covered the deployed Playwright cache path and Docker PDF smoke produced a valid PDF. No required changes remained for the hotfix.
+- 2026-07-17 PZK-015 post-task review rounds:
+  - Reviewer Raman: 8.2/10; required removing stale no-resource deployment docs, updating PZK-014 runbook/current production guidance, replacing `www`-canonical `PUBLIC_WEBSITE_URL` examples with canonical public origin guidance, and redacting a live public proposal token. Changes incorporated.
+  - Reviewer Franklin: 9.0/10; required updating `digitalocean-decision-gate.md` so the linked decision record did not contradict PZK-015 production state. Changes incorporated.
+  - Reviewer McClintock: 9.2/10; required time-scoping old Project/no-resource statements, annotating PZK-014 `www` placeholder history as superseded by PZK-015 apex production, and reframing open launch questions as post-launch follow-ups. Changes incorporated.
+  - Reviewer Ramanujan: 9.3/10; required fixing the top-level deployment target section that still said the Project had no resources. Changes incorporated.
+  - Reviewer Feynman: 9.7/10; confirmed stale deployment phrases are gone from active wording, no production secrets are present, only the expected markdown files are modified, and PZK-015 gate is cleared.
