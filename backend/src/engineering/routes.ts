@@ -15,6 +15,10 @@ import {
   projectExampleRequestSaveResponseSchema,
   projectExampleResponseSchema,
   projectExampleUpdateRequestSchema,
+  publicQuestionnairePatchRequestSchema,
+  publicQuestionnaireSessionResponseSchema,
+  publicQuestionnaireStartRequestSchema,
+  publicQuestionnaireStartResponseSchema,
   publicCalculatorConfigResponseSchema,
   publicCalculationSaveResponseSchema,
   publicProjectExampleListResponseSchema,
@@ -193,6 +197,105 @@ const saveProjectExampleRequestRoute = createRoute({
     429: {
       content: errorResponseContent,
       description: 'Too many public project example requests',
+    },
+  },
+})
+
+const startQuestionnaireRoute = createRoute({
+  method: 'post',
+  path: '/public/questionnaires',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: publicQuestionnaireStartRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicQuestionnaireStartResponseSchema,
+        },
+      },
+      description: 'Existing questionnaire returned for idempotent or duplicate public submission',
+    },
+    201: {
+      content: {
+        'application/json': {
+          schema: publicQuestionnaireStartResponseSchema,
+        },
+      },
+      description: 'Created questionnaire lead and returned resumable public session',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    409: {
+      content: errorResponseContent,
+      description: 'Exchange rate missing, selected service unavailable, or idempotency mismatch',
+    },
+    429: {
+      content: errorResponseContent,
+      description: 'Too many public questionnaire starts',
+    },
+  },
+})
+
+const getQuestionnaireRoute = createRoute({
+  method: 'get',
+  path: '/public/questionnaires/{token}',
+  request: {
+    params: publicTokenParamsSchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicQuestionnaireSessionResponseSchema,
+        },
+      },
+      description: 'Token-protected public questionnaire session',
+    },
+    404: {
+      content: errorResponseContent,
+      description: 'Questionnaire session not found',
+    },
+  },
+})
+
+const patchQuestionnaireAnswersRoute = createRoute({
+  method: 'patch',
+  path: '/public/questionnaires/{token}/answers',
+  request: {
+    params: publicTokenParamsSchema,
+    body: {
+      content: {
+        'application/json': {
+          schema: publicQuestionnairePatchRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicQuestionnaireSessionResponseSchema,
+        },
+      },
+      description: 'Saved questionnaire answers incrementally',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    404: {
+      content: errorResponseContent,
+      description: 'Questionnaire session not found',
     },
   },
 })
@@ -690,6 +793,49 @@ export function createEngineeringRoutes() {
 
     const result = await engineering.saveProjectExampleRequest(payload, metadata)
     return c.json({ request: result.publicRequest }, result.created ? 201 : 200)
+  })
+
+  routes.openapi(startQuestionnaireRoute, async (c) => {
+    c.header('Cache-Control', 'private, max-age=0, no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
+    const engineering = c.get('engineeringDataService')
+    const payload = c.req.valid('json')
+    const env = c.get('env')
+    const metadata = {
+      referrer: c.req.header('referer'),
+      ipAddress: publicSubmitIpAddress(c, env),
+      userAgent: c.req.header('user-agent'),
+    }
+
+    if (!(await engineering.isExactQuestionnaireStartReplay(payload, metadata))) {
+      enforcePublicSubmitRateLimit(
+        c,
+        env,
+        'Too many questionnaire starts. Please try again later.',
+      )
+    }
+
+    const result = await engineering.startQuestionnaire(payload, metadata)
+    return c.json({ questionnaire: result.questionnaire }, result.created ? 201 : 200)
+  })
+
+  routes.openapi(getQuestionnaireRoute, async (c) => {
+    c.header('Cache-Control', 'private, max-age=0, no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
+    const engineering = c.get('engineeringDataService')
+    const questionnaire = await engineering.getPublicQuestionnaire(c.req.valid('param').token)
+    return c.json({ questionnaire }, 200)
+  })
+
+  routes.openapi(patchQuestionnaireAnswersRoute, async (c) => {
+    c.header('Cache-Control', 'private, max-age=0, no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
+    const engineering = c.get('engineeringDataService')
+    const questionnaire = await engineering.saveQuestionnaireAnswers(
+      c.req.valid('param').token,
+      c.req.valid('json'),
+    )
+    return c.json({ questionnaire }, 200)
   })
 
   routes.openapi(publicProposalRoute, async (c) => {

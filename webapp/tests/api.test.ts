@@ -571,6 +571,7 @@ function calculationListItem(record: Record<string, unknown>) {
     notes: record.notes,
     source: record.source,
     proposalArtifacts: record.proposalArtifacts,
+    questionnaire: record.questionnaire ?? null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
@@ -674,6 +675,7 @@ function calculationRecord(overrides: Record<string, unknown>) {
       hasHtmlSnapshot: true,
       createdAt: '2026-07-09T00:00:00.000Z',
     }],
+    questionnaire: null,
     createdAt: '2026-07-09T00:00:00.000Z',
     updatedAt: '2026-07-09T00:00:00.000Z',
     ...overrides,

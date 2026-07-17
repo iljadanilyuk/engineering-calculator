@@ -1,0 +1,1849 @@
+---
+import {
+  QUESTIONNAIRE_VERSION,
+  calculateEngineeringOffer,
+  technicalQuestionnaireSections,
+  type CalculationResult,
+} from '@poznyak-engineering-calculator/contracts'
+import {
+  areaLimits,
+  defaultAreaSqm,
+  defaultSelectedServiceIds,
+  exchangeRate,
+  fallbackServices,
+} from '../lib/public-calculator'
+import { createPageMeta, siteName } from '../lib/seo'
+
+const initialCalculation = calculateEngineeringOffer({
+  areaSqm: defaultAreaSqm,
+  selectedServiceIds: defaultSelectedServiceIds,
+  services: fallbackServices,
+  exchangeRate,
+})
+
+const questionnaireData = {
+  version: QUESTIONNAIRE_VERSION,
+  sections: technicalQuestionnaireSections,
+  defaultAreaSqm,
+  areaLimits,
+  exchangeRate,
+  fallbackServices,
+  selectedServiceIds: defaultSelectedServiceIds,
+  selectedProjectType: 'private',
+}
+
+const formatRubles = (value: number) => new Intl.NumberFormat('ru-RU').format(value)
+
+const pageMeta = createPageMeta({
+  siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
+  path: '/questionnaire/',
+  title: 'Подробный опросник для технического задания - ИП Позняк',
+  description:
+    'Пошаговый опросник по инженерным системам дома для подготовки черновика технического задания.',
+  robots: 'noindex,nofollow',
+})
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  url: pageMeta.canonicalUrl,
+  name: pageMeta.title,
+  description: pageMeta.description,
+  inLanguage: 'ru-BY',
+  isPartOf: {
+    '@id': `${pageMeta.siteUrl}/#website`,
+  },
+}
+
+function allocateDisplayBynRubles(calculation: CalculationResult) {
+  const floorRows = calculation.lineItems.map((lineItem, index) => ({
+    serviceId: lineItem.serviceId,
+    rubles: Math.floor(lineItem.totalBynCents / 100),
+    remainder: lineItem.totalBynCents % 100,
+    index,
+  }))
+  const floorTotal = floorRows.reduce((total, row) => total + row.rubles, 0)
+  const remainingRubles = calculation.totals.totalBynRoundedRubles - floorTotal
+  const rowsByRemainder = [...floorRows].sort(
+    (first, second) => second.remainder - first.remainder || first.index - second.index,
+  )
+
+  for (const row of rowsByRemainder.slice(0, Math.max(0, remainingRubles))) {
+    row.rubles += 1
+  }
+
+  return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
+}
+
+const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
+---
+
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{pageMeta.title}</title>
+    <meta name="description" content={pageMeta.description} />
+    <meta name="robots" content={pageMeta.robots} />
+    <link rel="canonical" href={pageMeta.canonicalUrl} />
+    <meta property="og:locale" content="ru_BY" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={pageMeta.title} />
+    <meta property="og:description" content={pageMeta.description} />
+    <meta property="og:url" content={pageMeta.canonicalUrl} />
+    <meta property="og:image" content={pageMeta.imageUrl} />
+    <meta property="og:image:secure_url" content={pageMeta.imageUrl} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={pageMeta.imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageMeta.title} />
+    <meta name="twitter:description" content={pageMeta.description} />
+    <meta name="twitter:image" content={pageMeta.imageUrl} />
+    <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <script
+      id="questionnaire-data"
+      type="application/json"
+      is:inline
+      set:html={JSON.stringify(questionnaireData)}
+    />
+  </head>
+  <body>
+    <header class="header">
+      <div class="shell header-inner">
+        <a class="brand" href="/" aria-label="ИП Позняк, на главную">
+          <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+            <rect class="brand-mark-bg" width="48" height="48" rx="14" />
+            <path class="brand-mark-p" d="M15 34V14h10.2c5.1 0 8.8 3.2 8.8 8s-3.7 8-8.8 8H20" />
+            <path class="brand-mark-flow" d="M15 34c7-1.2 10.8-4.2 12.7-8.2" />
+            <circle class="brand-mark-node" cx="13" cy="25" r="2.2" />
+            <circle class="brand-mark-node" cx="25.8" cy="19" r="2.2" />
+          </svg>
+          <span class="brand-copy">
+            <strong>ИП Позняк</strong>
+            <span>Инженерные системы</span>
+          </span>
+        </a>
+        <nav class="nav" aria-label="Навигация">
+          <a href="/offer/">Выбор КП</a>
+          <a href="/#calculator">Изменить расчет</a>
+          <a href="/#contacts">Контакты</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="questionnaire-title">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow">Подробный сценарий</div>
+            <h1 id="questionnaire-title">Опросник для черновика технического задания</h1>
+            <p>
+              Ответы сохраняются по шагам и попадают в карточку заявки. Если данных пока нет,
+              отметьте это явно: менеджер увидит открытые вопросы.
+            </p>
+            <p class="state-status" data-config-status role="status">
+              Загружаем актуальные тарифы и выбранные разделы проекта.
+            </p>
+          </div>
+
+          <aside class="summary-card" aria-label="Выбранный расчет">
+            <div class="summary-head">
+              <span>Расчет из калькулятора</span>
+              <a href="/#calculator">Изменить</a>
+            </div>
+            <dl class="summary-metrics">
+              <div>
+                <dt>Площадь</dt>
+                <dd><span data-summary-area>{defaultAreaSqm}</span> м²</dd>
+              </div>
+              <div>
+                <dt>Тип объекта</dt>
+                <dd data-summary-type>Частный дом</dd>
+              </div>
+            </dl>
+            <div class="summary-list" data-summary-list>
+              {
+                initialCalculation.lineItems.map((lineItem) => (
+                  <div class="summary-row">
+                    <span>{lineItem.serviceSnapshot.title}</span>
+                    <strong>
+                      {formatRubles(initialSummaryRubles.get(lineItem.serviceId) ?? 0)}
+                      <img
+                        class="currency-symbol"
+                        src="/landing-v4/byn-symbol.svg"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span class="sr-only"> BYN</span>
+                    </strong>
+                  </div>
+                ))
+              }
+            </div>
+            <div class="summary-total">
+              <span>Ориентир</span>
+              <strong data-total-byn>
+                {formatRubles(initialCalculation.totals.totalBynRoundedRubles)}
+                <img class="currency-symbol" src="/landing-v4/byn-symbol.svg" alt="" aria-hidden="true" />
+                <span class="sr-only"> BYN</span>
+              </strong>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="workspace" aria-labelledby="workspace-title">
+        <div class="shell workspace-grid">
+          <aside class="progress-panel" aria-label="Прогресс опросника">
+            <div class="panel-head">
+              <div>
+                <div class="section-kicker">Прогресс</div>
+                <h2 id="workspace-title">Разделы</h2>
+              </div>
+              <strong data-progress-percent>0%</strong>
+            </div>
+            <progress data-progress-bar max="100" value="0">0%</progress>
+            <p data-progress-text>Опросник начнется после сохранения контакта.</p>
+            <div class="section-nav" data-section-nav></div>
+          </aside>
+
+          <div class="main-panel">
+            <form class="contact-gate" data-contact-form novalidate>
+              <div class="panel-head">
+                <div>
+                  <div class="section-kicker">Старт</div>
+                  <h2>Сохранить контакт</h2>
+                </div>
+              </div>
+              <div class="contact-grid">
+                <label for="questionnaire-name">
+                  <span>Ваше имя</span>
+                  <input id="questionnaire-name" data-client-name type="text" autocomplete="name" />
+                </label>
+                <label for="questionnaire-phone">
+                  <span>Телефон</span>
+                  <input id="questionnaire-phone" data-client-phone type="tel" inputmode="tel" autocomplete="tel" />
+                </label>
+              </div>
+              <label for="questionnaire-object">
+                <span>Объект и задача</span>
+                <textarea
+                  id="questionnaire-object"
+                  data-object-name
+                  rows="3"
+                  maxlength="160"
+                  placeholder="Например: дом 180 м², отопление, ВК и вентиляция"
+                ></textarea>
+              </label>
+              <label class="consent-row" for="questionnaire-consent">
+                <input id="questionnaire-consent" data-consent type="checkbox" />
+                <span>Согласен на обработку персональных данных и ответов опросника для подготовки ТЗ и обратной связи.</span>
+              </label>
+              <button class="button primary" type="submit" data-start-trigger>
+                Начать подробный опросник
+              </button>
+            </form>
+
+            <section class="resume-panel" data-resume-panel hidden aria-label="Ссылка для продолжения">
+              <div>
+                <div class="section-kicker">Сохранено</div>
+                <h2>Опросник привязан к заявке</h2>
+              </div>
+              <a data-resume-link href="/questionnaire/">Ссылка для продолжения</a>
+            </section>
+
+            <fieldset class="question-card" data-question-card hidden>
+              <legend data-question-title>Вопрос</legend>
+              <p class="question-meta" data-question-meta></p>
+              <div class="option-grid" data-option-list></div>
+              <label class="custom-answer" for="custom-answer">
+                <span>Свой вариант</span>
+                <textarea id="custom-answer" data-custom-answer rows="4" maxlength="2000"></textarea>
+              </label>
+              <div class="question-actions">
+                <button class="button secondary" type="button" data-save-custom>
+                  Сохранить свой ответ
+                </button>
+                <button class="button ghost" type="button" data-answer-unknown>
+                  Пока не знаю
+                </button>
+                <button class="button ghost" type="button" data-answer-skipped>
+                  Пропустить
+                </button>
+              </div>
+              <div class="pager">
+                <button class="button secondary" type="button" data-prev-question>Назад</button>
+                <button class="button primary" type="button" data-next-question>Далее</button>
+              </div>
+            </fieldset>
+
+            <p class="wizard-status" data-wizard-status role="status">
+              Сначала сохраните контакт, затем ответы будут сохраняться автоматически по шагам.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
+<script>
+  import {
+    calculateEngineeringOffer,
+    publicCalculatorConfigResponseSchema,
+    publicQuestionnaireSessionResponseSchema,
+    publicQuestionnaireStartResponseSchema,
+    type CalculationResult,
+    type EngineeringService,
+    type PublicQuestionnaireSession,
+    type QuestionnaireAnswerInput,
+    type ServiceRecord,
+  } from '@poznyak-engineering-calculator/contracts'
+
+  type ProjectType = 'private' | 'commercial'
+  type CalculatorService = EngineeringService & { isPublic?: boolean }
+  type QuestionnaireOption = { id: string; label: string }
+  type QuestionnaireQuestion = {
+    id: string
+    prompt: string
+    sourceRow: number
+    options?: QuestionnaireOption[]
+  }
+  type QuestionnaireSection = {
+    id: string
+    title: string
+    questions: QuestionnaireQuestion[]
+  }
+  type QuestionnaireData = {
+    version: string
+    sections: QuestionnaireSection[]
+    defaultAreaSqm: string
+    areaLimits: {
+      min: number
+      max: number
+      step: number
+    }
+    exchangeRate: {
+      source: 'manual' | 'nbrb' | 'fallback'
+      usdToBynRate: string
+      asOf?: string
+    }
+    fallbackServices: CalculatorService[]
+    selectedServiceIds: string[]
+    selectedProjectType: ProjectType
+  }
+  type OfferChoiceState = {
+    areaSqm?: string
+    selectedServiceIds?: string[]
+    projectType?: ProjectType
+  }
+
+  const dataElement = document.querySelector<HTMLScriptElement>('#questionnaire-data')
+  const data = JSON.parse(dataElement?.textContent ?? '{}') as QuestionnaireData
+  const allQuestions = data.sections.flatMap((section) => section.questions)
+  const questionOrder = new Map(allQuestions.map((question, index) => [question.id, index]))
+  const configStatus = document.querySelector<HTMLElement>('[data-config-status]')
+  const summaryArea = document.querySelector<HTMLElement>('[data-summary-area]')
+  const summaryType = document.querySelector<HTMLElement>('[data-summary-type]')
+  const summaryList = document.querySelector<HTMLElement>('[data-summary-list]')
+  const totalByn = document.querySelector<HTMLElement>('[data-total-byn]')
+  const progressPercent = document.querySelector<HTMLElement>('[data-progress-percent]')
+  const progressBar = document.querySelector<HTMLProgressElement>('[data-progress-bar]')
+  const progressText = document.querySelector<HTMLElement>('[data-progress-text]')
+  const sectionNav = document.querySelector<HTMLElement>('[data-section-nav]')
+  const contactForm = document.querySelector<HTMLFormElement>('[data-contact-form]')
+  const clientNameInput = document.querySelector<HTMLInputElement>('[data-client-name]')
+  const clientPhoneInput = document.querySelector<HTMLInputElement>('[data-client-phone]')
+  const objectNameInput = document.querySelector<HTMLTextAreaElement>('[data-object-name]')
+  const consentInput = document.querySelector<HTMLInputElement>('[data-consent]')
+  const startTrigger = document.querySelector<HTMLButtonElement>('[data-start-trigger]')
+  const resumePanel = document.querySelector<HTMLElement>('[data-resume-panel]')
+  const resumeLink = document.querySelector<HTMLAnchorElement>('[data-resume-link]')
+  const questionCard = document.querySelector<HTMLFieldSetElement>('[data-question-card]')
+  const questionTitle = document.querySelector<HTMLElement>('[data-question-title]')
+  const questionMeta = document.querySelector<HTMLElement>('[data-question-meta]')
+  const optionList = document.querySelector<HTMLElement>('[data-option-list]')
+  const customAnswer = document.querySelector<HTMLTextAreaElement>('[data-custom-answer]')
+  const saveCustom = document.querySelector<HTMLButtonElement>('[data-save-custom]')
+  const answerUnknown = document.querySelector<HTMLButtonElement>('[data-answer-unknown]')
+  const answerSkipped = document.querySelector<HTMLButtonElement>('[data-answer-skipped]')
+  const prevQuestion = document.querySelector<HTMLButtonElement>('[data-prev-question]')
+  const nextQuestion = document.querySelector<HTMLButtonElement>('[data-next-question]')
+  const wizardStatus = document.querySelector<HTMLElement>('[data-wizard-status]')
+
+  const numberFormatter = new Intl.NumberFormat('ru-RU')
+  const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
+  const projectTypeLabels: Record<ProjectType, string> = {
+    private: 'Частный дом',
+    commercial: 'Коммерческий объект',
+  }
+  const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
+  const offerStateStorageKey = 'pzk-offer-choice-state-v1'
+  const questionnaireSessionStorageKey = 'pzk-questionnaire-session-v1'
+
+  const initialChoiceState = readOfferChoiceState()
+  const hasExplicitServiceSelection = Array.isArray(initialChoiceState.selectedServiceIds)
+  let services = normalizeServices(data.fallbackServices)
+  let selectedProjectType: ProjectType = initialChoiceState.projectType ?? data.selectedProjectType ?? 'private'
+  let selectedServiceIds = new Set(
+    hasExplicitServiceSelection
+      ? initialChoiceState.selectedServiceIds
+      : data.selectedServiceIds,
+  )
+  let areaSqm = parseArea(initialChoiceState.areaSqm ?? data.defaultAreaSqm).canonical
+  let currentCalculation: CalculationResult | null = null
+  let hasApiConfig = false
+  let isStarting = false
+  let isSaving = false
+  let startIdempotencyKey = createIdempotencyKey()
+  let session: PublicQuestionnaireSession | null = null
+  let currentQuestionIndex = 0
+
+  attachHandlers()
+  renderStaticShell()
+  void bootstrap()
+
+  async function bootstrap() {
+    const resumeToken = resumeTokenFromUrl() ?? readStoredQuestionnaireToken()
+
+    if (resumeToken) {
+      await resumeQuestionnaire(resumeToken)
+    }
+
+    await loadPublicConfig()
+    render()
+  }
+
+  function attachHandlers() {
+    contactForm?.addEventListener('submit', (event) => {
+      event.preventDefault()
+      void startQuestionnaire()
+    })
+
+    clientNameInput?.addEventListener('input', resetStartKey)
+    clientPhoneInput?.addEventListener('input', resetStartKey)
+    objectNameInput?.addEventListener('input', resetStartKey)
+    consentInput?.addEventListener('change', resetStartKey)
+
+    saveCustom?.addEventListener('click', () => {
+      const text = customAnswer?.value.trim() ?? ''
+      if (!text) {
+        setWizardStatus('Введите свой ответ или выберите другой вариант.', 'error')
+        customAnswer?.setAttribute('aria-invalid', 'true')
+        return
+      }
+      customAnswer?.removeAttribute('aria-invalid')
+      void saveAnswer({
+        questionId: currentQuestion().id,
+        kind: 'custom',
+        customText: text,
+      })
+    })
+
+    answerUnknown?.addEventListener('click', () => {
+      void saveAnswer({
+        questionId: currentQuestion().id,
+        kind: 'unknown',
+      })
+    })
+
+    answerSkipped?.addEventListener('click', () => {
+      void saveAnswer({
+        questionId: currentQuestion().id,
+        kind: 'skipped',
+      })
+    })
+
+    prevQuestion?.addEventListener('click', () => {
+      currentQuestionIndex = Math.max(0, currentQuestionIndex - 1)
+      render()
+    })
+
+    nextQuestion?.addEventListener('click', () => {
+      currentQuestionIndex = Math.min(allQuestions.length - 1, currentQuestionIndex + 1)
+      render()
+    })
+  }
+
+  async function loadPublicConfig() {
+    if (!apiBaseUrl) {
+      hasApiConfig = false
+      setConfigStatus('Публичный API не подключен: старт опросника временно недоступен.', 'error')
+      return
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/calculator-config`, {
+        headers: { Accept: 'application/json' },
+      })
+
+      if (!response.ok) throw new Error(`Calculator config request failed: ${response.status}`)
+
+      const payload = publicCalculatorConfigResponseSchema.parse(await response.json())
+      const publicServices = normalizeServices(payload.services)
+      data.exchangeRate = payload.exchangeRate
+
+      if (publicServices.length === 0) {
+        services = []
+        selectedServiceIds = new Set()
+        hasApiConfig = false
+        setConfigStatus('В API нет опубликованных услуг. Опросник можно будет начать позже.', 'error')
+      } else {
+        services = publicServices
+        resolveSelectedServices()
+        hasApiConfig = true
+        setConfigStatus('Актуальные тарифы загружены. Опросник готов к старту.')
+      }
+    } catch {
+      hasApiConfig = false
+      setConfigStatus('API недоступен: попробуйте начать опросник позже.', 'error')
+    }
+  }
+
+  async function startQuestionnaire() {
+    if (isStarting) return
+
+    const validation = validateContact()
+    if (!validation.valid) {
+      setWizardStatus('Проверьте имя, телефон и согласие.', 'error')
+      return
+    }
+
+    if (!apiBaseUrl || !hasApiConfig || !currentCalculation || currentCalculation.lineItems.length === 0) {
+      setWizardStatus('Опросник требует подключенный API и выбранные разделы проекта.', 'error')
+      return
+    }
+
+    isStarting = true
+    updateStartState()
+    setWizardStatus('Сохраняю заявку и открываю опросник...', 'loading')
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/questionnaires`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          idempotencyKey: startIdempotencyKey,
+          clientName: validation.clientName,
+          clientPhone: validation.clientPhone,
+          objectName: questionnaireObjectName(),
+          calculation: {
+            areaSqm: currentCalculation.areaSqm,
+            selectedServiceIds: currentCalculation.selectedServiceIds,
+          },
+          consentAccepted: true,
+          source: 'public_questionnaire',
+          referrer: document.referrer || undefined,
+          utm: readAttributionMetadata(),
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) throw new Error(publicQuestionnaireErrorMessage(response.status, payload))
+
+      const parsed = publicQuestionnaireStartResponseSchema.parse(payload)
+      applyQuestionnaireSession(parsed.questionnaire)
+      storeQuestionnaireToken(parsed.questionnaire.publicToken)
+      setWizardStatus(
+        response.status === 200
+          ? 'Опросник уже был создан ранее. Продолжаем заполнение.'
+          : 'Контакт сохранен. Теперь ответы будут сохраняться по шагам.',
+        'ready',
+      )
+    } catch (error) {
+      setWizardStatus(
+        error instanceof Error ? error.message : 'Не удалось начать опросник. Попробуйте еще раз.',
+        'error',
+      )
+    } finally {
+      isStarting = false
+      updateStartState()
+      render()
+    }
+  }
+
+  async function resumeQuestionnaire(token: string) {
+    if (!apiBaseUrl) return
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/questionnaires/${encodeURIComponent(token)}`, {
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) return
+      const parsed = publicQuestionnaireSessionResponseSchema.parse(await response.json())
+      applyQuestionnaireSession(parsed.questionnaire)
+      storeQuestionnaireToken(parsed.questionnaire.publicToken)
+      setWizardStatus('Открыт сохраненный опросник.', 'ready')
+    } catch {
+      setWizardStatus('Не удалось восстановить сохраненный опросник.', 'error')
+    }
+  }
+
+  async function saveAnswer(answer: QuestionnaireAnswerInput) {
+    if (!session || isSaving) return
+
+    isSaving = true
+    setWizardStatus('Сохраняю ответ...', 'loading')
+    updateQuestionControls()
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/public/questionnaires/${encodeURIComponent(session.publicToken)}/answers`,
+        {
+          method: 'PATCH',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            answers: [answer],
+          }),
+        },
+      )
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) throw new Error(publicQuestionnaireErrorMessage(response.status, payload))
+
+      const parsed = publicQuestionnaireSessionResponseSchema.parse(payload)
+      applyQuestionnaireSession(parsed.questionnaire)
+      setWizardStatus('Ответ сохранен.', 'ready')
+    } catch (error) {
+      setWizardStatus(
+        error instanceof Error ? error.message : 'Не удалось сохранить ответ. Попробуйте еще раз.',
+        'error',
+      )
+    } finally {
+      isSaving = false
+      render()
+    }
+  }
+
+  function applyQuestionnaireSession(nextSession: PublicQuestionnaireSession) {
+    session = nextSession
+    const nextIndex = firstUnansweredQuestionIndex()
+    currentQuestionIndex = nextIndex === -1 ? currentQuestionIndex : nextIndex
+  }
+
+  function renderStaticShell() {
+    renderSectionNav()
+    render()
+  }
+
+  function render() {
+    renderCalculationSummary()
+    renderProgress()
+    renderQuestion()
+    renderSessionPanels()
+    updateStartState()
+    updateQuestionControls()
+  }
+
+  function renderCalculationSummary() {
+    if (session) {
+      if (summaryArea) summaryArea.textContent = compactArea(session.calculation.areaSqm)
+      if (summaryType) summaryType.textContent = projectTypeLabels[selectedProjectType]
+      if (summaryList) {
+        summaryList.innerHTML = session.calculation.serviceTitles
+          .map(
+            (title) => `
+              <div class="summary-row">
+                <span>${escapeHtml(title)}</span>
+                <strong>Сохранено</strong>
+              </div>
+            `,
+          )
+          .join('')
+      }
+      if (totalByn) {
+        totalByn.innerHTML = `${formatRubles(session.calculation.totalBynRoundedRubles)} ${currencyMarkup()}`
+      }
+      return
+    }
+
+    const parsedArea = parseArea(areaSqm)
+    areaSqm = parsedArea.canonical
+    const canCalculate = parsedArea.valid && services.length > 0
+
+    if (!canCalculate) {
+      currentCalculation = null
+      if (summaryList) {
+        summaryList.innerHTML = `<div class="summary-row muted"><span>Разделы не выбраны</span><strong>0 ${currencyMarkup()}</strong></div>`
+      }
+      if (totalByn) totalByn.innerHTML = `0 ${currencyMarkup()}`
+      return
+    }
+
+    resolveSelectedServices()
+    currentCalculation = calculateEngineeringOffer({
+      areaSqm,
+      selectedServiceIds: [...selectedServiceIds],
+      services,
+      exchangeRate: data.exchangeRate,
+    })
+
+    if (summaryArea) summaryArea.textContent = compactArea(currentCalculation.areaSqm)
+    if (summaryType) summaryType.textContent = projectTypeLabels[selectedProjectType]
+    if (!summaryList || !totalByn) return
+
+    const displayRubles = allocateDisplayBynRubles(currentCalculation)
+    summaryList.innerHTML = currentCalculation.lineItems
+      .map(
+        (lineItem) => `
+          <div class="summary-row">
+            <span>${escapeHtml(lineItem.serviceSnapshot.title)}</span>
+            <strong>${formatRubles(displayRubles.get(lineItem.serviceId) ?? 0)} ${currencyMarkup()}</strong>
+          </div>
+        `,
+      )
+      .join('')
+    totalByn.innerHTML = `${formatRubles(currentCalculation.totals.totalBynRoundedRubles)} ${currencyMarkup()}`
+  }
+
+  function renderProgress() {
+    const progress = session?.progress ?? {
+      completionPercent: 0,
+      answeredCount: 0,
+      totalQuestions: allQuestions.length,
+      unknownCount: 0,
+      skippedCount: 0,
+    }
+
+    if (progressPercent) progressPercent.textContent = `${progress.completionPercent}%`
+    if (progressBar) {
+      progressBar.value = progress.completionPercent
+      progressBar.textContent = `${progress.completionPercent}%`
+      progressBar.setAttribute('aria-valuenow', String(progress.completionPercent))
+    }
+    if (progressText) {
+      progressText.textContent = `${progress.answeredCount} из ${progress.totalQuestions} вопросов. Пока не знаю: ${progress.unknownCount}; пропущено: ${progress.skippedCount}.`
+    }
+
+    sectionNav?.querySelectorAll<HTMLButtonElement>('button[data-section-id]').forEach((button) => {
+      const sectionIndex = Number(button.dataset.sectionIndex ?? '0')
+      const section = data.sections[sectionIndex]
+      const isCurrent = section.questions.some((question) => question.id === currentQuestion().id)
+      const answeredInSection = section.questions.filter((question) => answersByQuestionId().has(question.id)).length
+      button.classList.toggle('is-active', isCurrent)
+      button.querySelector('span:last-child')!.textContent = `${answeredInSection}/${section.questions.length}`
+    })
+  }
+
+  function renderSectionNav() {
+    if (!sectionNav) return
+    sectionNav.innerHTML = data.sections
+      .map(
+        (section, index) => `
+          <button type="button" data-section-id="${escapeHtml(section.id)}" data-section-index="${index}">
+            <span>${escapeHtml(section.title)}</span>
+            <span>0/${section.questions.length}</span>
+          </button>
+        `,
+      )
+      .join('')
+
+    sectionNav.querySelectorAll<HTMLButtonElement>('button[data-section-index]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const section = data.sections[Number(button.dataset.sectionIndex ?? '0')]
+        const firstQuestion = section.questions[0]
+        currentQuestionIndex = Math.max(0, questionOrder.get(firstQuestion.id) ?? 0)
+        render()
+      })
+    })
+  }
+
+  function renderQuestion() {
+    if (!questionCard || !session) {
+      if (questionCard) questionCard.hidden = true
+      return
+    }
+
+    const question = currentQuestion()
+    const section = currentSection()
+    const answer = answersByQuestionId().get(question.id)
+    questionCard.hidden = false
+    if (questionTitle) questionTitle.textContent = question.prompt
+    if (questionMeta) {
+      questionMeta.textContent = `${section.title} · вопрос ${currentQuestionIndex + 1} из ${allQuestions.length}`
+    }
+    if (customAnswer) {
+      customAnswer.value = answer?.kind === 'custom' ? answer.customText ?? '' : ''
+      customAnswer.removeAttribute('aria-invalid')
+    }
+
+    if (optionList) {
+      optionList.innerHTML = question.options?.length
+        ? question.options
+          .map(
+            (option) => `
+              <button
+                class="answer-option${answer?.kind === 'option' && answer.optionId === option.id ? ' is-selected' : ''}"
+                type="button"
+                data-option-id="${escapeHtml(option.id)}"
+                aria-pressed="${answer?.kind === 'option' && answer.optionId === option.id ? 'true' : 'false'}"
+              >
+                ${escapeHtml(option.label)}
+              </button>
+            `,
+          )
+          .join('')
+        : '<p class="empty-options">Для этого вопроса нужен короткий текстовый ответ.</p>'
+
+      optionList.querySelectorAll<HTMLButtonElement>('button[data-option-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+          void saveAnswer({
+            questionId: question.id,
+            kind: 'option',
+            optionId: button.dataset.optionId ?? '',
+          })
+        })
+      })
+    }
+  }
+
+  function renderSessionPanels() {
+    const hasSession = Boolean(session)
+    if (contactForm) contactForm.hidden = hasSession
+    if (resumePanel) resumePanel.hidden = !hasSession
+
+    if (session && resumeLink) {
+      const url = new URL('/questionnaire/', window.location.origin)
+      url.searchParams.set('token', session.publicToken)
+      resumeLink.href = url.pathname + url.search
+      resumeLink.textContent = url.href
+    }
+  }
+
+  function updateStartState() {
+    if (!startTrigger) return
+    const disabled =
+      isStarting ||
+      Boolean(session) ||
+      !apiBaseUrl ||
+      !hasApiConfig ||
+      !currentCalculation ||
+      currentCalculation.lineItems.length === 0
+    startTrigger.disabled = disabled
+    startTrigger.textContent = isStarting ? 'Сохраняю...' : 'Начать подробный опросник'
+  }
+
+  function updateQuestionControls() {
+    const disabled = isSaving || !session
+    for (const button of [saveCustom, answerUnknown, answerSkipped, prevQuestion, nextQuestion]) {
+      if (button) button.disabled = disabled
+    }
+    if (prevQuestion) prevQuestion.disabled = disabled || currentQuestionIndex === 0
+    if (nextQuestion) nextQuestion.disabled = disabled || currentQuestionIndex >= allQuestions.length - 1
+  }
+
+  function validateContact() {
+    const clientName = clientNameInput?.value.trim() ?? ''
+    const clientPhone = clientPhoneInput?.value.trim() ?? ''
+    const phoneDigits = clientPhone.replace(/\D/g, '')
+    const nameValid = clientName.length >= 2 && clientName.length <= 120
+    const phoneValid =
+      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
+      phoneDigits.length >= 8 &&
+      phoneDigits.length <= 15 &&
+      !/^(\d)\1+$/.test(phoneDigits)
+    const consentValid = consentInput?.checked === true
+
+    setInputValidity(clientNameInput, nameValid)
+    setInputValidity(clientPhoneInput, phoneValid)
+    setInputValidity(consentInput, consentValid)
+
+    return {
+      valid: nameValid && phoneValid && consentValid,
+      clientName,
+      clientPhone,
+    }
+  }
+
+  function setInputValidity(input: HTMLInputElement | null, isValid: boolean) {
+    if (!input) return
+    if (isValid) {
+      input.removeAttribute('aria-invalid')
+    } else {
+      input.setAttribute('aria-invalid', 'true')
+    }
+  }
+
+  function currentQuestion() {
+    return allQuestions[currentQuestionIndex] ?? allQuestions[0]
+  }
+
+  function currentSection() {
+    return data.sections.find((section) =>
+      section.questions.some((question) => question.id === currentQuestion().id),
+    ) ?? data.sections[0]
+  }
+
+  function firstUnansweredQuestionIndex() {
+    const answers = answersByQuestionId()
+    const index = allQuestions.findIndex((question) => !answers.has(question.id))
+    return index
+  }
+
+  function answersByQuestionId() {
+    return new Map((session?.answers ?? []).map((answer) => [answer.questionId, answer]))
+  }
+
+  function readOfferChoiceState(): OfferChoiceState {
+    const searchParams = new URLSearchParams(window.location.search)
+    const servicesFromQuery = (searchParams.get('services') ?? '')
+      .split(',')
+      .map((serviceId) => serviceId.trim())
+      .filter(Boolean)
+    const typeFromQuery = searchParams.get('type')
+    const hasServicesQuery = searchParams.has('services')
+    const queryState: OfferChoiceState = {
+      areaSqm: searchParams.get('area') ?? undefined,
+      selectedServiceIds: hasServicesQuery ? servicesFromQuery : undefined,
+      projectType: typeFromQuery === 'commercial' ? 'commercial' : typeFromQuery === 'private' ? 'private' : undefined,
+    }
+
+    if (queryState.areaSqm || queryState.selectedServiceIds || queryState.projectType) {
+      return queryState
+    }
+
+    try {
+      const rawState = sessionStorage.getItem(offerStateStorageKey)
+      if (!rawState) return {}
+      const parsed = JSON.parse(rawState) as OfferChoiceState
+      return {
+        areaSqm: typeof parsed.areaSqm === 'string' ? parsed.areaSqm : undefined,
+        selectedServiceIds: Array.isArray(parsed.selectedServiceIds)
+          ? parsed.selectedServiceIds.filter((serviceId) => typeof serviceId === 'string')
+          : undefined,
+        projectType: parsed.projectType === 'commercial' || parsed.projectType === 'private'
+          ? parsed.projectType
+          : undefined,
+      }
+    } catch {
+      return {}
+    }
+  }
+
+  function normalizeServices(source: Array<CalculatorService | ServiceRecord>): CalculatorService[] {
+    return source
+      .filter((service) => service.isActive && supportedPricingTypes.has(service.pricingType))
+      .map((service) => ({
+        id: service.id,
+        title: service.title,
+        description: service.description ?? null,
+        pricingType: service.pricingType,
+        priceUsdCents: service.priceUsdCents,
+        isActive: service.isActive,
+        sortOrder: service.sortOrder,
+        pricingRule: service.pricingRule ?? undefined,
+        formulaVersion: service.formulaVersion ?? undefined,
+        createdAt: service.createdAt,
+        updatedAt: service.updatedAt,
+        isPublic: 'isPublic' in service ? service.isPublic : true,
+      }))
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+  }
+
+  function resolveSelectedServices() {
+    const availableServiceIds = new Set(services.map((service) => service.id))
+    const validSelectedServiceIds = [...selectedServiceIds].filter((serviceId) =>
+      availableServiceIds.has(serviceId),
+    )
+    const shouldPreserveExplicitEmptySelection = hasExplicitServiceSelection && selectedServiceIds.size === 0
+    selectedServiceIds = new Set(
+      shouldPreserveExplicitEmptySelection
+        ? []
+        : validSelectedServiceIds.length > 0
+          ? validSelectedServiceIds
+          : defaultSelectedServiceIds(services),
+    )
+  }
+
+  function defaultSelectedServiceIds(source: CalculatorService[]) {
+    return source.slice(0, Math.min(3, source.length)).map((service) => service.id)
+  }
+
+  function parseArea(value: string) {
+    const canonical = value.trim().replace(',', '.')
+
+    if (!/^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(canonical)) {
+      return { valid: false, canonical: data.defaultAreaSqm }
+    }
+
+    const numericValue = Number(canonical)
+    if (numericValue < data.areaLimits.min || numericValue > data.areaLimits.max) {
+      return { valid: false, canonical: data.defaultAreaSqm }
+    }
+
+    return { valid: true, canonical }
+  }
+
+  function questionnaireObjectName() {
+    const comment = objectNameInput?.value.trim() ?? ''
+    const base = `Подробный опросник. Тип проекта: ${projectTypeLabels[selectedProjectType]}`
+    return comment ? `${base}. ${comment}`.slice(0, 160) : base
+  }
+
+  function readAttributionMetadata() {
+    const searchParams = new URLSearchParams(window.location.search)
+    const metadata: Record<string, string> = {}
+
+    searchParams.forEach((value, key) => {
+      if (!/^(utm_[a-z0-9_]+|gclid|yclid|fbclid)$/i.test(key)) return
+      const trimmedValue = value.trim()
+      if (!trimmedValue) return
+      metadata[key.slice(0, 64)] = trimmedValue.slice(0, 500)
+    })
+
+    return Object.keys(metadata).length > 0 ? metadata : undefined
+  }
+
+  function resumeTokenFromUrl() {
+    return new URLSearchParams(window.location.search).get('token')?.trim() || null
+  }
+
+  function storeQuestionnaireToken(token: string) {
+    try {
+      sessionStorage.setItem(questionnaireSessionStorageKey, JSON.stringify({ token }))
+    } catch {
+      // Resume links still work even if session storage is unavailable.
+    }
+  }
+
+  function readStoredQuestionnaireToken() {
+    if (new URLSearchParams(window.location.search).has('area')) return null
+
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(questionnaireSessionStorageKey) ?? '{}') as {
+        token?: unknown
+      }
+      return typeof parsed.token === 'string' ? parsed.token : null
+    } catch {
+      return null
+    }
+  }
+
+  function resetStartKey() {
+    startIdempotencyKey = createIdempotencyKey()
+  }
+
+  function createIdempotencyKey() {
+    if ('randomUUID' in crypto) {
+      return crypto.randomUUID()
+    }
+
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`
+  }
+
+  function setConfigStatus(message: string, state?: 'error') {
+    if (!configStatus) return
+    configStatus.textContent = message
+    configStatus.classList.toggle('is-error', state === 'error')
+  }
+
+  function setWizardStatus(message: string, state?: 'ready' | 'error' | 'loading') {
+    if (!wizardStatus) return
+    wizardStatus.textContent = message
+    wizardStatus.classList.toggle('is-ready', state === 'ready')
+    wizardStatus.classList.toggle('is-error', state === 'error')
+    wizardStatus.classList.toggle('is-loading', state === 'loading')
+  }
+
+  function publicQuestionnaireErrorMessage(status: number, payload: unknown) {
+    const serverMessage =
+      payload && typeof payload === 'object' && 'error' in payload
+        ? (payload as { error?: { message?: string } }).error?.message
+        : undefined
+
+    if (status === 400) return serverMessage ?? 'Проверьте поля формы.'
+    if (status === 404) return 'Сохраненный опросник не найден.'
+    if (status === 409) return 'Выбранные разделы изменились. Вернитесь к калькулятору и повторите старт.'
+    if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
+    return serverMessage ?? 'Не удалось выполнить действие. Попробуйте еще раз.'
+  }
+
+  function allocateDisplayBynRubles(calculation: CalculationResult) {
+    const floorRows = calculation.lineItems.map((lineItem, index) => ({
+      serviceId: lineItem.serviceId,
+      rubles: Math.floor(lineItem.totalBynCents / 100),
+      remainder: lineItem.totalBynCents % 100,
+      index,
+    }))
+    const floorTotal = floorRows.reduce((total, row) => total + row.rubles, 0)
+    const remainingRubles = calculation.totals.totalBynRoundedRubles - floorTotal
+    const rowsByRemainder = [...floorRows].sort(
+      (first, second) => second.remainder - first.remainder || first.index - second.index,
+    )
+
+    for (const row of rowsByRemainder.slice(0, Math.max(0, remainingRubles))) {
+      row.rubles += 1
+    }
+
+    return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
+  }
+
+  function formatRubles(value: number) {
+    return numberFormatter.format(value)
+  }
+
+  function compactArea(value: string) {
+    return value.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+  }
+
+  function currencyMarkup() {
+    return '<img class="currency-symbol" src="/landing-v4/byn-symbol.svg" alt="" aria-hidden="true"><span class="sr-only"> BYN</span>'
+  }
+
+  function escapeHtml(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+</script>
+
+<style is:global>
+  :root {
+    color-scheme: light;
+    --navy: #081a2f;
+    --blue: #0b5fb5;
+    --blue-2: #084d93;
+    --blue-soft: #edf5fc;
+    --ink: #102033;
+    --body: #4d5b6a;
+    --muted: #7a8794;
+    --line: #dbe3eb;
+    --line-strong: #c5d0db;
+    --paper: #f6f8fb;
+    --surface: #ffffff;
+    --danger: #b6401a;
+    --success: #0b5f46;
+    --shadow: 0 18px 50px rgba(16, 32, 51, 0.1);
+    --shell: 1160px;
+    --font-body: Inter, "Segoe UI", Arial, sans-serif;
+    --font-heading: Nunito, Inter, "Segoe UI", Arial, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.56;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  h1,
+  h2,
+  p,
+  dl,
+  dd,
+  fieldset,
+  legend {
+    margin: 0;
+  }
+
+  h1,
+  h2,
+  legend {
+    font-family: var(--font-heading);
+    letter-spacing: 0;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .shell {
+    width: min(var(--shell), calc(100% - 48px));
+    margin-inline: auto;
+  }
+
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid rgba(219, 227, 235, 0.95);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(14px);
+  }
+
+  .header-inner {
+    min-height: 74px;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    width: fit-content;
+  }
+
+  .brand-mark {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    overflow: visible;
+  }
+
+  .brand-mark-bg {
+    fill: var(--navy);
+  }
+
+  .brand-mark-p,
+  .brand-mark-flow {
+    fill: none;
+    stroke: #ffffff;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .brand-mark-p {
+    stroke-width: 3.2;
+  }
+
+  .brand-mark-flow {
+    stroke: #85c2ff;
+    stroke-width: 2.4;
+  }
+
+  .brand-mark-node {
+    fill: #ffffff;
+    stroke: #85c2ff;
+    stroke-width: 1.6;
+  }
+
+  .brand-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .brand-copy strong {
+    font-family: var(--font-heading);
+    font-size: 19px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .brand-copy > span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: flex-end;
+    gap: 28px;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .nav a:hover {
+    color: var(--blue);
+  }
+
+  .hero {
+    border-bottom: 1px solid var(--line);
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.8)),
+      url("/landing-v4/project-preview-spec-10.jpg") center / cover;
+  }
+
+  .hero-grid {
+    min-height: 420px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 56px;
+    align-items: center;
+    padding: 56px 0;
+  }
+
+  .eyebrow,
+  .section-kicker {
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    max-width: 680px;
+    margin-top: 14px;
+    font-size: clamp(34px, 3.45vw, 52px);
+    line-height: 1.06;
+    font-weight: 800;
+  }
+
+  .hero-copy p {
+    max-width: 660px;
+    margin-top: 20px;
+    color: var(--body);
+    font-size: 18px;
+  }
+
+  .state-status,
+  .wizard-status {
+    width: fit-content;
+    border: 1px solid rgba(11, 95, 181, 0.18);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px 12px;
+    color: var(--blue) !important;
+    font-size: 13px !important;
+    font-weight: 750;
+  }
+
+  .state-status.is-error,
+  .wizard-status.is-error {
+    border-color: rgba(182, 64, 26, 0.22);
+    color: var(--danger) !important;
+  }
+
+  .wizard-status.is-ready {
+    border-color: rgba(11, 95, 70, 0.22);
+    color: var(--success) !important;
+  }
+
+  .summary-card,
+  .progress-panel,
+  .main-panel,
+  .contact-gate,
+  .resume-panel,
+  .question-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: var(--shadow);
+  }
+
+  .summary-card {
+    padding: 26px;
+  }
+
+  .summary-head,
+  .summary-row,
+  .summary-total,
+  .summary-metrics {
+    display: grid;
+    gap: 12px;
+  }
+
+  .summary-head {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .summary-head a {
+    border-bottom: 1px solid currentColor;
+  }
+
+  .summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 20px;
+  }
+
+  .summary-metrics div {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+    padding: 12px;
+  }
+
+  .summary-metrics dt {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .summary-metrics dd {
+    margin-top: 4px;
+    font-family: var(--font-heading);
+    font-weight: 800;
+  }
+
+  .summary-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 22px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+  }
+
+  .summary-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .summary-row strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .currency-symbol {
+    width: 0.72em;
+    height: 0.72em;
+    display: inline-block;
+    object-fit: contain;
+    vertical-align: -0.04em;
+  }
+
+  .summary-total {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    margin-top: 24px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f7f9fc, #eef3f8);
+    padding: 22px;
+  }
+
+  .summary-total span {
+    color: var(--body);
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .summary-total strong {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    font-family: var(--font-heading);
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 800;
+  }
+
+  .workspace {
+    background: var(--paper);
+    padding: 48px 0 72px;
+  }
+
+  .workspace-grid {
+    display: grid;
+    grid-template-columns: 330px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  .progress-panel,
+  .main-panel {
+    padding: 22px;
+  }
+
+  .progress-panel {
+    position: sticky;
+    top: 96px;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  h2 {
+    margin-top: 6px;
+    font-size: 26px;
+    line-height: 1.12;
+    font-weight: 800;
+  }
+
+  .panel-head strong {
+    color: var(--blue);
+    font-family: var(--font-heading);
+    font-size: 26px;
+    font-weight: 800;
+  }
+
+  progress {
+    width: 100%;
+    height: 10px;
+    margin-top: 18px;
+    accent-color: var(--blue);
+  }
+
+  .progress-panel p {
+    margin-top: 12px;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .section-nav {
+    display: grid;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  .section-nav button {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px 12px;
+    color: var(--body);
+    font-size: 12px;
+    font-weight: 750;
+    text-align: left;
+  }
+
+  .section-nav button.is-active {
+    border-color: rgba(11, 95, 181, 0.35);
+    background: var(--blue-soft);
+    color: var(--ink);
+  }
+
+  .main-panel {
+    display: grid;
+    gap: 16px;
+    box-shadow: none;
+  }
+
+  .contact-gate,
+  .resume-panel,
+  .question-card {
+    display: grid;
+    gap: 18px;
+    padding: 22px;
+    box-shadow: none;
+  }
+
+  .contact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  label {
+    display: grid;
+    gap: 8px;
+  }
+
+  label span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  input:not([type="checkbox"]),
+  textarea {
+    width: 100%;
+    min-height: 50px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0 14px;
+  }
+
+  textarea {
+    min-height: 104px;
+    padding: 12px 14px;
+    resize: vertical;
+  }
+
+  input[aria-invalid],
+  textarea[aria-invalid] {
+    border-color: var(--danger);
+    background: #fff8f4;
+  }
+
+  .consent-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    border: 1px solid rgba(219, 227, 235, 0.85);
+    border-radius: 10px;
+    background: #f8fbfe;
+    padding: 11px 12px;
+  }
+
+  .consent-row input {
+    width: 18px;
+    height: 18px;
+    margin: 1px 0 0;
+    accent-color: var(--blue);
+  }
+
+  .consent-row span {
+    color: var(--body);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .resume-panel {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    background: #f8fbfe;
+  }
+
+  .resume-panel a {
+    max-width: 360px;
+    overflow-wrap: anywhere;
+    border-bottom: 1px solid var(--blue);
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .question-card {
+    border-color: rgba(11, 95, 181, 0.22);
+  }
+
+  .question-card legend {
+    float: left;
+    width: 100%;
+    font-size: clamp(24px, 2.2vw, 34px);
+    line-height: 1.12;
+    font-weight: 800;
+  }
+
+  .question-meta {
+    clear: both;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .option-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .answer-option {
+    min-height: 44px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0 14px;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .answer-option:hover,
+  .answer-option.is-selected {
+    border-color: var(--blue);
+    background: var(--blue-soft);
+    color: var(--blue);
+  }
+
+  .empty-options {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .question-actions,
+  .pager {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .pager {
+    justify-content: space-between;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+
+  .button {
+    min-height: 46px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 18px;
+    font-weight: 750;
+    line-height: 1.2;
+    text-align: center;
+    transition: 0.18s ease;
+  }
+
+  .button.primary {
+    background: var(--blue);
+    color: #ffffff;
+    box-shadow: 0 10px 26px rgba(11, 95, 181, 0.16);
+  }
+
+  .button.primary:hover {
+    background: var(--blue-2);
+  }
+
+  .button.secondary,
+  .button.ghost {
+    border-color: var(--line-strong);
+    background: #ffffff;
+    color: var(--ink);
+  }
+
+  .button.ghost {
+    background: var(--paper);
+  }
+
+  .button.secondary:hover,
+  .button.ghost:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  .brand:focus-visible,
+  .nav a:focus-visible,
+  .button:focus-visible,
+  .section-nav button:focus-visible,
+  .answer-option:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid rgba(11, 95, 181, 0.35);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 940px) {
+    .nav {
+      display: none;
+    }
+
+    .hero-grid,
+    .workspace-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .progress-panel {
+      position: static;
+    }
+
+    .section-nav {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .shell {
+      width: min(100% - 28px, var(--shell));
+    }
+
+    .header-inner {
+      min-height: 66px;
+      grid-template-columns: 1fr;
+    }
+
+    .brand-copy strong {
+      font-size: 16px;
+    }
+
+    .hero-grid,
+    .workspace {
+      padding: 38px 0;
+    }
+
+    h1 {
+      font-size: clamp(28px, 8vw, 36px);
+    }
+
+    .hero-copy p {
+      font-size: 16px;
+    }
+
+    .summary-card,
+    .progress-panel,
+    .main-panel,
+    .contact-gate,
+    .resume-panel,
+    .question-card {
+      padding: 18px;
+    }
+
+    .summary-metrics,
+    .summary-total,
+    .contact-grid,
+    .resume-panel {
+      grid-template-columns: 1fr;
+    }
+
+    .section-nav {
+      grid-template-columns: 1fr;
+    }
+
+    .pager {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .button {
+      width: 100%;
+    }
+  }
+</style>

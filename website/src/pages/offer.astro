@@ -387,7 +387,6 @@ const structuredData = {
   const totalByn = document.querySelector<HTMLElement>('[data-total-byn]')
   const preliminaryButton = document.querySelector<HTMLButtonElement>('[data-preliminary-start]')
   const questionnaireButton = document.querySelector<HTMLButtonElement>('[data-questionnaire-start]')
-  const questionnaireNote = document.querySelector<HTMLElement>('[data-questionnaire-note]')
   const preliminaryPanel = document.querySelector<HTMLElement>('[data-preliminary-panel]')
   const leadForm = document.querySelector<HTMLFormElement>('[data-preliminary-form]')
   const leadNameInput = document.querySelector<HTMLInputElement>('[data-lead-name]')
@@ -448,11 +447,18 @@ const structuredData = {
 
     questionnaireButton?.addEventListener('click', () => {
       persistOfferChoiceState('questionnaire')
-      questionnaireButton.setAttribute('aria-pressed', 'true')
-      questionnaireButton.textContent = 'Подробный опросник выбран'
-      if (questionnaireNote) questionnaireNote.hidden = false
-      questionnaireNote?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      setStateStatus('Выбран подробный сценарий. Полный опросник будет доступен в следующем этапе.')
+      const params = new URLSearchParams()
+      params.set('area', currentCalculation?.areaSqm ?? areaSqm)
+      params.set('services', (currentCalculation?.selectedServiceIds ?? [...selectedServiceIds]).join(','))
+      params.set('type', selectedProjectType)
+
+      for (const [key, value] of new URLSearchParams(window.location.search)) {
+        if (/^(utm_[a-z0-9_]+|gclid|yclid|fbclid)$/i.test(key)) {
+          params.set(key, value)
+        }
+      }
+
+      window.location.href = `/questionnaire/?${params.toString()}`
     })
 
     leadNameInput?.addEventListener('input', () => {

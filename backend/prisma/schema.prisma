@@ -90,6 +90,7 @@ model Calculation {
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
   proposals              Proposal[]
+  questionnaire          CalculationQuestionnaire?
 
   @@index([createdAt], map: "calculations_created_at_idx")
   @@index([status, createdAt], map: "calculations_status_created_at_idx")
@@ -97,6 +98,30 @@ model Calculation {
   @@index([clientPhone, createdAt], map: "calculations_client_phone_created_at_idx")
   @@index([duplicateWindowStartedAt], map: "calculations_duplicate_window_started_at_idx")
   @@map("calculations")
+}
+
+model CalculationQuestionnaire {
+  id                     String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  calculationId          String      @unique(map: "calculation_questionnaires_calculation_id_key") @db.Uuid @map("calculation_id")
+  idempotencyKey         String      @unique(map: "calculation_questionnaires_idempotency_key_key") @map("idempotency_key")
+  requestFingerprintHash String      @map("request_fingerprint_hash")
+  questionnaireVersion   String      @map("questionnaire_version")
+  answersSnapshot        Json        @map("answers_snapshot")
+  source                 String?
+  referrer               String?
+  utm                    Json?
+  consentAcceptedAt      DateTime?   @map("consent_accepted_at")
+  consentVersion         String?     @map("consent_version")
+  consentText            String?     @map("consent_text")
+  consentIpAddress       String?     @map("consent_ip_address")
+  consentUserAgent       String?     @map("consent_user_agent")
+  createdAt              DateTime    @default(now()) @map("created_at")
+  updatedAt              DateTime    @updatedAt @map("updated_at")
+  calculation            Calculation @relation(fields: [calculationId], references: [id], onDelete: Restrict, map: "calculation_questionnaires_calculation_id_fkey")
+
+  @@index([createdAt], map: "calculation_questionnaires_created_at_idx")
+  @@index([updatedAt], map: "calculation_questionnaires_updated_at_idx")
+  @@map("calculation_questionnaires")
 }
 
 model Proposal {

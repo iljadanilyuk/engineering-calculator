@@ -461,6 +461,8 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             </CardContent>
           </Card>
 
+          <QuestionnaireDraftCard questionnaire={lead.questionnaire} />
+
           <Card className="rounded-lg">
             <CardHeader>
               <CardTitle>Снимок выбранных услуг</CardTitle>
@@ -560,11 +562,15 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <CardHeader>
               <CardTitle>Следующие этапы</CardTitle>
               <CardDescription>
-                Место в карточке уже выделено под будущие ТЗ, договор и Telegram-уточнения.
+                Место в карточке выделено под договор и будущие уточнения по проекту.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              <Badge variant="secondary">ТЗ позже</Badge>
+              {lead.questionnaire ? (
+                <Badge variant="secondary">Черновик ТЗ {lead.questionnaire.progress.completionPercent}%</Badge>
+              ) : (
+                <Badge variant="secondary">ТЗ не заполнено</Badge>
+              )}
               <Badge variant="secondary">Договор позже</Badge>
               <Badge variant="secondary">Telegram позже</Badge>
             </CardContent>
@@ -689,6 +695,136 @@ function CalculationLine({ lineItem }: { lineItem: CalculationLineItem }) {
       <DetailItem label="BYN" value={formatByn(lineItem.totalBynRoundedRubles)} />
     </div>
   )
+}
+
+function QuestionnaireDraftCard({
+  questionnaire,
+}: {
+  questionnaire: CalculationRecord['questionnaire']
+}) {
+  if (!questionnaire) {
+    return (
+      <Card className="rounded-lg">
+        <CardHeader>
+          <CardTitle>Черновик ТЗ</CardTitle>
+          <CardDescription>
+            Подробный опросник для этой заявки еще не заполнен.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="rounded-lg">
+      <CardHeader>
+        <div className="grid gap-2">
+          <CardTitle>Черновик ТЗ</CardTitle>
+          <CardDescription>
+            {questionnaire.progress.answeredCount} из {questionnaire.progress.totalQuestions} вопросов · обновлено{' '}
+            {formatDateTime(questionnaire.updatedAt)}
+          </CardDescription>
+        </div>
+        <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
+          <Badge variant="outline">{questionnaire.progress.completionPercent}%</Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 sm:grid-cols-4">
+          <DetailItem
+            label="Заполнено"
+            value={`${questionnaire.progress.answeredCount}/${questionnaire.progress.totalQuestions}`}
+          />
+          <DetailItem label="Свои ответы" value={String(questionnaire.progress.customCount)} />
+          <DetailItem label="Пока не знаю" value={String(questionnaire.progress.unknownCount)} />
+          <DetailItem label="Пропущено" value={String(questionnaire.progress.skippedCount)} />
+        </div>
+
+        <div className="grid gap-4">
+          {questionnaire.sections.map((section) => (
+            <QuestionnaireSectionDraft key={section.id} section={section} />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function QuestionnaireSectionDraft({
+  section,
+}: {
+  section: NonNullable<CalculationRecord['questionnaire']>['sections'][number]
+}) {
+  const answeredQuestions = section.questions.filter(hasQuestionnaireAnswer)
+
+  return (
+    <section className="grid gap-3 rounded-lg border p-4" aria-label={section.title}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Typography variant="bodySmMedium">{section.title}</Typography>
+        <Typography variant="caption" tone="muted">
+          {answeredQuestions.length}/{section.questions.length}
+        </Typography>
+      </div>
+
+      {answeredQuestions.length === 0 ? (
+        <Typography variant="bodySm" tone="muted">
+          В этом разделе пока нет ответов.
+        </Typography>
+      ) : (
+        <div className="grid gap-3">
+          {answeredQuestions.map((question) => (
+            <div key={question.id} className="grid gap-1 border-t pt-3 first:border-t-0 first:pt-0">
+              <Typography variant="caption" tone="muted">
+                {question.prompt}
+              </Typography>
+              <div className="flex flex-wrap items-start gap-2">
+                <QuestionnaireAnswerBadge answer={question.answer} />
+                <Typography className="min-w-0 break-words" variant="bodySmMedium">
+                  {questionnaireAnswerText(question.answer)}
+                </Typography>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+type QuestionnaireDraftQuestion =
+  NonNullable<CalculationRecord['questionnaire']>['sections'][number]['questions'][number]
+
+type AnsweredQuestionnaireDraftQuestion = QuestionnaireDraftQuestion & {
+  answer: NonNullable<QuestionnaireDraftQuestion['answer']>
+}
+
+function hasQuestionnaireAnswer(
+  question: QuestionnaireDraftQuestion,
+): question is AnsweredQuestionnaireDraftQuestion {
+  return question.answer !== null
+}
+
+function QuestionnaireAnswerBadge({
+  answer,
+}: {
+  answer: NonNullable<
+    NonNullable<CalculationRecord['questionnaire']>['sections'][number]['questions'][number]['answer']
+  >
+}) {
+  if (answer.kind === 'unknown') return <Badge variant="secondary">Пока не знаю</Badge>
+  if (answer.kind === 'skipped') return <Badge variant="secondary">Пропущено</Badge>
+  if (answer.kind === 'custom') return <Badge variant="outline">Свой ответ</Badge>
+  return <Badge variant="outline">Вариант</Badge>
+}
+
+function questionnaireAnswerText(
+  answer: NonNullable<
+    NonNullable<CalculationRecord['questionnaire']>['sections'][number]['questions'][number]['answer']
+  >,
+) {
+  if (answer.kind === 'unknown') return 'Требует уточнения'
+  if (answer.kind === 'skipped') return 'Пользователь пропустил вопрос'
+  return answer.label ?? answer.customText ?? answer.optionId ?? 'Ответ сохранен'
 }
 
 function LeadFilters({
@@ -1042,6 +1178,7 @@ function exchangeRateSourceLabel(source: string) {
 
 function leadSourceLabel(source: string | null) {
   if (source === 'example_request') return 'Запрос примера проекта'
+  if (source === 'public_questionnaire') return 'Подробный опросник'
   if (source === 'public_offer_preliminary') return 'Предварительное КП'
   if (source === 'public_website') return 'Публичный сайт'
   if (source === 'public_calculator') return 'Калькулятор'

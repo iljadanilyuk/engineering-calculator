@@ -13,6 +13,14 @@ import {
   skippedCalculationServiceSchema,
   usdCentsSchema,
 } from './calculation'
+import {
+  adminQuestionnaireDraftSchema,
+  adminQuestionnaireSummarySchema,
+  questionnaireAnswersPatchRequestSchema,
+  questionnaireSessionResponseSchema,
+  questionnaireStartRequestSchema,
+  questionnaireStartResponseSchema,
+} from './questionnaire'
 
 const uuidSchema = z.string().uuid()
 const publicTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{32,128}$/)
@@ -205,6 +213,7 @@ export const calculationRecordSchema = z.object({
   consentIpAddress: z.string().nullable(),
   consentUserAgent: z.string().nullable(),
   proposalArtifacts: z.array(proposalArtifactReferenceSchema),
+  questionnaire: adminQuestionnaireDraftSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 })
@@ -265,8 +274,11 @@ export const calculationListItemSchema = calculationRecordSchema.pick({
   notes: true,
   source: true,
   proposalArtifacts: true,
+  questionnaire: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  questionnaire: adminQuestionnaireSummarySchema.nullable(),
 })
 
 export const calculationStatusCountsSchema = z.object({
@@ -437,6 +449,11 @@ export const projectExampleResponseSchema = z.object({
   example: projectExampleRecordSchema,
 })
 
+export const publicQuestionnaireStartRequestSchema = questionnaireStartRequestSchema
+export const publicQuestionnairePatchRequestSchema = questionnaireAnswersPatchRequestSchema
+export const publicQuestionnaireStartResponseSchema = questionnaireStartResponseSchema
+export const publicQuestionnaireSessionResponseSchema = questionnaireSessionResponseSchema
+
 export type ServiceCreateRequest = z.infer<typeof serviceCreateRequestSchema>
 export type ServiceUpdateRequest = z.infer<typeof serviceUpdateRequestSchema>
 export type ServiceReorderRequest = z.infer<typeof serviceReorderRequestSchema>
@@ -466,6 +483,10 @@ export type ProjectExampleCreateRequest = z.infer<typeof projectExampleCreateReq
 export type ProjectExampleUpdateRequest = z.infer<typeof projectExampleUpdateRequestSchema>
 export type ProjectExampleRecord = z.infer<typeof projectExampleRecordSchema>
 export type PublicProjectExampleRecord = z.infer<typeof publicProjectExampleRecordSchema>
+export type PublicQuestionnaireStartRequest = z.infer<typeof publicQuestionnaireStartRequestSchema>
+export type PublicQuestionnairePatchRequest = z.infer<typeof publicQuestionnairePatchRequestSchema>
+export type PublicQuestionnaireStartResponse = z.infer<typeof publicQuestionnaireStartResponseSchema>
+export type PublicQuestionnaireSessionResponse = z.infer<typeof publicQuestionnaireSessionResponseSchema>
 
 function isValidDateOnly(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)

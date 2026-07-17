@@ -1,9 +1,14 @@
 import {
   EXCHANGE_RATE_SCALE,
+  QUESTIONNAIRE_VERSION,
   calculateEngineeringOffer,
   calculationResultSchema,
   exchangeRateInputSchema,
   publicProjectExampleAssets,
+  questionnaireAnswersPatchRequestSchema,
+  questionnaireStartRequestSchema,
+  questionnaireStoredAnswerSchema,
+  technicalQuestionnaireSections,
   type CalculationListItem,
   type CalculationListQuery,
   type CalculationRecord,
@@ -23,6 +28,11 @@ import {
   type PublicCalculationRecord,
   type PublicProjectExampleRecord,
   type PublicProjectExampleRequestRecord,
+  type PublicQuestionnaireSession,
+  type QuestionnaireAnswersPatchRequest,
+  type QuestionnaireQuestion,
+  type QuestionnaireStartRequest,
+  type QuestionnaireStoredAnswer,
   type ServiceCreateRequest,
   type ServiceRecord,
   type ServiceReorderRequest,
@@ -44,6 +54,7 @@ import {
 const exchangeRateSettingKey = 'exchange_rate'
 const defaultLeadSource = 'public_calculator'
 const defaultProjectExampleRequestSource = 'example_request'
+const defaultQuestionnaireSource = 'public_questionnaire'
 const duplicateDetectionWindowMs = 10 * 60 * 1_000
 const consentVersion = 'pzk-public-lead-consent-v1'
 const consentText =
@@ -51,6 +62,9 @@ const consentText =
 const projectExampleRequestConsentVersion = 'pzk-project-example-request-consent-v1'
 const projectExampleRequestConsentText =
   'Согласен на обработку имени и телефона для выдачи примеров проектов и связи по проектированию.'
+const questionnaireConsentVersion = 'pzk-questionnaire-consent-v1'
+const questionnaireConsentText =
+  'Согласен на обработку имени, телефона, параметров расчета и ответов опросника для подготовки черновика технического задания и обратной связи.'
 const calculationStatuses = [
   'new',
   'contacted',
@@ -64,9 +78,14 @@ const orderedProposalInclude = {
     createdAt: 'asc' as const,
   },
 }
+const calculationDetailInclude = {
+  proposals: orderedProposalInclude,
+  questionnaire: true,
+}
 
 type ServiceRow = Awaited<ReturnType<DbClient['service']['findFirstOrThrow']>>
 type CalculationRow = Awaited<ReturnType<DbClient['calculation']['findFirstOrThrow']>>
+type CalculationQuestionnaireRow = Awaited<ReturnType<DbClient['calculationQuestionnaire']['findFirstOrThrow']>>
 type ProjectExampleRow = Awaited<ReturnType<DbClient['projectExample']['findFirstOrThrow']>>
 type ProjectExampleRequestRow = Awaited<ReturnType<DbClient['projectExampleRequest']['findFirstOrThrow']>>
 type ProposalRow = {
@@ -83,17 +102,35 @@ type ProposalRow = {
   createdAt: Date
 }
 type CalculationWithProposals = CalculationRow & { proposals: ProposalRow[] }
+type CalculationWithQuestionnaire = CalculationRow & {
+  proposals: ProposalRow[]
+  questionnaire: CalculationQuestionnaireRow | null
+}
 type SaveCalculationMetadata = {
   referrer?: string
   ipAddress?: string
   userAgent?: string
 }
 type SaveProjectExampleRequestMetadata = SaveCalculationMetadata
+type SaveQuestionnaireMetadata = SaveCalculationMetadata
 type EngineeringDataServiceOptions = {
   publicWebsiteUrl?: string
 }
 
 const projectExampleAssetBaseUrl = new URL('../../assets/project-examples/', import.meta.url)
+const questionnaireQuestions = technicalQuestionnaireSections.flatMap((section) =>
+  section.questions.map((question) => ({
+    ...question,
+    sectionId: section.id,
+  })),
+)
+const questionnaireTotalQuestions = questionnaireQuestions.length
+const questionnaireQuestionOrder: ReadonlyMap<string, number> = new Map(
+  questionnaireQuestions.map((question, index) => [question.id, index]),
+)
+const questionnaireQuestionById: ReadonlyMap<string, QuestionnaireQuestion & { sectionId: string }> = new Map(
+  questionnaireQuestions.map((question) => [question.id, question]),
+)
 
 export class EngineeringDataService {
   constructor(
@@ -490,6 +527,235 @@ export class EngineeringDataService {
     }
   }
 
+  async startQuestionnaire(
+    input: QuestionnaireStartRequest,
+    metadata: SaveQuestionnaireMetadata = {},
+  ) {
+    const parsedInput = questionnaireStartRequestSchema.parse(input)
+    const normalizedPhone = normalizeLeadPhone(parsedInput.clientPhone)
+    const referrer = normalizeOptionalText(parsedInput.referrer ?? metadata.referrer, 2_048)
+    const source = normalizeOptionalText(parsedInput.source, 80) ?? defaultQuestionnaireSource
+    const requestFingerprintHash = questionnaireStartFingerprintHash({
+      input: parsedInput,
+      normalizedPhone,
+      source,
+      referrer,
+    })
+
+    const existingIdempotentQuestionnaire = await this.findQuestionnaireByIdempotencyKey(
+      parsedInput.idempotencyKey,
+    )
+    if (existingIdempotentQuestionnaire) {
+      assertQuestionnaireFingerprintMatches(
+        existingIdempotentQuestionnaire,
+        requestFingerprintHash,
+      )
+      return {
+        questionnaire: questionnaireToPublicSession(
+          existingIdempotentQuestionnaire.calculation,
+          existingIdempotentQuestionnaire,
+        ),
+        created: false,
+      }
+    }
+
+    const exchangeRate = (await this.getExchangeRate()).exchangeRate
+    const selectedServiceIds = parsedInput.calculation.selectedServiceIds
+    const queryableServiceIds = selectedServiceIds.filter(isUuid)
+    const services = await this.db.service.findMany({
+      where: {
+        id: {
+          in: queryableServiceIds,
+        },
+        isPublic: true,
+      },
+    })
+    const calculation = calculateEngineeringOffer({
+      ...parsedInput.calculation,
+      services: services.map(serviceToCalculationInput),
+      exchangeRate,
+    })
+
+    if (calculation.skippedServices.length > 0) {
+      throw new AppError(
+        409,
+        'CONFLICT',
+        'Selected services are unavailable for questionnaire lead',
+        calculation.skippedServices,
+      )
+    }
+
+    const duplicateWindowStartedAt = duplicateWindowStart(new Date())
+    const duplicateFingerprintHash = questionnaireDuplicateFingerprintHash({
+      normalizedPhone,
+      calculation,
+      duplicateWindowStartedAt,
+    })
+    const duplicateCalculation = await this.findCalculationByDuplicateFingerprintHash(duplicateFingerprintHash)
+
+    if (duplicateCalculation?.questionnaire) {
+      throw new AppError(
+        409,
+        'CONFLICT',
+        'A questionnaire lead already exists for this phone and calculation. Use the original resume link or change the contact details.',
+      )
+    }
+
+    const publicToken = await this.createUniqueCalculationToken()
+    const consentAcceptedAt = new Date()
+    const initialAnswers = storedQuestionnaireAnswers(parsedInput.initialAnswers ?? [], consentAcceptedAt)
+
+    try {
+      const persisted = await this.db.$transaction(async (tx) => {
+        const row = await tx.calculation.create({
+          data: {
+            publicToken,
+            requestFingerprintHash,
+            duplicateFingerprintHash,
+            duplicateWindowStartedAt,
+            clientName: parsedInput.clientName,
+            clientPhone: normalizedPhone,
+            objectName: parsedInput.objectName ?? null,
+            areaSqm: calculation.areaSqm,
+            areaSqmHundredths: BigInt(calculation.areaSqmHundredths),
+            selectedServiceIds: toJson(calculation.selectedServiceIds),
+            serviceSnapshots: toJson(calculation.lineItems.map((lineItem) => lineItem.serviceSnapshot)),
+            skippedServices: toJson(calculation.skippedServices),
+            exchangeRate: toJson(calculation.exchangeRate),
+            usdToBynRateScaled: calculation.exchangeRate.usdToBynRateScaled,
+            usdToBynRateScale: EXCHANGE_RATE_SCALE,
+            calculationVersion: calculation.calculationVersion,
+            calculationSnapshot: toJson(calculation),
+            totalUsdCents: BigInt(calculation.totals.totalUsdCents),
+            totalBynCents: BigInt(calculation.totals.totalBynCents),
+            totalBynRoundedRubles: BigInt(calculation.totals.totalBynRoundedRubles),
+            status: 'new',
+            statusUpdatedAt: new Date(),
+            source,
+            referrer,
+            utm: parsedInput.utm === undefined ? undefined : toJson(parsedInput.utm),
+            consentAcceptedAt,
+            consentVersion: questionnaireConsentVersion,
+            consentText: questionnaireConsentText,
+            consentIpAddress: normalizeOptionalText(metadata.ipAddress, 255),
+            consentUserAgent: normalizeOptionalText(metadata.userAgent, 512),
+          },
+        })
+        const questionnaire = await tx.calculationQuestionnaire.create({
+          data: {
+            calculationId: row.id,
+            idempotencyKey: parsedInput.idempotencyKey,
+            requestFingerprintHash,
+            questionnaireVersion: QUESTIONNAIRE_VERSION,
+            answersSnapshot: toJson(initialAnswers),
+            source,
+            referrer,
+            utm: parsedInput.utm === undefined ? undefined : toJson(parsedInput.utm),
+            consentAcceptedAt,
+            consentVersion: questionnaireConsentVersion,
+            consentText: questionnaireConsentText,
+            consentIpAddress: normalizeOptionalText(metadata.ipAddress, 255),
+            consentUserAgent: normalizeOptionalText(metadata.userAgent, 512),
+          },
+        })
+
+        return { row, questionnaire }
+      })
+
+      return {
+        questionnaire: questionnaireToPublicSession(persisted.row, persisted.questionnaire),
+        created: true,
+      }
+    } catch (error) {
+      if (isPrismaUniqueConstraint(error)) {
+        const existing = await this.findQuestionnaireByIdempotencyKey(parsedInput.idempotencyKey)
+        if (existing) {
+          assertQuestionnaireFingerprintMatches(existing, requestFingerprintHash)
+          return {
+            questionnaire: questionnaireToPublicSession(existing.calculation, existing),
+            created: false,
+          }
+        }
+
+        const duplicate = await this.findCalculationByDuplicateFingerprintHash(duplicateFingerprintHash)
+        if (duplicate?.questionnaire) {
+          throw new AppError(
+            409,
+            'CONFLICT',
+            'A questionnaire lead already exists for this phone and calculation. Use the original resume link or change the contact details.',
+          )
+        }
+      }
+
+      throw error
+    }
+  }
+
+  async isExactQuestionnaireStartReplay(
+    input: QuestionnaireStartRequest,
+    metadata: SaveQuestionnaireMetadata = {},
+  ) {
+    const existing = await this.db.calculationQuestionnaire.findUnique({
+      where: { idempotencyKey: input.idempotencyKey },
+      select: { requestFingerprintHash: true },
+    })
+
+    if (!existing) return false
+
+    try {
+      const parsedInput = questionnaireStartRequestSchema.parse(input)
+      const normalizedPhone = normalizeLeadPhone(parsedInput.clientPhone)
+      const referrer = normalizeOptionalText(parsedInput.referrer ?? metadata.referrer, 2_048)
+      const source = normalizeOptionalText(parsedInput.source, 80) ?? defaultQuestionnaireSource
+      const requestFingerprintHash = questionnaireStartFingerprintHash({
+        input: parsedInput,
+        normalizedPhone,
+        source,
+        referrer,
+      })
+
+      return existing.requestFingerprintHash === requestFingerprintHash
+    } catch {
+      return false
+    }
+  }
+
+  async getPublicQuestionnaire(publicToken: string) {
+    const calculation = await this.findQuestionnaireCalculationByPublicToken(publicToken)
+
+    if (!calculation.questionnaire) {
+      throw new AppError(404, 'NOT_FOUND', 'Questionnaire session not found')
+    }
+
+    return questionnaireToPublicSession(calculation, calculation.questionnaire)
+  }
+
+  async saveQuestionnaireAnswers(
+    publicToken: string,
+    input: QuestionnaireAnswersPatchRequest,
+  ) {
+    const parsedInput = questionnaireAnswersPatchRequestSchema.parse(input)
+    const calculation = await this.findQuestionnaireCalculationByPublicToken(publicToken)
+
+    if (!calculation.questionnaire) {
+      throw new AppError(404, 'NOT_FOUND', 'Questionnaire session not found')
+    }
+
+    const answers = mergeStoredQuestionnaireAnswers(
+      questionnaireAnswersFromJson(calculation.questionnaire.answersSnapshot),
+      parsedInput.answers,
+      new Date(),
+    )
+    const questionnaire = await this.db.calculationQuestionnaire.update({
+      where: { calculationId: calculation.id },
+      data: {
+        answersSnapshot: toJson(answers),
+      },
+    })
+
+    return questionnaireToPublicSession(calculation, questionnaire)
+  }
+
   async isExactProjectExampleRequestIdempotencyReplay(
     input: ProjectExampleRequestCreateRequest,
     metadata: SaveProjectExampleRequestMetadata = {},
@@ -604,7 +870,7 @@ export class EngineeringDataService {
     const calculation = await this.db.calculation
       .findUniqueOrThrow({
         where: { id },
-        include: { proposals: orderedProposalInclude },
+        include: calculationDetailInclude,
       })
       .catch((error: unknown) => {
         if (isPrismaNotFound(error)) {
@@ -620,7 +886,7 @@ export class EngineeringDataService {
     const where = calculationListWhere(input)
     const calculations = await this.db.calculation.findMany({
       where,
-      include: { proposals: orderedProposalInclude },
+      include: calculationDetailInclude,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: input.limit,
       skip: input.offset,
@@ -659,7 +925,7 @@ export class EngineeringDataService {
     const existing = await this.db.calculation
       .findUniqueOrThrow({
         where: { id },
-        include: { proposals: orderedProposalInclude },
+        include: calculationDetailInclude,
       })
       .catch((error: unknown) => {
         if (isPrismaNotFound(error)) {
@@ -686,7 +952,7 @@ export class EngineeringDataService {
     const calculation = await this.db.calculation.update({
       where: { id },
       data,
-      include: { proposals: orderedProposalInclude },
+      include: calculationDetailInclude,
     })
 
     return calculationToRecord(calculation, calculation.proposals)
@@ -833,7 +1099,20 @@ export class EngineeringDataService {
   private async findCalculationByIdempotencyKey(idempotencyKey: string) {
     return this.db.calculation.findUnique({
       where: { idempotencyKey },
-      include: { proposals: orderedProposalInclude },
+      include: calculationDetailInclude,
+    })
+  }
+
+  private async findQuestionnaireByIdempotencyKey(idempotencyKey: string) {
+    return this.db.calculationQuestionnaire.findUnique({
+      where: { idempotencyKey },
+      include: {
+        calculation: {
+          include: {
+            proposals: orderedProposalInclude,
+          },
+        },
+      },
     })
   }
 
@@ -845,11 +1124,27 @@ export class EngineeringDataService {
 
   private async findCalculationByDuplicateFingerprintHash(
     duplicateFingerprintHash: string,
-  ): Promise<CalculationWithProposals | null> {
+  ): Promise<CalculationWithQuestionnaire | null> {
     return this.db.calculation.findUnique({
       where: { duplicateFingerprintHash },
-      include: { proposals: orderedProposalInclude },
+      include: calculationDetailInclude,
     })
+  }
+
+  private async findQuestionnaireCalculationByPublicToken(
+    publicToken: string,
+  ): Promise<CalculationWithQuestionnaire> {
+    return this.db.calculation
+      .findUniqueOrThrow({
+        where: { publicToken },
+        include: calculationDetailInclude,
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Questionnaire session not found')
+        }
+        throw error
+      })
   }
 
   private async countCalculationsByStatus() {
@@ -949,7 +1244,10 @@ function serviceToCalculationInput(service: ServiceRow) {
 }
 
 function calculationToRecord(
-  calculation: CalculationRow & { proposals?: ProposalRow[] },
+  calculation: CalculationRow & {
+    proposals?: ProposalRow[]
+    questionnaire?: CalculationQuestionnaireRow | null
+  },
   proposals: ProposalRow[],
 ): CalculationRecord {
   const calculationSnapshot = calculationResultSchema.parse(calculation.calculationSnapshot)
@@ -991,13 +1289,19 @@ function calculationToRecord(
     consentIpAddress: calculation.consentIpAddress,
     consentUserAgent: calculation.consentUserAgent,
     proposalArtifacts: proposals.map(proposalToArtifactReference),
+    questionnaire: calculation.questionnaire
+      ? questionnaireToAdminDraft(calculation.questionnaire)
+      : null,
     createdAt: calculation.createdAt.toISOString(),
     updatedAt: calculation.updatedAt.toISOString(),
   }
 }
 
 function calculationToListItem(
-  calculation: CalculationRow & { proposals?: ProposalRow[] },
+  calculation: CalculationRow & {
+    proposals?: ProposalRow[]
+    questionnaire?: CalculationQuestionnaireRow | null
+  },
   proposals: ProposalRow[],
 ): CalculationListItem {
   const record = calculationToRecord(calculation, proposals)
@@ -1017,6 +1321,9 @@ function calculationToListItem(
     notes: record.notes,
     source: record.source,
     proposalArtifacts: record.proposalArtifacts,
+    questionnaire: record.questionnaire
+      ? questionnaireToAdminSummary(calculation.questionnaire ?? null)
+      : null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
@@ -1185,6 +1492,165 @@ function proposalToArtifactReference(proposal: ProposalRow): CalculationRecord['
     hasHtmlSnapshot: proposal.htmlSnapshot !== null,
     createdAt: proposal.createdAt.toISOString(),
   }
+}
+
+function questionnaireToPublicSession(
+  calculation: CalculationRow & { proposals?: ProposalRow[] },
+  questionnaire: CalculationQuestionnaireRow,
+): PublicQuestionnaireSession {
+  const calculationSnapshot = calculationResultSchema.parse(calculation.calculationSnapshot)
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
+
+  return {
+    publicToken: calculation.publicToken,
+    questionnaireVersion: QUESTIONNAIRE_VERSION,
+    progress: questionnaireProgress(answers, questionnaire.updatedAt),
+    calculation: {
+      areaSqm: calculationSnapshot.areaSqm,
+      selectedServiceIds: calculationSnapshot.selectedServiceIds,
+      serviceTitles: calculationSnapshot.lineItems.map((lineItem) => lineItem.serviceSnapshot.title),
+      totalUsdCents: calculationSnapshot.totals.totalUsdCents,
+      totalBynRoundedRubles: calculationSnapshot.totals.totalBynRoundedRubles,
+    },
+    answers,
+    createdAt: questionnaire.createdAt.toISOString(),
+    updatedAt: questionnaire.updatedAt.toISOString(),
+  }
+}
+
+function questionnaireToAdminDraft(questionnaire: CalculationQuestionnaireRow): CalculationRecord['questionnaire'] {
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
+  const answersByQuestionId = new Map(answers.map((answer) => [answer.questionId, answer]))
+
+  return {
+    id: questionnaire.id,
+    questionnaireVersion: QUESTIONNAIRE_VERSION,
+    source: questionnaire.source,
+    progress: questionnaireProgress(answers, questionnaire.updatedAt),
+    consentAcceptedAt: questionnaire.consentAcceptedAt?.toISOString() ?? null,
+    consentVersion: questionnaire.consentVersion,
+    consentText: questionnaire.consentText,
+    createdAt: questionnaire.createdAt.toISOString(),
+    updatedAt: questionnaire.updatedAt.toISOString(),
+    sections: technicalQuestionnaireSections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      questions: section.questions.map((question) => {
+        const answer = answersByQuestionId.get(question.id) ?? null
+
+        return {
+          id: question.id,
+          prompt: question.prompt,
+          sourceRow: question.sourceRow,
+          options: [...(question.options ?? [])],
+          answer: answer
+            ? {
+                ...answer,
+                label: questionnaireAnswerLabel(question.id, answer),
+              }
+            : null,
+        }
+      }),
+    })),
+  }
+}
+
+function questionnaireToAdminSummary(
+  questionnaire: CalculationQuestionnaireRow | null,
+): CalculationListItem['questionnaire'] {
+  if (!questionnaire) return null
+
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
+  const progress = questionnaireProgress(answers, questionnaire.updatedAt)
+
+  return {
+    questionnaireVersion: QUESTIONNAIRE_VERSION,
+    answeredCount: progress.answeredCount,
+    totalQuestions: progress.totalQuestions,
+    completionPercent: progress.completionPercent,
+    unknownCount: progress.unknownCount,
+    skippedCount: progress.skippedCount,
+    updatedAt: questionnaire.updatedAt.toISOString(),
+  }
+}
+
+function questionnaireProgress(
+  answers: readonly QuestionnaireStoredAnswer[],
+  updatedAt: Date,
+): PublicQuestionnaireSession['progress'] {
+  const uniqueAnswers = new Map(answers.map((answer) => [answer.questionId, answer]))
+  const values = [...uniqueAnswers.values()]
+  const answeredCount = values.length
+  const optionCount = values.filter((answer) => answer.kind === 'option').length
+  const customCount = values.filter((answer) => answer.kind === 'custom').length
+  const unknownCount = values.filter((answer) => answer.kind === 'unknown').length
+  const skippedCount = values.filter((answer) => answer.kind === 'skipped').length
+  const completionPercent = Math.min(
+    100,
+    Math.round((answeredCount / questionnaireTotalQuestions) * 100),
+  )
+
+  return {
+    totalQuestions: questionnaireTotalQuestions,
+    answeredCount,
+    optionCount,
+    customCount,
+    unknownCount,
+    skippedCount,
+    completionPercent,
+    completedAt: answeredCount >= questionnaireTotalQuestions
+      ? updatedAt.toISOString()
+      : null,
+  }
+}
+
+function questionnaireAnswersFromJson(value: Prisma.JsonValue): QuestionnaireStoredAnswer[] {
+  return questionnaireStoredAnswerSchema.array().parse(value)
+}
+
+function storedQuestionnaireAnswers(
+  answers: NonNullable<QuestionnaireStartRequest['initialAnswers']>,
+  updatedAt: Date,
+): QuestionnaireStoredAnswer[] {
+  return sortQuestionnaireAnswers(
+    answers.map((answer) => ({
+      ...answer,
+      updatedAt: updatedAt.toISOString(),
+    })),
+  )
+}
+
+function mergeStoredQuestionnaireAnswers(
+  existingAnswers: readonly QuestionnaireStoredAnswer[],
+  nextAnswers: QuestionnaireAnswersPatchRequest['answers'],
+  updatedAt: Date,
+) {
+  const answersByQuestionId = new Map(existingAnswers.map((answer) => [answer.questionId, answer]))
+
+  for (const answer of nextAnswers) {
+    answersByQuestionId.set(answer.questionId, {
+      ...answer,
+      updatedAt: updatedAt.toISOString(),
+    })
+  }
+
+  return sortQuestionnaireAnswers([...answersByQuestionId.values()])
+}
+
+function sortQuestionnaireAnswers(answers: QuestionnaireStoredAnswer[]) {
+  return [...answers].sort(
+    (first, second) =>
+      (questionnaireQuestionOrder.get(first.questionId) ?? Number.MAX_SAFE_INTEGER) -
+      (questionnaireQuestionOrder.get(second.questionId) ?? Number.MAX_SAFE_INTEGER),
+  )
+}
+
+function questionnaireAnswerLabel(questionId: string, answer: QuestionnaireStoredAnswer) {
+  if (answer.kind === 'custom') return answer.customText ?? null
+  if (answer.kind !== 'option') return null
+
+  const question = questionnaireQuestionById.get(questionId)
+  return question?.options?.find((option) => option.id === answer.optionId)?.label ?? null
 }
 
 function snapshotExchangeRate(input: ExchangeRateInput): ExchangeRateSnapshot {
@@ -1444,6 +1910,29 @@ function projectExampleRequestFingerprintHash(input: {
   })
 }
 
+function questionnaireStartFingerprintHash(input: {
+  input: QuestionnaireStartRequest
+  normalizedPhone: string
+  source: string
+  referrer: string | null
+}) {
+  return sha256Hex({
+    clientName: input.input.clientName,
+    clientPhone: input.normalizedPhone,
+    objectName: input.input.objectName ?? null,
+    calculation: {
+      areaSqm: input.input.calculation.areaSqm,
+      selectedServiceIds: [...new Set(input.input.calculation.selectedServiceIds)],
+    },
+    initialAnswers: (input.input.initialAnswers ?? []).map(questionnaireAnswerFingerprintInput),
+    consentAccepted: true,
+    consentVersion: questionnaireConsentVersion,
+    source: input.source,
+    referrer: input.referrer,
+    utm: input.input.utm ?? null,
+  })
+}
+
 function calculationDuplicateFingerprintHash(input: {
   normalizedPhone: string
   calculation: CalculationResult
@@ -1458,6 +1947,34 @@ function calculationDuplicateFingerprintHash(input: {
     totalUsdCents: input.calculation.totals.totalUsdCents,
     totalBynCents: input.calculation.totals.totalBynCents,
   })
+}
+
+function questionnaireDuplicateFingerprintHash(input: {
+  normalizedPhone: string
+  calculation: CalculationResult
+  duplicateWindowStartedAt: Date
+}) {
+  return sha256Hex({
+    leadKind: 'questionnaire',
+    clientPhone: input.normalizedPhone,
+    duplicateWindowStartedAt: input.duplicateWindowStartedAt.toISOString(),
+    areaSqm: input.calculation.areaSqm,
+    selectedServiceIds: input.calculation.selectedServiceIds,
+    exchangeRateScaled: input.calculation.exchangeRate.usdToBynRateScaled,
+    totalUsdCents: input.calculation.totals.totalUsdCents,
+    totalBynCents: input.calculation.totals.totalBynCents,
+  })
+}
+
+function questionnaireAnswerFingerprintInput(
+  answer: NonNullable<QuestionnaireStartRequest['initialAnswers']>[number],
+) {
+  return {
+    questionId: answer.questionId,
+    kind: answer.kind,
+    optionId: answer.optionId ?? null,
+    customText: answer.customText ?? null,
+  }
 }
 
 function duplicateWindowStart(now: Date) {
@@ -1487,6 +2004,19 @@ function assertProjectExampleRequestFingerprintMatches(
     409,
     'CONFLICT',
     'Idempotency key was already used for a different project example request',
+  )
+}
+
+function assertQuestionnaireFingerprintMatches(
+  questionnaire: Pick<CalculationQuestionnaireRow, 'requestFingerprintHash'>,
+  requestFingerprintHash: string,
+) {
+  if (questionnaire.requestFingerprintHash === requestFingerprintHash) return
+
+  throw new AppError(
+    409,
+    'CONFLICT',
+    'Idempotency key was already used for a different questionnaire submission',
   )
 }
 

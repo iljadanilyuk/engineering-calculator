@@ -1301,7 +1301,7 @@ Review log:
 
 ### PZK-019 - Detailed Questionnaire And Technical Assignment Wizard
 
-Status: Pending
+Status: Complete
 
 Goal:
 
@@ -1330,6 +1330,43 @@ Out of scope:
 - Telegram group listening.
 - Fully automated final technical assignment approval without admin review.
 - Contract generation.
+
+Implementation notes:
+
+- Added a sanitized shared questionnaire contract in `packages/contracts/src/questionnaire.ts`, based on `docs/design/Опросный лист.xlsx` column A only.
+- Added literal column-A option labels where predefined options are safe; open/ambiguous cases remain custom-answer questions with global `Пока не знаю` and `Пропустить` controls.
+- Added `CalculationQuestionnaire` persistence linked one-to-one to `Calculation`, with incremental answer snapshots, consent evidence, source/referrer/UTM fields, and a dedicated Prisma migration.
+- Added public questionnaire start/resume/autosave endpoints:
+  - exact idempotency retries return the same session;
+  - loose duplicate starts return `409` without exposing the existing token or answers;
+  - public session responses omit client name and phone and use `no-store`/`noindex` headers.
+- Added `/questionnaire/` on the public website and wired the detailed option from `/offer/` into the wizard.
+- Added an admin lead detail draft-ТЗ card showing grouped answers, progress, unknown/skipped counts, and source/status context.
+- Did not create or modify cloud resources, Codex plugin layer, Telegram bot behavior, admin redesign navigation, blog/cases, or contract generation.
+
+Verification:
+
+- `bun run --cwd backend prisma:validate` passed.
+- `bun run typecheck` passed.
+- `bun run test:contracts` passed: 23/23.
+- `bun run test:backend:unit` passed: 36/36.
+- `bun run test:backend:integration` passed: 35/35.
+- `bun run test:webapp` passed: 40/40.
+- `bun run build:website` passed.
+- `bun run build:webapp` passed with the existing Vite large-chunk warning.
+- `git diff --check` passed, with only standard CRLF working-copy warnings.
+- Browser smoke was run against the static `/questionnaire/` page with a mocked public API; start/autosave/resume flow passed and confirmed the start payload did not include client-supplied totals or calculation snapshots.
+
+Review log:
+
+- Pre-task `gpt-5.5 xhigh` reviews completed:
+  - Cicero flagged XLSX column-B privacy, no proposal/PDF/Telegram side effects, separate `/questionnaire/`, and admin draft-only scope.
+  - Aquinas recommended a one-to-one questionnaire child record linked to `Calculation`, token-based resume, bounded JSON, and admin detail integration.
+  - Curie recommended the `/offer/` detailed option leading to a separate wizard, progress UI, one-question flow, and no PZK-021 admin navigation expansion.
+- Post-task reviewer Hegel, `gpt-5.5 xhigh`: 9.6/10; no required fixes, noted non-blocking concurrent autosave hardening.
+- Post-task reviewer Franklin, `gpt-5.5 xhigh`: 8.1/10; required preventing loose duplicate starts from exposing an existing token/answers, removing literal XLSX filled-answer values from tests, and making predefined option labels column-A-only. Fixes incorporated.
+- Focused reviewer Fermat, `gpt-5.5 xhigh`: 9.0/10; confirmed privacy fixes but required stricter literal option labels for source rows such as heating type, piping material, and ВРВ. Fixes incorporated.
+- Focused reviewer Fermat continuation, `gpt-5.5 xhigh`: 9.6/10; required fixes none, gate cleared.
 
 ### PZK-020 - Telegram Delivery And Project Context Bot
 

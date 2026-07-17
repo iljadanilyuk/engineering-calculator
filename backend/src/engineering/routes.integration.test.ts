@@ -39,6 +39,7 @@ maybeDescribe('engineering API integration', () => {
 
   beforeEach(async () => {
     await prisma.proposal.deleteMany()
+    await prisma.calculationQuestionnaire.deleteMany()
     await prisma.calculation.deleteMany()
     await prisma.projectExampleRequest.deleteMany()
     await prisma.projectExample.deleteMany()
@@ -1468,6 +1469,201 @@ maybeDescribe('engineering API integration', () => {
     expect(pdfBefore.headers.get('x-proposal-checksum-sha256')).toBe(artifact.checksumSha256)
     expect(pdfAfter.status).toBe(200)
     expect(pdfAfterBytes).toEqual(pdfBeforeBytes)
+  })
+
+  test('creates detailed questionnaire leads, saves answers incrementally, and exposes admin draft TZ', async () => {
+    const accessToken = await loginAdmin('questionnaire@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const heating = await createService(accessToken, {
+      title: 'Questionnaire heating drawings',
+      pricingType: 'per_sqm',
+      priceUsdCents: 250,
+      sortOrder: 1,
+    })
+    const water = await createService(accessToken, {
+      title: 'Questionnaire water drawings',
+      pricingType: 'fixed',
+      priceUsdCents: 12_000,
+      sortOrder: 2,
+    })
+    const idempotencyKey = nextIdempotencyKey()
+    const startPayload = {
+      idempotencyKey,
+      clientName: 'Detailed Client',
+      clientPhone: '+375 29 111-22-33',
+      objectName: 'Подробный опросник: дом 180 м2',
+      calculation: {
+        areaSqm: '180',
+        selectedServiceIds: [heating.id, water.id],
+      },
+      consentAccepted: true,
+      source: 'public_questionnaire',
+      initialAnswers: [
+        {
+          questionId: 'interior_finished',
+          kind: 'option',
+          optionId: 'no',
+        },
+        {
+          questionId: 'wall_materials',
+          kind: 'custom',
+          customText: 'Газосиликат, утепление уточнить',
+        },
+      ],
+    }
+
+    const start = await app.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'pzk-questionnaire-test',
+        'X-Forwarded-For': '203.0.113.20',
+      },
+      body: JSON.stringify(startPayload),
+    })
+    const startBody = await start.json()
+    const replay = await app.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'pzk-questionnaire-test',
+        'X-Forwarded-For': '203.0.113.20',
+      },
+      body: JSON.stringify(startPayload),
+    })
+    const replayBody = await replay.json()
+    const mismatch = await app.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...startPayload,
+        clientName: 'Different Client',
+      }),
+    })
+    const token = startBody.questionnaire.publicToken
+    const patch = await app.request(`/api/public/questionnaires/${token}/answers`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: [
+          {
+            questionId: 'roof_materials',
+            kind: 'unknown',
+          },
+          {
+            questionId: 'fireplace',
+            kind: 'skipped',
+          },
+        ],
+      }),
+    })
+    const patchBody = await patch.json()
+    const looseDuplicate = await app.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'pzk-questionnaire-test-duplicate',
+        'X-Forwarded-For': '203.0.113.21',
+      },
+      body: JSON.stringify({
+        ...startPayload,
+        idempotencyKey: nextIdempotencyKey(),
+        clientName: 'Another Detailed Client',
+        initialAnswers: undefined,
+      }),
+    })
+    const looseDuplicateText = await looseDuplicate.text()
+    const resume = await app.request(`/api/public/questionnaires/${token}`)
+    const resumeBody = await resume.json()
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: token },
+      include: { proposals: true, questionnaire: true },
+    })
+    const adminDetail = await app.request(`/api/admin/calculations/${saved.id}`, {
+      headers: authHeaders(accessToken),
+    })
+    const adminDetailBody = await adminDetail.json()
+    const list = await app.request('/api/admin/calculations', {
+      headers: authHeaders(accessToken),
+    })
+    const listBody = await list.json()
+
+    expect(start.status).toBe(201)
+    expect(start.headers.get('cache-control')).toBe('private, max-age=0, no-store')
+    expect(start.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    expect(startBody.questionnaire.publicToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/)
+    expect(startBody.questionnaire.clientName).toBeUndefined()
+    expect(startBody.questionnaire.clientPhone).toBeUndefined()
+    expect(startBody.questionnaire.calculation.serviceTitles).toEqual([
+      'Questionnaire heating drawings',
+      'Questionnaire water drawings',
+    ])
+    expect(startBody.questionnaire.progress).toMatchObject({
+      totalQuestions: 91,
+      answeredCount: 2,
+      customCount: 1,
+      optionCount: 1,
+      unknownCount: 0,
+      skippedCount: 0,
+    })
+    expect(startBody.questionnaire.answers).toHaveLength(2)
+    expect(replay.status).toBe(200)
+    expect(replayBody.questionnaire.publicToken).toBe(token)
+    expect(mismatch.status).toBe(409)
+    expect(patch.status).toBe(200)
+    expect(patchBody.questionnaire.progress).toMatchObject({
+      answeredCount: 4,
+      unknownCount: 1,
+      skippedCount: 1,
+    })
+    expect(looseDuplicate.status).toBe(409)
+    expect(JSON.parse(looseDuplicateText).questionnaire).toBeUndefined()
+    expect(looseDuplicateText).not.toContain(token)
+    expect(looseDuplicateText).not.toContain('Газосиликат, утепление уточнить')
+    expect(resume.status).toBe(200)
+    expect(resume.headers.get('cache-control')).toBe('private, max-age=0, no-store')
+    expect(resume.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    expect(resumeBody.questionnaire.answers.map((answer: { questionId: string }) => answer.questionId)).toEqual([
+      'wall_materials',
+      'roof_materials',
+      'interior_finished',
+      'fireplace',
+    ])
+    expect(saved.source).toBe('public_questionnaire')
+    expect(saved.consentVersion).toBe('pzk-questionnaire-consent-v1')
+    expect(saved.proposals).toHaveLength(0)
+    expect(saved.questionnaire?.answersSnapshot).toBeTruthy()
+    expect(await prisma.proposal.count()).toBe(0)
+    expect(adminDetail.status).toBe(200)
+    expect(adminDetailBody.calculation.proposalArtifacts).toEqual([])
+    expect(adminDetailBody.calculation.questionnaire.progress).toMatchObject({
+      answeredCount: 4,
+      totalQuestions: 91,
+      unknownCount: 1,
+      skippedCount: 1,
+    })
+    expect(adminDetailBody.calculation.questionnaire.sections[1].title).toBe('Общая информация о доме')
+    const wallMaterials = adminDetailBody.calculation.questionnaire.sections[1].questions.find(
+      (question: { id: string }) => question.id === 'wall_materials',
+    )
+    const interiorFinished = adminDetailBody.calculation.questionnaire.sections[1].questions.find(
+      (question: { id: string }) => question.id === 'interior_finished',
+    )
+    expect(wallMaterials.answer).toMatchObject({
+      kind: 'custom',
+      label: 'Газосиликат, утепление уточнить',
+    })
+    expect(interiorFinished.answer).toMatchObject({
+      kind: 'option',
+      optionId: 'no',
+      label: 'нет',
+    })
+    expect(listBody.calculations[0].questionnaire).toMatchObject({
+      answeredCount: 4,
+      totalQuestions: 91,
+      unknownCount: 1,
+      skippedCount: 1,
+    })
   })
 
   test('rate limits repeated public calculation submissions by client bucket', async () => {
