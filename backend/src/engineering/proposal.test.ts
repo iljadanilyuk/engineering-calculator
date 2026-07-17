@@ -24,9 +24,9 @@ describe('commercial proposal generation', () => {
     expect(artifact.htmlSnapshot).toContain('Площадь')
     expect(artifact.htmlSnapshot).toContain('Итого к проектированию')
     expect(artifact.htmlSnapshot).toContain('70% старт / 30%')
-    expect(artifact.htmlSnapshot).toContain('Открыть PDF-пример')
-    expect(artifact.htmlSnapshot).toContain('https://example.com/project-examples/proekt-primer-ov.pdf')
-    expect(artifact.htmlSnapshot).toContain('https://example.com/project-examples/primer-proekt-vk.pdf')
+    expect(artifact.htmlSnapshot).toContain('Открыть раздел с примерами')
+    expect(artifact.htmlSnapshot).not.toContain('/project-examples/proekt-primer-ov.pdf')
+    expect(artifact.htmlSnapshot).not.toContain('/project-examples/primer-proekt-vk.pdf')
     expect(artifact.htmlSnapshot).toContain('PDF-комплект для согласования и монтажа')
     expect(countMatches(artifact.htmlSnapshot, 'class="pdf-page')).toBe(2)
     expect(artifact.pdfByteSize).toBe(artifact.pdfBytes.byteLength)
@@ -54,7 +54,7 @@ describe('commercial proposal generation', () => {
     expect(sumVisibleServiceRubles(html)).toBe(input.calculation.totals.totalBynRoundedRubles)
   })
 
-  test('embeds custom project example links into the immutable proposal snapshot', () => {
+  test('keeps custom project example proof cards without exposing direct PDF links', () => {
     const input = {
       ...proposalInput(),
       sourcePageUrl: 'https://website.example.com/calculator',
@@ -75,9 +75,10 @@ describe('commercial proposal generation', () => {
     const html = renderCommercialProposalHtmlSnapshot(input)
 
     expect(html).toContain('Approved OV PDF')
-    expect(html).toContain('https://cdn.example.com/examples/approved-ov.pdf')
+    expect(html).not.toContain('https://cdn.example.com/examples/approved-ov.pdf')
     expect(html).toContain('Relative VK PDF')
-    expect(html).toContain('https://website.example.com/media/examples/approved-vk.pdf')
+    expect(html).not.toContain('https://website.example.com/media/examples/approved-vk.pdf')
+    expect(countMatches(html, 'Открыть раздел с примерами')).toBeGreaterThanOrEqual(2)
     expect(html).not.toContain('proekt-primer-ov.pdf')
     expect(html).not.toContain('primer-proekt-vk.pdf')
   })

@@ -12,10 +12,16 @@ export const leadQueryKeys = {
   all: ['leads'] as const,
   list: (filters: LeadListFilters) => [...leadQueryKeys.all, 'list', filters] as const,
   detail: (id: string) => [...leadQueryKeys.all, 'detail', id] as const,
+  exampleRequests: (limit: number) => [...leadQueryKeys.all, 'project-example-requests', limit] as const,
 }
 
 type LeadQueryOptions = {
   api: Pick<ApiClient, 'listCalculations' | 'getCalculation'>
+  enabled: boolean
+}
+
+type ProjectExampleRequestQueryOptions = {
+  api: Pick<ApiClient, 'listProjectExampleRequests'>
   enabled: boolean
 }
 
@@ -44,6 +50,18 @@ export function useLeadQuery({
     queryKey: leadQueryKeys.detail(id),
     enabled: enabled && Boolean(id),
     queryFn: () => api.getCalculation(id),
+  })
+}
+
+export function useProjectExampleRequestsQuery({
+  api,
+  enabled,
+  limit = 25,
+}: ProjectExampleRequestQueryOptions & { limit?: number }) {
+  return useQuery({
+    queryKey: leadQueryKeys.exampleRequests(limit),
+    enabled,
+    queryFn: () => api.listProjectExampleRequests({ limit, offset: 0 }),
   })
 }
 

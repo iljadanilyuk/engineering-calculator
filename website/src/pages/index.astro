@@ -467,8 +467,8 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
             <p class="section-kicker">Примеры и объекты</p>
             <h2 id="examples-title">Проекты для домов и небольшой коммерции</h2>
             <p>
-              Два реальных PDF-комплекта доступны как публичные примеры: можно открыть в браузере
-              или скачать перед расчетом.
+              Два реальных PDF-комплекта остаются proof-asset: состав и объем видны сразу,
+              а сами файлы выдаются после контакта по защищенной ссылке.
             </p>
           </div>
           <div class="objects">
@@ -489,25 +489,16 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
                   <h3>{example.title}</h3>
                   <p>{example.description}</p>
                   <div class="object-actions">
-                    <a
+                    <button
                       class="button small light"
-                      href={example.filePath}
-                      target="_blank"
-                      rel="noopener"
-                      type="application/pdf"
-                      aria-label={`Открыть PDF-пример: ${example.title}`}
+                      type="button"
+                      data-example-select
+                      data-example-slug={example.slug}
+                      aria-controls="example-request-form"
                     >
-                      Открыть PDF
-                    </a>
-                    <a
-                      class="text-link"
-                      href={example.filePath}
-                      download={example.fileName}
-                      type="application/pdf"
-                      aria-label={`Скачать PDF-пример: ${example.title}`}
-                    >
-                      Скачать
-                    </a>
+                      Получить PDF
+                    </button>
+                    <span class="text-link">после контакта</span>
                   </div>
                 </div>
               </article>
@@ -522,9 +513,84 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
                 <span class="node n2">PDF</span>
               </div>
               <div class="object-body">
-                <h3>Небольшая коммерция</h3>
-                <p>Офис, магазин или сервис, где нужен быстрый расчет состава проекта.</p>
-                <a class="button small primary" href="#calculator">Рассчитать по м²</a>
+                <h3>Получить примеры проектов</h3>
+                <p>Оставьте контакт, и сайт сразу откроет token-ссылки на выбранные PDF.</p>
+                <form
+                  class="example-request-form"
+                  id="example-request-form"
+                  data-example-form
+                  novalidate
+                >
+                  <fieldset class="example-choice-group" aria-describedby="example-choice-error">
+                    <legend>Какие примеры нужны</legend>
+                    {publicProjectExampleAssets.map((example) => (
+                      <label class="example-choice" for={`example-choice-${example.slug}`}>
+                        <input
+                          id={`example-choice-${example.slug}`}
+                          type="checkbox"
+                          value={example.slug}
+                          data-example-choice
+                          checked
+                        />
+                        <span>{example.code}</span>
+                        <strong>{example.title}</strong>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <p class="field-error" id="example-choice-error" data-example-choice-error hidden>
+                    Выберите хотя бы один пример проекта.
+                  </p>
+                  <label for="example-name">
+                    <span>Имя</span>
+                    <input
+                      id="example-name"
+                      data-example-name
+                      type="text"
+                      autocomplete="name"
+                      placeholder="Например, Андрей"
+                      aria-describedby="example-name-error"
+                    />
+                  </label>
+                  <p class="field-error" id="example-name-error" data-example-name-error hidden>
+                    Укажите имя: минимум 2 символа.
+                  </p>
+                  <label for="example-phone">
+                    <span>Телефон</span>
+                    <input
+                      id="example-phone"
+                      data-example-phone
+                      type="tel"
+                      inputmode="tel"
+                      autocomplete="tel"
+                      placeholder="+375 ..."
+                      aria-describedby="example-phone-error"
+                    />
+                  </label>
+                  <p class="field-error" id="example-phone-error" data-example-phone-error hidden>
+                    Укажите телефон в белорусском или международном формате.
+                  </p>
+                  <label class="consent-row" for="example-consent">
+                    <input
+                      id="example-consent"
+                      data-example-consent
+                      type="checkbox"
+                      aria-describedby="example-consent-error"
+                    />
+                    <span>
+                      Согласен на обработку имени и телефона для выдачи примеров проектов и связи по проектированию.
+                    </span>
+                  </label>
+                  <p class="field-error" id="example-consent-error" data-example-consent-error hidden>
+                    Подтвердите согласие перед отправкой.
+                  </p>
+                  <button class="button small primary" type="submit" data-example-trigger>
+                    Получить PDF-примеры
+                  </button>
+                  <p data-example-status role="status">
+                    Прямые PDF-ссылки не публикуются: после отправки здесь появятся защищенные ссылки.
+                  </p>
+                  <div class="lead-success" data-example-success hidden></div>
+                </form>
               </div>
             </article>
           </div>
@@ -647,8 +713,10 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     calculateEngineeringOffer,
     publicCalculatorConfigResponseSchema,
     publicCalculationSaveResponseSchema,
+    projectExampleRequestSaveResponseSchema,
     type CalculationResult,
     type EngineeringService,
+    type PublicProjectExampleRequestRecord,
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
 
@@ -685,6 +753,18 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   const leadTrigger = document.querySelector<HTMLButtonElement>('[data-lead-shell-trigger]')
   const leadStatus = document.querySelector<HTMLElement>('[data-lead-shell-status]')
   const leadSuccess = document.querySelector<HTMLElement>('[data-lead-success]')
+  const exampleForm = document.querySelector<HTMLFormElement>('[data-example-form]')
+  const exampleNameInput = document.querySelector<HTMLInputElement>('[data-example-name]')
+  const examplePhoneInput = document.querySelector<HTMLInputElement>('[data-example-phone]')
+  const exampleConsent = document.querySelector<HTMLInputElement>('[data-example-consent]')
+  const exampleChoices = [...document.querySelectorAll<HTMLInputElement>('[data-example-choice]')]
+  const exampleChoiceError = document.querySelector<HTMLElement>('[data-example-choice-error]')
+  const exampleNameError = document.querySelector<HTMLElement>('[data-example-name-error]')
+  const examplePhoneError = document.querySelector<HTMLElement>('[data-example-phone-error]')
+  const exampleConsentError = document.querySelector<HTMLElement>('[data-example-consent-error]')
+  const exampleTrigger = document.querySelector<HTMLButtonElement>('[data-example-trigger]')
+  const exampleStatus = document.querySelector<HTMLElement>('[data-example-status]')
+  const exampleSuccess = document.querySelector<HTMLElement>('[data-example-success]')
 
   const numberFormatter = new Intl.NumberFormat('ru-RU')
   const usdFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
@@ -698,7 +778,9 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
   let currentCalculationSignature = ''
   let hasApiConfig = false
   let isSubmitting = false
+  let isExampleSubmitting = false
   let submissionIdempotencyKey = createIdempotencyKey()
+  let exampleRequestIdempotencyKey = createIdempotencyKey()
 
   render()
   attachHandlers()
@@ -747,13 +829,53 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       event.preventDefault()
       void submitLead()
     })
+
+    document.querySelectorAll<HTMLButtonElement>('[data-example-select]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const slug = button.dataset.exampleSlug
+        if (!slug) return
+        selectExampleForRequest(slug)
+      })
+    })
+
+    exampleNameInput?.addEventListener('input', () => {
+      validateExampleForm(false)
+      resetExampleRequestState()
+    })
+
+    examplePhoneInput?.addEventListener('input', () => {
+      validateExampleForm(false)
+      resetExampleRequestState()
+    })
+
+    exampleConsent?.addEventListener('change', () => {
+      validateExampleForm(false)
+      resetExampleRequestState()
+    })
+
+    exampleChoices.forEach((choice) => {
+      choice.addEventListener('change', () => {
+        validateExampleForm(false)
+        resetExampleRequestState()
+        updateExampleSubmitState()
+      })
+    })
+
+    exampleForm?.addEventListener('submit', (event) => {
+      event.preventDefault()
+      void submitExampleRequest()
+    })
+
+    updateExampleSubmitState()
   }
 
   async function loadPublicConfig() {
     if (!apiBaseUrl) {
       setSourceMessage(`Базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
       setLeadStatus('Сохранение заявки требует подключенный backend API.')
+      setExampleStatus('Выдача PDF-примеров требует подключенный backend API.')
       updateSubmitState()
+      updateExampleSubmitState()
       return
     }
 
@@ -782,12 +904,17 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       }
 
       render()
-    } catch {
+    } catch (error) {
       services = normalizeServices(data.fallbackServices)
       selectedServiceIds = new Set(data.selectedServiceIds)
       hasApiConfig = false
       setSourceMessage(`API недоступен · базовые тарифы · курс ${data.exchangeRate.usdToBynRate} BYN/USD`)
       setLeadStatus('API недоступен: расчет можно посмотреть, но заявку сейчас нельзя сохранить.')
+      if (error instanceof Error && error.message.includes('failed: 409')) {
+        setExampleStatus('Калькулятор ждет настройку курса, но PDF-примеры можно запросить после контакта.')
+      } else {
+        setExampleStatus('API недоступен: PDF-примеры сейчас нельзя выдать по защищенной ссылке.', 'error')
+      }
       render()
     }
   }
@@ -1002,6 +1129,63 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     }
   }
 
+  async function submitExampleRequest() {
+    if (isExampleSubmitting) return
+
+    const validation = validateExampleForm(true)
+
+    if (!validation.valid) {
+      setExampleStatus('Проверьте поля формы перед отправкой.', 'error')
+      return
+    }
+
+    if (!apiBaseUrl) {
+      setExampleStatus('Выдача PDF недоступна: backend API сейчас не подключен.', 'error')
+      return
+    }
+
+    isExampleSubmitting = true
+    updateExampleSubmitState()
+    setExampleStatus('Сохраняю контакт и готовлю ссылки на PDF-примеры...', 'loading')
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/project-example-requests`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          idempotencyKey: exampleRequestIdempotencyKey,
+          clientName: validation.clientName,
+          clientPhone: validation.clientPhone,
+          requestedExampleSlugs: validation.requestedExampleSlugs,
+          consentAccepted: true,
+          source: 'example_request',
+          referrer: document.referrer || undefined,
+          utm: readAttributionMetadata(),
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        applyExampleServerValidationErrors(payload)
+        throw new Error(exampleRequestErrorMessage(response.status, payload))
+      }
+
+      const parsed = projectExampleRequestSaveResponseSchema.parse(payload)
+      showExampleSuccess(parsed.request, response.status === 200)
+    } catch (error) {
+      setExampleStatus(
+        error instanceof Error ? error.message : 'Не удалось выдать PDF-примеры. Попробуйте еще раз.',
+        'error',
+      )
+    } finally {
+      isExampleSubmitting = false
+      updateExampleSubmitState()
+    }
+  }
+
   function validateLeadForm(showErrors: boolean) {
     const clientName = leadNameInput?.value.trim() ?? ''
     const clientPhone = leadPhoneInput?.value.trim() ?? ''
@@ -1022,6 +1206,35 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       valid: nameValid && phoneValid && consentValid,
       clientName,
       clientPhone,
+    }
+  }
+
+  function validateExampleForm(showErrors: boolean) {
+    const clientName = exampleNameInput?.value.trim() ?? ''
+    const clientPhone = examplePhoneInput?.value.trim() ?? ''
+    const phoneDigits = clientPhone.replace(/\D/g, '')
+    const requestedExampleSlugs = selectedExampleSlugs()
+    const examplesValid = requestedExampleSlugs.length > 0
+    const nameValid = clientName.length >= 2 && clientName.length <= 120
+    const phoneValid =
+      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
+      phoneDigits.length >= 8 &&
+      phoneDigits.length <= 15 &&
+      !/^(\d)\1+$/.test(phoneDigits)
+    const consentValid = exampleConsent?.checked === true
+
+    if (exampleChoiceError) {
+      exampleChoiceError.hidden = examplesValid || !showErrors
+    }
+    setFieldValidity(exampleNameInput, exampleNameError, nameValid, showErrors)
+    setFieldValidity(examplePhoneInput, examplePhoneError, phoneValid, showErrors)
+    setFieldValidity(exampleConsent, exampleConsentError, consentValid, showErrors)
+
+    return {
+      valid: examplesValid && nameValid && phoneValid && consentValid,
+      clientName,
+      clientPhone,
+      requestedExampleSlugs,
     }
   }
 
@@ -1051,6 +1264,25 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
       isSubmitting || !apiBaseUrl || !hasApiConfig || currentCalculation === null || currentCalculation.lineItems.length === 0
     leadTrigger.disabled = unavailable
     leadTrigger.textContent = isSubmitting ? 'Сохраняю...' : 'Получить КП'
+  }
+
+  function updateExampleSubmitState() {
+    if (!exampleTrigger) return
+
+    const unavailable = isExampleSubmitting || !apiBaseUrl || selectedExampleSlugs().length === 0
+    exampleTrigger.disabled = unavailable
+    exampleTrigger.textContent = isExampleSubmitting ? 'Готовлю ссылки...' : 'Получить PDF-примеры'
+  }
+
+  function selectExampleForRequest(slug: string) {
+    exampleChoices.forEach((choice) => {
+      choice.checked = choice.value === slug
+    })
+    resetExampleRequestState()
+    updateExampleSubmitState()
+    exampleForm?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    exampleNameInput?.focus({ preventScroll: true })
+    setExampleStatus('Оставьте контакт: выбранный PDF откроется здесь по защищенной ссылке.')
   }
 
   function showLeadSuccess(
@@ -1105,15 +1337,63 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     )
   }
 
+  function showExampleSuccess(
+    request: PublicProjectExampleRequestRecord,
+    returnedExisting: boolean,
+  ) {
+    if (exampleSuccess) {
+      exampleSuccess.hidden = false
+      exampleSuccess.innerHTML = `
+        <strong>${returnedExisting ? 'Этот запрос уже сохранен' : 'Контакт сохранен'}</strong>
+        <span>Телефон сохранен как ${escapeHtml(request.clientPhone)}.</span>
+        <span>PDF-ссылки защищены token-адресом и не публикуются на странице.</span>
+        <div class="proposal-actions">
+          ${request.requestedExamples
+            .map(
+              (example) => `
+                <a
+                  class="proposal-link"
+                  href="${apiBaseUrl}${escapeHtml(example.urlPath)}"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  ${escapeHtml(example.code)} · ${escapeHtml(example.fileName)}
+                </a>
+              `,
+            )
+            .join('')}
+        </div>
+      `
+    }
+
+    setExampleStatus(
+      returnedExisting
+        ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
+        : 'Запрос принят. PDF-примеры готовы по защищенным ссылкам.',
+      'ready',
+    )
+  }
+
   function hideLeadSuccess() {
     if (!leadSuccess) return
     leadSuccess.hidden = true
     leadSuccess.innerHTML = ''
   }
 
+  function hideExampleSuccess() {
+    if (!exampleSuccess) return
+    exampleSuccess.hidden = true
+    exampleSuccess.innerHTML = ''
+  }
+
   function resetLeadSubmissionState() {
     submissionIdempotencyKey = createIdempotencyKey()
     hideLeadSuccess()
+  }
+
+  function resetExampleRequestState() {
+    exampleRequestIdempotencyKey = createIdempotencyKey()
+    hideExampleSuccess()
   }
 
   function applyServerValidationErrors(payload: unknown) {
@@ -1132,6 +1412,22 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     }
   }
 
+  function applyExampleServerValidationErrors(payload: unknown) {
+    if (!payload || typeof payload !== 'object' || !('error' in payload)) return
+    const details = (payload as { error?: { details?: unknown } }).error?.details
+    if (!Array.isArray(details)) return
+
+    const phoneIssue = details.find((issue) =>
+      Array.isArray((issue as { path?: unknown }).path)
+        ? ((issue as { path: unknown[] }).path ?? []).includes('clientPhone')
+        : false,
+    )
+
+    if (phoneIssue) {
+      setFieldValidity(examplePhoneInput, examplePhoneError, false, true)
+    }
+  }
+
   function publicSubmitErrorMessage(status: number, payload: unknown) {
     const serverMessage =
       payload && typeof payload === 'object' && 'error' in payload
@@ -1142,6 +1438,24 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     if (status === 409) return 'Тарифы или курс изменились. Обновите страницу и повторите расчет.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
     return serverMessage ?? 'Не удалось сохранить заявку. Попробуйте еще раз.'
+  }
+
+  function exampleRequestErrorMessage(status: number, payload: unknown) {
+    const serverMessage =
+      payload && typeof payload === 'object' && 'error' in payload
+        ? (payload as { error?: { message?: string } }).error?.message
+        : undefined
+
+    if (status === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
+    if (status === 409) return 'Выбранный пример временно недоступен. Обновите страницу и попробуйте еще раз.'
+    if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
+    return serverMessage ?? 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
+  }
+
+  function selectedExampleSlugs() {
+    return exampleChoices
+      .filter((choice) => choice.checked)
+      .map((choice) => choice.value)
   }
 
   function readAttributionMetadata() {
@@ -1182,6 +1496,14 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     leadStatus.classList.toggle('is-ready', state === 'ready')
     leadStatus.classList.toggle('is-error', state === 'error')
     leadStatus.classList.toggle('is-loading', state === 'loading')
+  }
+
+  function setExampleStatus(message: string, state?: 'ready' | 'error' | 'loading') {
+    if (!exampleStatus) return
+    exampleStatus.textContent = message
+    exampleStatus.classList.toggle('is-ready', state === 'ready')
+    exampleStatus.classList.toggle('is-error', state === 'error')
+    exampleStatus.classList.toggle('is-loading', state === 'loading')
   }
 
   function parseArea(value: string) {
@@ -1941,7 +2263,8 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
 
   .summary-list,
   .calc-note,
-  .lead-shell {
+  .lead-shell,
+  .example-request-form {
     display: grid;
     gap: 9px;
     margin-top: 18px;
@@ -1976,18 +2299,21 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     font-weight: 700;
   }
 
-  .lead-shell label {
+  .lead-shell label,
+  .example-request-form label {
     display: grid;
     gap: 5px;
   }
 
-  .lead-shell label span {
+  .lead-shell label span,
+  .example-request-form label span {
     color: var(--muted);
     font-size: 12px;
     font-weight: 800;
   }
 
-  .lead-shell input {
+  .lead-shell input:not([type="checkbox"]),
+  .example-request-form input:not([type="checkbox"]) {
     min-height: 44px;
     border: 1px solid var(--line);
     border-radius: 999px;
@@ -1995,13 +2321,64 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     padding: 0 14px;
   }
 
-  .lead-shell input[aria-invalid] {
+  .lead-shell input[aria-invalid],
+  .example-request-form input[aria-invalid] {
     border-color: #b6401a;
     background: #fff8f4;
   }
 
-  .lead-shell .field-error {
+  .lead-shell .field-error,
+  .example-request-form .field-error {
     margin-top: -2px;
+  }
+
+  .example-choice-group {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    border: 0;
+    padding: 0;
+  }
+
+  .example-choice-group legend {
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .example-choice {
+    grid-template-columns: 18px 36px minmax(0, 1fr);
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 9px 10px;
+  }
+
+  .example-choice input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--orange);
+  }
+
+  .example-choice span {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    min-height: 24px;
+    border-radius: 9px;
+    background: var(--orange-soft);
+    color: #8f3519;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .example-choice strong {
+    min-width: 0;
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1.25;
   }
 
   .consent-row {
@@ -2027,26 +2404,31 @@ function allocateDisplayBynRubles(calculation: CalculationResult) {
     line-height: 1.35;
   }
 
-  .lead-shell .button {
+  .lead-shell .button,
+  .example-request-form .button {
     width: 100%;
     padding-inline: 10px;
   }
 
-  .lead-shell p {
+  .lead-shell p,
+  .example-request-form p {
     color: var(--muted);
     font-size: 12px;
     font-weight: 700;
   }
 
-  .lead-shell p.is-ready {
+  .lead-shell p.is-ready,
+  .example-request-form p.is-ready {
     color: #8f3519;
   }
 
-  .lead-shell p.is-error {
+  .lead-shell p.is-error,
+  .example-request-form p.is-error {
     color: #b6401a;
   }
 
-  .lead-shell p.is-loading {
+  .lead-shell p.is-loading,
+  .example-request-form p.is-loading {
     color: var(--steel);
   }
 

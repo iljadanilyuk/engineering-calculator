@@ -305,7 +305,7 @@ Required component shape (static build):
 
 Keep website independent from authenticated browser-app flows unless the product explicitly needs shared API data.
 
-The backend also needs runtime `PUBLIC_WEBSITE_URL=https://example.com` or the project's canonical public website origin so newly generated proposal HTML/PDF snapshots can embed absolute links to public project example PDFs. `PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
+The backend also needs runtime `PUBLIC_WEBSITE_URL=https://example.com` or the project's canonical public website origin so newly generated proposal HTML/PDF snapshots can link back to public website sections such as examples and contacts without embedding direct static PDF URLs. Project example PDFs are backend assets served only through tokenized `/api/public/project-example-requests/{token}/examples/{slug}` routes after contact capture. `PUBLIC_WEBAPP_URL` is also build-time public config. If website links point to the webapp, generate it as a concrete URL and redeploy website after it changes.
 
 ## Managed PostgreSQL
 

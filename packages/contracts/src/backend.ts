@@ -7,6 +7,7 @@ import {
   engineeringServiceSchema,
   exchangeRateInputSchema,
   exchangeRateSnapshotSchema,
+  idempotencyKeySchema,
   leadSubmissionSchema,
   servicePricingTypeSchema,
   skippedCalculationServiceSchema,
@@ -15,6 +16,10 @@ import {
 
 const uuidSchema = z.string().uuid()
 const publicTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{32,128}$/)
+const projectExampleSlugSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value
+  return value.trim().toLowerCase()
+}, z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
 const optionalTextSchema = (max: number) =>
   z.preprocess((value) => {
     if (typeof value !== 'string') return value
@@ -314,6 +319,74 @@ export const publicCalculationSaveResponseSchema = z.object({
   calculation: publicCalculationRecordSchema,
 })
 
+export const projectExampleRequestCreateRequestSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
+  clientName: z.string().trim().min(2).max(120),
+  clientPhone: z.string().trim().min(5).max(40),
+  requestedExampleSlugs: z.array(projectExampleSlugSchema).min(1).max(10).default(['ov', 'vk']),
+  consentAccepted: z.literal(true),
+  source: z.string().trim().min(1).max(80).optional(),
+  referrer: z.string().trim().max(2_048).optional(),
+  utm: z.record(z.string().trim().min(1).max(64), z.string().trim().max(500)).optional(),
+})
+
+export const projectExampleDeliveryLinkSchema = z.object({
+  slug: projectExampleSlugSchema,
+  code: z.string(),
+  title: z.string(),
+  description: z.string(),
+  fileName: z.string(),
+  pageCount: z.number().int().positive(),
+  fileSizeBytes: z.number().int().positive(),
+  urlPath: z.string().startsWith('/api/public/project-example-requests/'),
+})
+
+export const publicProjectExampleRequestRecordSchema = z.object({
+  publicToken: publicTokenSchema,
+  clientPhone: z.string(),
+  requestedExamples: z.array(projectExampleDeliveryLinkSchema),
+  createdAt: z.string().datetime(),
+})
+
+export const projectExampleRequestSaveResponseSchema = z.object({
+  request: publicProjectExampleRequestRecordSchema,
+})
+
+export const projectExampleRequestRecordSchema = z.object({
+  id: uuidSchema,
+  publicToken: publicTokenSchema,
+  idempotencyKey: z.string().nullable(),
+  requestFingerprintHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  clientName: z.string(),
+  clientPhone: z.string(),
+  requestedExampleSlugs: z.array(projectExampleSlugSchema),
+  requestedExamples: z.array(projectExampleDeliveryLinkSchema),
+  source: z.string().nullable(),
+  referrer: z.string().nullable(),
+  utm: z.record(z.string(), z.unknown()).nullable(),
+  consentAcceptedAt: z.string().datetime().nullable(),
+  consentVersion: z.string().nullable(),
+  consentText: z.string().nullable(),
+  consentIpAddress: z.string().nullable(),
+  consentUserAgent: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+})
+
+export const projectExampleRequestListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).max(10_000).default(0),
+})
+
+export const projectExampleRequestListResponseSchema = z.object({
+  requests: z.array(projectExampleRequestRecordSchema),
+  summary: z.object({
+    totalCount: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    offset: z.number().int().nonnegative(),
+  }),
+})
+
 export const projectExampleCreateRequestSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: optionalTextSchema(2_000),
@@ -344,8 +417,19 @@ export const projectExampleRecordSchema = z.object({
   updatedAt: z.string().datetime(),
 })
 
+export const publicProjectExampleRecordSchema = projectExampleRecordSchema.omit({
+  fileUrl: true,
+  isPublic: true,
+  createdAt: true,
+  updatedAt: true,
+})
+
 export const projectExampleListResponseSchema = z.object({
   examples: z.array(projectExampleRecordSchema),
+})
+
+export const publicProjectExampleListResponseSchema = z.object({
+  examples: z.array(publicProjectExampleRecordSchema),
 })
 
 export const projectExampleResponseSchema = z.object({
@@ -370,9 +454,17 @@ export type CalculationListQuery = z.infer<typeof calculationListQuerySchema>
 export type CalculationListResponse = z.infer<typeof calculationListResponseSchema>
 export type CalculationUpdateRequest = z.infer<typeof calculationUpdateRequestSchema>
 export type PublicCalculationRecord = z.infer<typeof publicCalculationRecordSchema>
+export type ProjectExampleRequestCreateRequest = z.infer<typeof projectExampleRequestCreateRequestSchema>
+export type ProjectExampleDeliveryLink = z.infer<typeof projectExampleDeliveryLinkSchema>
+export type PublicProjectExampleRequestRecord = z.infer<typeof publicProjectExampleRequestRecordSchema>
+export type ProjectExampleRequestRecord = z.infer<typeof projectExampleRequestRecordSchema>
+export type ProjectExampleRequestListQueryInput = z.input<typeof projectExampleRequestListQuerySchema>
+export type ProjectExampleRequestListQuery = z.infer<typeof projectExampleRequestListQuerySchema>
+export type ProjectExampleRequestListResponse = z.infer<typeof projectExampleRequestListResponseSchema>
 export type ProjectExampleCreateRequest = z.infer<typeof projectExampleCreateRequestSchema>
 export type ProjectExampleUpdateRequest = z.infer<typeof projectExampleUpdateRequestSchema>
 export type ProjectExampleRecord = z.infer<typeof projectExampleRecordSchema>
+export type PublicProjectExampleRecord = z.infer<typeof publicProjectExampleRecordSchema>
 
 function isValidDateOnly(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)

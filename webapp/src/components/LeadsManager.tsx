@@ -3,6 +3,7 @@ import type {
   CalculationListItem,
   CalculationRecord,
   CalculationStatus,
+  ProjectExampleRequestRecord,
 } from '@poznyak-engineering-calculator/contracts'
 import { Link } from '@tanstack/react-router'
 import { type FormEvent, useMemo, useState } from 'react'
@@ -47,6 +48,7 @@ import {
   type LeadListFilters,
   useLeadQuery,
   useLeadsQuery,
+  useProjectExampleRequestsQuery,
   useUpdateLeadMutation,
 } from '@/lib/leads-queries'
 import { leadPageRange } from '@/lib/leads-pagination'
@@ -104,6 +106,11 @@ export function LeadsManager() {
     api: auth.api,
     enabled: auth.isAuthenticated,
     filters: queryFilters,
+  })
+  const projectExampleRequestsQuery = useProjectExampleRequestsQuery({
+    api: auth.api,
+    enabled: auth.isAuthenticated,
+    limit: 25,
   })
   const updateLead = useUpdateLeadMutation({ api: auth.api })
   const [actionError, setActionError] = useState<string | null>(null)
@@ -301,6 +308,15 @@ export function LeadsManager() {
           )}
         </CardContent>
       </Card>
+
+      <ProjectExampleRequestsPanel
+        requests={projectExampleRequestsQuery.data?.requests ?? []}
+        totalCount={projectExampleRequestsQuery.data?.summary.totalCount ?? 0}
+        isLoading={projectExampleRequestsQuery.isLoading}
+        isError={projectExampleRequestsQuery.isError}
+        error={projectExampleRequestsQuery.error}
+        onRefresh={() => void projectExampleRequestsQuery.refetch()}
+      />
     </section>
   )
 }
@@ -799,6 +815,103 @@ function LeadMetric({ label, value, muted = false }: { label: string; value: num
   )
 }
 
+function ProjectExampleRequestsPanel({
+  requests,
+  totalCount,
+  isLoading,
+  isError,
+  error,
+  onRefresh,
+}: {
+  requests: ProjectExampleRequestRecord[]
+  totalCount: number
+  isLoading: boolean
+  isError: boolean
+  error: unknown
+  onRefresh: () => void
+}) {
+  return (
+    <Card className="rounded-lg">
+      <CardHeader>
+        <div className="grid gap-2">
+          <CardTitle>Запросы примеров проектов</CardTitle>
+          <CardDescription>
+            {totalCount > 0
+              ? `Последние ${numberFormatter.format(requests.length)} из ${numberFormatter.format(totalCount)}`
+              : 'Отдельный поток лидов, которые запросили PDF-примеры после контакта'}
+          </CardDescription>
+        </div>
+        <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
+          <Button type="button" variant="outline" onClick={onRefresh}>
+            Обновить
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {isLoading ? (
+          <div className="flex items-center gap-3 py-6">
+            <Spinner />
+            <Typography tone="muted">Загружаем запросы примеров...</Typography>
+          </div>
+        ) : isError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Не удалось загрузить запросы примеров</AlertTitle>
+            <AlertDescription>{errorMessage(error)}</AlertDescription>
+          </Alert>
+        ) : requests.length === 0 ? (
+          <div className="grid gap-2 rounded-lg border border-dashed p-6">
+            <Typography variant="h6">Запросов примеров пока нет</Typography>
+            <Typography tone="muted">
+              Когда посетитель оставит контакт ради PDF-примера, заявка появится здесь.
+            </Typography>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {requests.map((request) => (
+              <div
+                key={request.id}
+                className="grid gap-3 rounded-lg border p-4 lg:grid-cols-[minmax(160px,220px)_minmax(140px,180px)_minmax(0,1fr)_auto] lg:items-center"
+              >
+                <div className="grid gap-1">
+                  <Typography variant="bodySmMedium">{request.clientName}</Typography>
+                  <Typography variant="caption" tone="muted">
+                    {formatDateTime(request.createdAt)}
+                  </Typography>
+                </div>
+                <Typography className="tabular-nums" variant="bodySm">
+                  {request.clientPhone}
+                </Typography>
+                <div className="grid gap-1">
+                  <Typography variant="caption" tone="muted">
+                    Источник: {leadSourceLabel(request.source)}
+                  </Typography>
+                  <Typography variant="bodySm">
+                    {request.requestedExamples.map((example) => example.code).join(', ')}
+                  </Typography>
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  {request.requestedExamples.map((example) => (
+                    <Button key={example.slug} asChild type="button" variant="outline" size="sm">
+                      <a
+                        href={buildApiUrl(example.urlPath)}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Открыть ${example.title} для ${request.clientName}`}
+                      >
+                        {example.code} PDF
+                      </a>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
@@ -919,6 +1032,13 @@ function exchangeRateSourceLabel(source: string) {
   if (source === 'manual') return 'вручную'
   if (source === 'nbrb') return 'НБ РБ'
   return source
+}
+
+function leadSourceLabel(source: string | null) {
+  if (source === 'example_request') return 'Запрос примера проекта'
+  if (source === 'public_website') return 'Публичный сайт'
+  if (source === 'public_calculator') return 'Калькулятор'
+  return source ?? 'Не указан'
 }
 
 function errorMessage(error: unknown) {

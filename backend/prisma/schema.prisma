@@ -143,6 +143,30 @@ model ProjectExample {
   @@map("project_examples")
 }
 
+model ProjectExampleRequest {
+  id                     String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  publicToken            String   @unique @map("public_token")
+  idempotencyKey         String?  @unique(map: "project_example_requests_idempotency_key_key") @map("idempotency_key")
+  requestFingerprintHash String?  @map("request_fingerprint_hash")
+  clientName             String   @map("client_name")
+  clientPhone            String   @map("client_phone")
+  requestedExampleSlugs  Json     @map("requested_example_slugs")
+  source                 String?
+  referrer               String?
+  utm                    Json?
+  consentAcceptedAt      DateTime? @map("consent_accepted_at")
+  consentVersion         String?  @map("consent_version")
+  consentText            String?  @map("consent_text")
+  consentIpAddress       String?  @map("consent_ip_address")
+  consentUserAgent       String?  @map("consent_user_agent")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@index([createdAt], map: "project_example_requests_created_at_idx")
+  @@index([clientPhone, createdAt], map: "project_example_requests_client_phone_created_at_idx")
+  @@map("project_example_requests")
+}
+
 model AuthSession {
   id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   userId           String    @db.Uuid @map("user_id")

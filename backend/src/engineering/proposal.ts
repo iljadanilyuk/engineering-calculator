@@ -478,14 +478,13 @@ function proofCard(
 
 function proposalProjectExamples(input: CommercialProposalInput) {
   const customExamples = input.projectExamples?.filter((example) => example.title.trim() && example.fileUrl.trim()) ?? []
-  const baseUrl = input.sourcePageUrl ?? undefined
 
   if (customExamples.length > 0) {
     return customExamples.slice(0, 2).map((example, index) => ({
       code: example.code?.trim() || `П${index + 1}`,
       title: example.title.trim(),
       description: example.description?.trim() || 'PDF-пример проекта для проверки состава и оформления.',
-      href: resolvePublicUrl(example.fileUrl, baseUrl),
+      href: null,
     }))
   }
 
@@ -493,18 +492,8 @@ function proposalProjectExamples(input: CommercialProposalInput) {
     code: example.code,
     title: example.title,
     description: `${example.description} ${example.pageCount} листов, PDF ${formatMegabytes(example.fileSizeBytes)}.`,
-    href: resolvePublicUrl(example.filePath, baseUrl),
+    href: null,
   }))
-}
-
-function resolvePublicUrl(rawUrl: string, baseUrl: string | undefined) {
-  try {
-    const url = baseUrl ? new URL(rawUrl, baseUrl) : new URL(rawUrl)
-    if (!['http:', 'https:'].includes(url.protocol)) return null
-    return url.toString()
-  } catch {
-    return null
-  }
 }
 
 function allocateDisplayBynRubles(

@@ -3,6 +3,7 @@ import {
   calculateEngineeringOffer,
   calculationResultSchema,
   exchangeRateInputSchema,
+  publicProjectExampleAssets,
   type CalculationListItem,
   type CalculationListQuery,
   type CalculationRecord,
@@ -13,15 +14,22 @@ import {
   type ExchangeRateInput,
   type ExchangeRateSnapshot,
   type ProjectExampleCreateRequest,
+  type ProjectExampleDeliveryLink,
   type ProjectExampleRecord,
+  type ProjectExampleRequestCreateRequest,
+  type ProjectExampleRequestListQuery,
+  type ProjectExampleRequestRecord,
   type ProjectExampleUpdateRequest,
   type PublicCalculationRecord,
+  type PublicProjectExampleRecord,
+  type PublicProjectExampleRequestRecord,
   type ServiceCreateRequest,
   type ServiceRecord,
   type ServiceReorderRequest,
   type ServiceUpdateRequest,
 } from '@poznyak-engineering-calculator/contracts'
 import { createHash, randomBytes } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 
 import type { DbClient } from '../db'
 import { Prisma } from '../generated/prisma/client'
@@ -35,10 +43,14 @@ import {
 
 const exchangeRateSettingKey = 'exchange_rate'
 const defaultLeadSource = 'public_calculator'
+const defaultProjectExampleRequestSource = 'example_request'
 const duplicateDetectionWindowMs = 10 * 60 * 1_000
 const consentVersion = 'pzk-public-lead-consent-v1'
 const consentText =
   'Согласен на обработку имени, телефона и выбранного расчета для подготовки коммерческого предложения.'
+const projectExampleRequestConsentVersion = 'pzk-project-example-request-consent-v1'
+const projectExampleRequestConsentText =
+  'Согласен на обработку имени и телефона для выдачи примеров проектов и связи по проектированию.'
 const calculationStatuses = [
   'new',
   'contacted',
@@ -56,6 +68,7 @@ const orderedProposalInclude = {
 type ServiceRow = Awaited<ReturnType<DbClient['service']['findFirstOrThrow']>>
 type CalculationRow = Awaited<ReturnType<DbClient['calculation']['findFirstOrThrow']>>
 type ProjectExampleRow = Awaited<ReturnType<DbClient['projectExample']['findFirstOrThrow']>>
+type ProjectExampleRequestRow = Awaited<ReturnType<DbClient['projectExampleRequest']['findFirstOrThrow']>>
 type ProposalRow = {
   id: string
   publicToken: string
@@ -75,9 +88,12 @@ type SaveCalculationMetadata = {
   ipAddress?: string
   userAgent?: string
 }
+type SaveProjectExampleRequestMetadata = SaveCalculationMetadata
 type EngineeringDataServiceOptions = {
   publicWebsiteUrl?: string
 }
+
+const projectExampleAssetBaseUrl = new URL('../../assets/project-examples/', import.meta.url)
 
 export class EngineeringDataService {
   constructor(
@@ -401,6 +417,161 @@ export class EngineeringDataService {
     }
   }
 
+  async saveProjectExampleRequest(
+    input: ProjectExampleRequestCreateRequest,
+    metadata: SaveProjectExampleRequestMetadata = {},
+  ) {
+    const normalizedPhone = normalizeLeadPhone(input.clientPhone)
+    const requestedExampleSlugs = normalizeProjectExampleSlugs(input.requestedExampleSlugs)
+    const referrer = normalizeOptionalText(input.referrer ?? metadata.referrer, 2_048)
+    const source = normalizeOptionalText(input.source, 80) ?? defaultProjectExampleRequestSource
+    const requestFingerprintHash = projectExampleRequestFingerprintHash({
+      input,
+      normalizedPhone,
+      requestedExampleSlugs,
+      source,
+      referrer,
+    })
+
+    const existingIdempotentRequest = await this.findProjectExampleRequestByIdempotencyKey(
+      input.idempotencyKey,
+    )
+    if (existingIdempotentRequest) {
+      assertProjectExampleRequestFingerprintMatches(existingIdempotentRequest, requestFingerprintHash)
+      return {
+        request: projectExampleRequestToRecord(existingIdempotentRequest),
+        publicRequest: projectExampleRequestToPublicRecord(existingIdempotentRequest),
+        created: false,
+      }
+    }
+
+    const publicToken = await this.createUniqueProjectExampleRequestToken()
+    const consentAcceptedAt = new Date()
+
+    try {
+      const request = await this.db.projectExampleRequest.create({
+        data: {
+          publicToken,
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprintHash,
+          clientName: input.clientName,
+          clientPhone: normalizedPhone,
+          requestedExampleSlugs: toJson(requestedExampleSlugs),
+          source,
+          referrer,
+          utm: input.utm === undefined ? undefined : toJson(input.utm),
+          consentAcceptedAt,
+          consentVersion: projectExampleRequestConsentVersion,
+          consentText: projectExampleRequestConsentText,
+          consentIpAddress: normalizeOptionalText(metadata.ipAddress, 255),
+          consentUserAgent: normalizeOptionalText(metadata.userAgent, 512),
+        },
+      })
+
+      return {
+        request: projectExampleRequestToRecord(request),
+        publicRequest: projectExampleRequestToPublicRecord(request),
+        created: true,
+      }
+    } catch (error) {
+      if (isPrismaUniqueConstraint(error)) {
+        const existing = await this.findProjectExampleRequestByIdempotencyKey(input.idempotencyKey)
+        if (existing) {
+          assertProjectExampleRequestFingerprintMatches(existing, requestFingerprintHash)
+          return {
+            request: projectExampleRequestToRecord(existing),
+            publicRequest: projectExampleRequestToPublicRecord(existing),
+            created: false,
+          }
+        }
+      }
+
+      throw error
+    }
+  }
+
+  async isExactProjectExampleRequestIdempotencyReplay(
+    input: ProjectExampleRequestCreateRequest,
+    metadata: SaveProjectExampleRequestMetadata = {},
+  ) {
+    const existing = await this.db.projectExampleRequest.findUnique({
+      where: { idempotencyKey: input.idempotencyKey },
+      select: { requestFingerprintHash: true },
+    })
+
+    if (!existing) return false
+
+    try {
+      const normalizedPhone = normalizeLeadPhone(input.clientPhone)
+      const requestedExampleSlugs = normalizeProjectExampleSlugs(input.requestedExampleSlugs)
+      const referrer = normalizeOptionalText(input.referrer ?? metadata.referrer, 2_048)
+      const source = normalizeOptionalText(input.source, 80) ?? defaultProjectExampleRequestSource
+      const requestFingerprintHash = projectExampleRequestFingerprintHash({
+        input,
+        normalizedPhone,
+        requestedExampleSlugs,
+        source,
+        referrer,
+      })
+
+      return existing.requestFingerprintHash === requestFingerprintHash
+    } catch {
+      return false
+    }
+  }
+
+  async getPublicProjectExamplePdf(publicToken: string, slug: string) {
+    const normalizedSlug = normalizeProjectExampleSlug(slug)
+    const request = await this.db.projectExampleRequest
+      .findUniqueOrThrow({
+        where: { publicToken },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Project example request not found')
+        }
+        throw error
+      })
+    const requestedExampleSlugs = projectExampleSlugsFromJson(request.requestedExampleSlugs)
+
+    if (!requestedExampleSlugs.includes(normalizedSlug)) {
+      throw new AppError(404, 'NOT_FOUND', 'Project example is not available for this request')
+    }
+
+    const asset = projectExampleAssetBySlug(normalizedSlug)
+    const bytes = await readFile(new URL(asset.fileName, projectExampleAssetBaseUrl)).catch((error: unknown) => {
+      if (isNotFoundFileError(error)) {
+        throw new AppError(404, 'NOT_FOUND', 'Project example PDF is not available')
+      }
+      throw error
+    })
+
+    return {
+      asset,
+      bytes: new Uint8Array(bytes),
+    }
+  }
+
+  async listProjectExampleRequests(input: ProjectExampleRequestListQuery) {
+    const [requests, totalCount] = await Promise.all([
+      this.db.projectExampleRequest.findMany({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: input.limit,
+        skip: input.offset,
+      }),
+      this.db.projectExampleRequest.count(),
+    ])
+
+    return {
+      requests: requests.map(projectExampleRequestToRecord),
+      summary: {
+        totalCount,
+        limit: input.limit,
+        offset: input.offset,
+      },
+    }
+  }
+
   async isExactIdempotencyReplay(
     input: CalculationSaveRequest,
     metadata: SaveCalculationMetadata = {},
@@ -572,6 +743,15 @@ export class EngineeringDataService {
     return examples.map(projectExampleToRecord)
   }
 
+  async listPublicProjectExampleSummaries() {
+    const examples = await this.db.projectExample.findMany({
+      where: { isPublic: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    return examples.map(projectExampleToPublicRecord)
+  }
+
   async listAdminProjectExamples() {
     const examples = await this.db.projectExample.findMany({
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -637,10 +817,29 @@ export class EngineeringDataService {
     throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate proposal token')
   }
 
+  private async createUniqueProjectExampleRequestToken() {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = randomToken()
+      const existing = await this.db.projectExampleRequest.findUnique({
+        where: { publicToken: token },
+        select: { id: true },
+      })
+      if (!existing) return token
+    }
+
+    throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate project example request token')
+  }
+
   private async findCalculationByIdempotencyKey(idempotencyKey: string) {
     return this.db.calculation.findUnique({
       where: { idempotencyKey },
       include: { proposals: orderedProposalInclude },
+    })
+  }
+
+  private async findProjectExampleRequestByIdempotencyKey(idempotencyKey: string) {
+    return this.db.projectExampleRequest.findUnique({
+      where: { idempotencyKey },
     })
   }
 
@@ -864,6 +1063,78 @@ function projectExampleToRecord(example: ProjectExampleRow): ProjectExampleRecor
   }
 }
 
+function projectExampleToPublicRecord(example: ProjectExampleRow): PublicProjectExampleRecord {
+  return {
+    id: example.id,
+    title: example.title,
+    description: example.description,
+    coverImageUrl: example.coverImageUrl,
+    sortOrder: example.sortOrder,
+  }
+}
+
+function projectExampleRequestToPublicRecord(
+  request: ProjectExampleRequestRow,
+): PublicProjectExampleRequestRecord {
+  const requestedExampleSlugs = projectExampleSlugsFromJson(request.requestedExampleSlugs)
+
+  return {
+    publicToken: request.publicToken,
+    clientPhone: request.clientPhone,
+    requestedExamples: requestedExampleSlugs.map((slug) =>
+      projectExampleDeliveryLink(projectExampleAssetBySlug(slug), request.publicToken),
+    ),
+    createdAt: request.createdAt.toISOString(),
+  }
+}
+
+function projectExampleRequestToRecord(
+  request: ProjectExampleRequestRow,
+): ProjectExampleRequestRecord {
+  const requestedExampleSlugs = projectExampleSlugsFromJson(request.requestedExampleSlugs)
+
+  return {
+    id: request.id,
+    publicToken: request.publicToken,
+    idempotencyKey: request.idempotencyKey,
+    requestFingerprintHash: request.requestFingerprintHash,
+    clientName: request.clientName,
+    clientPhone: request.clientPhone,
+    requestedExampleSlugs,
+    requestedExamples: requestedExampleSlugs.map((slug) =>
+      projectExampleDeliveryLink(projectExampleAssetBySlug(slug), request.publicToken),
+    ),
+    source: request.source,
+    referrer: request.referrer,
+    utm: (request.utm as Record<string, unknown> | null) ?? null,
+    consentAcceptedAt: request.consentAcceptedAt?.toISOString() ?? null,
+    consentVersion: request.consentVersion,
+    consentText: request.consentText,
+    consentIpAddress: request.consentIpAddress,
+    consentUserAgent: request.consentUserAgent,
+    createdAt: request.createdAt.toISOString(),
+    updatedAt: request.updatedAt.toISOString(),
+  }
+}
+
+function projectExampleDeliveryLink(
+  asset: (typeof publicProjectExampleAssets)[number],
+  publicToken: string,
+): ProjectExampleDeliveryLink {
+  const urlPath = `/api/public/project-example-requests/${publicToken}/examples/${asset.slug}`
+
+  return {
+    slug: asset.slug,
+    code: asset.code,
+    title: asset.title,
+    description: asset.description,
+    fileName: asset.fileName,
+    pageCount: asset.pageCount,
+    fileSizeBytes: asset.fileSizeBytes,
+    urlPath,
+  }
+}
+
 function projectExampleToProposalInput(example: ProjectExampleRecord): CommercialProposalProjectExample {
   return {
     title: example.title,
@@ -1082,6 +1353,40 @@ function normalizeLeadPhone(rawPhone: string) {
   return `+${normalizedDigits}`
 }
 
+function normalizeProjectExampleSlugs(rawSlugs: readonly string[]): string[] {
+  const slugs = [...new Set(rawSlugs.map(normalizeProjectExampleSlug))]
+  const unknownSlugs = slugs.filter((slug) => !publicProjectExampleAssets.some((asset) => asset.slug === slug))
+
+  if (unknownSlugs.length > 0) {
+    throw new AppError(409, 'CONFLICT', 'Requested project example is unavailable', {
+      requestedExampleSlugs: unknownSlugs,
+    })
+  }
+
+  return slugs
+}
+
+function normalizeProjectExampleSlug(rawSlug: string) {
+  const slug = rawSlug.trim().toLowerCase()
+
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)) {
+    throw new AppError(404, 'NOT_FOUND', 'Project example not found')
+  }
+
+  return slug
+}
+
+function projectExampleAssetBySlug(slug: string): (typeof publicProjectExampleAssets)[number] {
+  const asset = publicProjectExampleAssets.find((example) => example.slug === slug)
+  if (!asset) throw new AppError(404, 'NOT_FOUND', 'Project example not found')
+  return asset
+}
+
+function projectExampleSlugsFromJson(value: Prisma.JsonValue): string[] {
+  if (!Array.isArray(value)) return []
+  return normalizeProjectExampleSlugs(value.filter((slug): slug is string => typeof slug === 'string'))
+}
+
 function throwInvalidPhone(): never {
   throw new AppError(400, 'VALIDATION_ERROR', 'Invalid lead phone number', [
     {
@@ -1119,6 +1424,25 @@ function leadRequestFingerprintHash(input: {
   })
 }
 
+function projectExampleRequestFingerprintHash(input: {
+  input: ProjectExampleRequestCreateRequest
+  normalizedPhone: string
+  requestedExampleSlugs: string[]
+  source: string
+  referrer: string | null
+}) {
+  return sha256Hex({
+    clientName: input.input.clientName,
+    clientPhone: input.normalizedPhone,
+    requestedExampleSlugs: input.requestedExampleSlugs,
+    consentAccepted: true,
+    consentVersion: projectExampleRequestConsentVersion,
+    source: input.source,
+    referrer: input.referrer,
+    utm: input.input.utm ?? null,
+  })
+}
+
 function calculationDuplicateFingerprintHash(input: {
   normalizedPhone: string
   calculation: CalculationResult
@@ -1149,6 +1473,19 @@ function assertIdempotencyFingerprintMatches(
     409,
     'CONFLICT',
     'Idempotency key was already used for a different calculation submission',
+  )
+}
+
+function assertProjectExampleRequestFingerprintMatches(
+  request: ProjectExampleRequestRow,
+  requestFingerprintHash: string,
+) {
+  if (request.requestFingerprintHash === requestFingerprintHash) return
+
+  throw new AppError(
+    409,
+    'CONFLICT',
+    'Idempotency key was already used for a different project example request',
   )
 }
 
@@ -1191,6 +1528,10 @@ function isPrismaNotFound(error: unknown) {
 
 function isPrismaUniqueConstraint(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+}
+
+function isNotFoundFileError(error: unknown) {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
 function safeErrorMessage(error: unknown) {

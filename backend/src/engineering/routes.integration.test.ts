@@ -40,6 +40,7 @@ maybeDescribe('engineering API integration', () => {
   beforeEach(async () => {
     await prisma.proposal.deleteMany()
     await prisma.calculation.deleteMany()
+    await prisma.projectExampleRequest.deleteMany()
     await prisma.projectExample.deleteMany()
     await prisma.service.deleteMany()
     await prisma.appSetting.deleteMany()
@@ -188,8 +189,9 @@ maybeDescribe('engineering API integration', () => {
     expect(publicProposalHtml).toContain('Коммерческое предложение')
     expect(publicProposalHtml).toContain('Анна Клиент')
     expect(publicProposalHtml).toContain('Boiler room fixed package')
-    expect(publicProposalHtml).toContain('https://website.example.com/project-examples/proekt-primer-ov.pdf')
-    expect(publicProposalHtml).toContain('https://website.example.com/project-examples/primer-proekt-vk.pdf')
+    expect(publicProposalHtml).toContain('Открыть раздел с примерами')
+    expect(publicProposalHtml).not.toContain('/project-examples/proekt-primer-ov.pdf')
+    expect(publicProposalHtml).not.toContain('/project-examples/primer-proekt-vk.pdf')
     expect(publicProposalHtml).not.toContain('Коммерческое предложение готовится')
 
     const publicProposalPdf = await app.request(`/api/public/proposals/${saved.proposals[0].publicToken}/pdf`)
@@ -1071,12 +1073,105 @@ maybeDescribe('engineering API integration', () => {
     const adminBody = await adminList.json()
 
     expect(publicList.status).toBe(200)
-    expect(publicBody.examples).toEqual([publicExample])
+    expect(publicBody.examples).toEqual([
+      {
+        id: publicExample.id,
+        title: 'ОВ example',
+        description: null,
+        coverImageUrl: null,
+        sortOrder: 2,
+      },
+    ])
+    expect(publicBody.examples[0]).not.toHaveProperty('fileUrl')
     expect(adminList.status).toBe(200)
     expect(adminBody.examples).toHaveLength(2)
   })
 
-  test('snapshots public project example links into generated proposals', async () => {
+  test('saves lead-gated project example requests and serves PDFs only by request token', async () => {
+    const accessToken = await loginAdmin('example-request-admin@example.com')
+    const idempotencyKey = nextIdempotencyKey()
+    const response = await saveProjectExampleRequest({
+      idempotencyKey,
+      clientName: '  Example Request Client  ',
+      clientPhone: '8 029 111-22-33',
+      requestedExampleSlugs: ['ov'],
+      consentAccepted: true,
+      source: 'example_request',
+      referrer: 'https://website.example.com/#examples',
+      utm: {
+        utm_source: 'test',
+      },
+    })
+    const body = await response.json()
+    const replay = await saveProjectExampleRequest({
+      idempotencyKey,
+      clientName: '  Example Request Client  ',
+      clientPhone: '8 029 111-22-33',
+      requestedExampleSlugs: ['ov'],
+      consentAccepted: true,
+      source: 'example_request',
+      referrer: 'https://website.example.com/#examples',
+      utm: {
+        utm_source: 'test',
+      },
+    })
+    const replayBody = await replay.json()
+    const saved = await prisma.projectExampleRequest.findUniqueOrThrow({
+      where: { publicToken: body.request.publicToken },
+    })
+    const pdf = await app.request(body.request.requestedExamples[0].urlPath)
+    const pdfBytes = new Uint8Array(await pdf.arrayBuffer())
+    const wrongSlug = await app.request(
+      `/api/public/project-example-requests/${body.request.publicToken}/examples/vk`,
+    )
+    const wrongToken = await app.request(
+      `/api/public/project-example-requests/${'x'.repeat(32)}/examples/ov`,
+    )
+    const adminList = await app.request('/api/admin/project-example-requests', {
+      headers: authHeaders(accessToken),
+    })
+    const adminBody = await adminList.json()
+
+    expect(response.status).toBe(201)
+    expect(replay.status).toBe(200)
+    expect(replayBody.request.publicToken).toBe(body.request.publicToken)
+    expect(body.request.clientPhone).toBe('+375291112233')
+    expect(body.request.requestedExamples).toHaveLength(1)
+    expect(body.request.requestedExamples[0]).toMatchObject({
+      slug: 'ov',
+      code: 'ОВ',
+      fileName: 'proekt-primer-ov.pdf',
+      urlPath: expect.stringMatching(
+        /^\/api\/public\/project-example-requests\/[A-Za-z0-9_-]{32,128}\/examples\/ov$/,
+      ),
+    })
+    expect(saved.clientName).toBe('Example Request Client')
+    expect(saved.clientPhone).toBe('+375291112233')
+    expect(saved.source).toBe('example_request')
+    expect(saved.consentVersion).toBe('pzk-project-example-request-consent-v1')
+    expect(saved.consentText).toBe(
+      'Согласен на обработку имени и телефона для выдачи примеров проектов и связи по проектированию.',
+    )
+    expect(saved.requestFingerprintHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(pdf.status).toBe(200)
+    expect(pdf.headers.get('cache-control')).toBe('private, max-age=0, no-store')
+    expect(pdf.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    expect(pdf.headers.get('content-type')).toContain('application/pdf')
+    expect(pdf.headers.get('content-disposition')).toContain('proekt-primer-ov.pdf')
+    expect(new TextDecoder().decode(pdfBytes.slice(0, 8))).toContain('%PDF-')
+    expect(wrongSlug.status).toBe(404)
+    expect(wrongToken.status).toBe(404)
+    expect(adminList.status).toBe(200)
+    expect(adminBody.summary.totalCount).toBe(1)
+    expect(adminBody.requests[0]).toMatchObject({
+      clientName: 'Example Request Client',
+      clientPhone: '+375291112233',
+      source: 'example_request',
+      requestedExampleSlugs: ['ov'],
+    })
+  })
+
+  test('snapshots public project example proof cards into generated proposals without direct PDF links', async () => {
     const accessToken = await loginAdmin('proposal-examples@example.com')
     await setExchangeRate(accessToken, '3.0000')
     const service = await createService(accessToken, {
@@ -1122,7 +1217,8 @@ maybeDescribe('engineering API integration', () => {
     expect(response.status).toBe(201)
     expect(proposalBeforeEdit.status).toBe(200)
     expect(htmlBeforeEdit).toContain('Approved OV project example')
-    expect(htmlBeforeEdit).toContain('https://cdn.example.com/project-examples/approved-ov.pdf')
+    expect(htmlBeforeEdit).not.toContain('https://cdn.example.com/project-examples/approved-ov.pdf')
+    expect(htmlBeforeEdit).toContain('Открыть раздел с примерами')
     expect(htmlBeforeEdit).not.toContain('Private draft example')
     expect(htmlBeforeEdit).not.toContain('proekt-primer-ov.pdf')
     expect(htmlAfterEdit).toBe(htmlBeforeEdit)
@@ -1530,6 +1626,17 @@ maybeDescribe('engineering API integration', () => {
 
   function saveCalculation(payload: Record<string, unknown>) {
     return saveCalculationWithApp(app, payload)
+  }
+
+  function saveProjectExampleRequest(payload: Record<string, unknown>) {
+    return app.request('/api/public/project-example-requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotencyKey: nextIdempotencyKey(),
+        ...payload,
+      }),
+    })
   }
 
   function saveCalculationWithApp(targetApp: typeof app, payload: Record<string, unknown>) {

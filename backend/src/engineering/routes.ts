@@ -9,10 +9,15 @@ import {
   exchangeRateSettingResponseSchema,
   projectExampleCreateRequestSchema,
   projectExampleListResponseSchema,
+  projectExampleRequestCreateRequestSchema,
+  projectExampleRequestListQuerySchema,
+  projectExampleRequestListResponseSchema,
+  projectExampleRequestSaveResponseSchema,
   projectExampleResponseSchema,
   projectExampleUpdateRequestSchema,
   publicCalculatorConfigResponseSchema,
   publicCalculationSaveResponseSchema,
+  publicProjectExampleListResponseSchema,
   serviceCreateRequestSchema,
   serviceListResponseSchema,
   serviceReorderRequestSchema,
@@ -49,6 +54,10 @@ const idParamsSchema = z.object({
 
 const publicTokenParamsSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
+})
+
+const publicProjectExampleParamsSchema = publicTokenParamsSchema.extend({
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
 })
 
 const publicServicesRoute = createRoute({
@@ -92,7 +101,7 @@ const publicProjectExamplesRoute = createRoute({
     200: {
       content: {
         'application/json': {
-          schema: projectExampleListResponseSchema,
+          schema: publicProjectExampleListResponseSchema,
         },
       },
       description: 'Public project examples',
@@ -140,6 +149,72 @@ const saveCalculationRoute = createRoute({
     429: {
       content: errorResponseContent,
       description: 'Too many public calculation submissions',
+    },
+  },
+})
+
+const saveProjectExampleRequestRoute = createRoute({
+  method: 'post',
+  path: '/public/project-example-requests',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: projectExampleRequestCreateRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: projectExampleRequestSaveResponseSchema,
+        },
+      },
+      description: 'Existing project example request returned for idempotent public submission',
+    },
+    201: {
+      content: {
+        'application/json': {
+          schema: projectExampleRequestSaveResponseSchema,
+        },
+      },
+      description: 'Saved public project example request and returned tokenized delivery links',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    409: {
+      content: errorResponseContent,
+      description: 'Requested project example unavailable',
+    },
+    429: {
+      content: errorResponseContent,
+      description: 'Too many public project example requests',
+    },
+  },
+})
+
+const publicProjectExamplePdfRoute = createRoute({
+  method: 'get',
+  path: '/public/project-example-requests/{token}/examples/{slug}',
+  request: {
+    params: publicProjectExampleParamsSchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/pdf': {
+          schema: z.string(),
+        },
+      },
+      description: 'Token-protected public project example PDF',
+    },
+    404: {
+      content: errorResponseContent,
+      description: 'Project example request or PDF not found',
     },
   },
 })
@@ -318,6 +393,30 @@ const adminCalculationsRoute = createRoute({
         },
       },
       description: 'Submitted calculations/leads with CRM filters and counts',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid filters',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+  },
+})
+
+const adminProjectExampleRequestsRoute = createRoute({
+  method: 'get',
+  path: '/admin/project-example-requests',
+  request: {
+    query: projectExampleRequestListQuerySchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: projectExampleRequestListResponseSchema,
+        },
+      },
+      description: 'Project example lead requests',
     },
     400: {
       content: errorResponseContent,
@@ -550,7 +649,7 @@ export function createEngineeringRoutes() {
 
   routes.openapi(publicProjectExamplesRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
-    return c.json({ examples: await engineering.listPublicProjectExamples() }, 200)
+    return c.json({ examples: await engineering.listPublicProjectExampleSummaries() }, 200)
   })
 
   routes.openapi(saveCalculationRoute, async (c) => {
@@ -571,6 +670,28 @@ export function createEngineeringRoutes() {
     return c.json({ calculation: result.publicCalculation }, result.created ? 201 : 200)
   })
 
+  routes.openapi(saveProjectExampleRequestRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const payload = c.req.valid('json')
+    const env = c.get('env')
+    const metadata = {
+      referrer: c.req.header('referer'),
+      ipAddress: publicSubmitIpAddress(c, env),
+      userAgent: c.req.header('user-agent'),
+    }
+
+    if (!(await engineering.isExactProjectExampleRequestIdempotencyReplay(payload, metadata))) {
+      enforcePublicSubmitRateLimit(
+        c,
+        env,
+        'Too many project example requests. Please try again later.',
+      )
+    }
+
+    const result = await engineering.saveProjectExampleRequest(payload, metadata)
+    return c.json({ request: result.publicRequest }, result.created ? 201 : 200)
+  })
+
   routes.openapi(publicProposalRoute, async (c) => {
     c.header('Cache-Control', 'private, max-age=0, no-store')
     c.header('X-Robots-Tag', 'noindex, nofollow')
@@ -588,6 +709,17 @@ export function createEngineeringRoutes() {
     c.header('Content-Disposition', `inline; filename="${proposal.offerNumber}.pdf"`)
     c.header('X-Proposal-Checksum-Sha256', proposal.checksumSha256)
     return c.body(proposal.bytes, 200)
+  })
+
+  routes.openapi(publicProjectExamplePdfRoute, async (c) => {
+    c.header('Cache-Control', 'private, max-age=0, no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
+    const engineering = c.get('engineeringDataService')
+    const params = c.req.valid('param')
+    const example = await engineering.getPublicProjectExamplePdf(params.token, params.slug)
+    c.header('Content-Type', 'application/pdf')
+    c.header('Content-Disposition', `inline; filename="${example.asset.fileName}"`)
+    return c.body(example.bytes, 200)
   })
 
   protectedRoutes.use('/admin/*', requireAdmin)
@@ -618,6 +750,11 @@ export function createEngineeringRoutes() {
   protectedRoutes.openapi(adminCalculationsRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
     return c.json(await engineering.listCalculations(c.req.valid('query')), 200)
+  })
+
+  protectedRoutes.openapi(adminProjectExampleRequestsRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    return c.json(await engineering.listProjectExampleRequests(c.req.valid('query')), 200)
   })
 
   protectedRoutes.openapi(getCalculationRoute, async (c) => {
@@ -678,7 +815,11 @@ function createPublicSubmitRateLimiter() {
   const maxSubmissionsPerWindow = 20
   const maxBuckets = 10_000
 
-  return (c: { req: { header: (name: string) => string | undefined } }, env: AppEnv) => {
+  return (
+    c: { req: { header: (name: string) => string | undefined } },
+    env: AppEnv,
+    message = 'Too many calculation submissions. Please try again later.',
+  ) => {
     const now = Date.now()
     cleanupRateLimitBuckets(buckets, now, windowMs, maxBuckets)
     const key = publicSubmitClientKey(c, env)
@@ -692,7 +833,7 @@ function createPublicSubmitRateLimiter() {
     buckets.set(key, bucket)
 
     if (bucket.count > maxSubmissionsPerWindow) {
-      throw new AppError(429, 'RATE_LIMITED', 'Too many calculation submissions. Please try again later.')
+      throw new AppError(429, 'RATE_LIMITED', message)
     }
   }
 }

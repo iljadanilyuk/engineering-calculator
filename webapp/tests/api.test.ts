@@ -350,6 +350,46 @@ test('ApiClient sends authenticated lead CRM requests', async () => {
       }, 200)
     }
 
+    if (url.pathname === '/api/admin/project-example-requests' && init?.method === 'GET') {
+      const token = 'e'.repeat(32)
+      return json({
+        requests: [{
+          id: '00000000-0000-7000-8000-000000000401',
+          publicToken: token,
+          idempotencyKey: 'example-request-key-001',
+          requestFingerprintHash: 'f'.repeat(64),
+          clientName: 'Example Client',
+          clientPhone: '+375291112233',
+          requestedExampleSlugs: ['ov'],
+          requestedExamples: [{
+            slug: 'ov',
+            code: 'ОВ',
+            title: 'Example OV PDF',
+            description: 'Example description',
+            fileName: 'proekt-primer-ov.pdf',
+            pageCount: 39,
+            fileSizeBytes: 5_607_314,
+            urlPath: `/api/public/project-example-requests/${token}/examples/ov`,
+          }],
+          source: 'example_request',
+          referrer: null,
+          utm: null,
+          consentAcceptedAt: '2026-07-09T00:00:00.000Z',
+          consentVersion: 'pzk-project-example-request-consent-v1',
+          consentText: 'Consent',
+          consentIpAddress: null,
+          consentUserAgent: null,
+          createdAt: '2026-07-09T00:00:00.000Z',
+          updatedAt: '2026-07-09T00:00:00.000Z',
+        }],
+        summary: {
+          totalCount: 1,
+          limit: 25,
+          offset: 0,
+        },
+      }, 200)
+    }
+
     if (url.pathname === `/api/admin/calculations/${lead.id}` && init?.method === 'GET') {
       return json({ calculation: lead }, 200)
     }
@@ -378,6 +418,10 @@ test('ApiClient sends authenticated lead CRM requests', async () => {
     limit: 25,
     offset: 0,
   })
+  await client.listProjectExampleRequests({
+    limit: 25,
+    offset: 0,
+  })
   await client.getCalculation(lead.id)
   await client.updateCalculation(lead.id, {
     status: 'contacted',
@@ -391,11 +435,12 @@ test('ApiClient sends authenticated lead CRM requests', async () => {
   expect(listUrl.searchParams.get('limit')).toBe('25')
   expect(calls.map((call) => [new URL(`http://localhost${call.path}`).pathname, call.method ?? 'GET'])).toEqual([
     ['/api/admin/calculations', 'GET'],
+    ['/api/admin/project-example-requests', 'GET'],
     [`/api/admin/calculations/${lead.id}`, 'GET'],
     [`/api/admin/calculations/${lead.id}`, 'PATCH'],
   ])
   expect(calls.every((call) => call.authorization === 'Bearer admin-access-token')).toBe(true)
-  expect(calls[2]?.body).toMatchObject({
+  expect(calls[3]?.body).toMatchObject({
     status: 'contacted',
     notes: 'Call tomorrow',
   })

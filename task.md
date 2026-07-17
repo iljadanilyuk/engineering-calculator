@@ -893,6 +893,7 @@ Completion notes:
 - Preserved immutable proposal behavior: existing proposal HTML/PDF artifacts are served from stored snapshots and do not change when ProjectExample records are edited later.
 - Minimal admin management UI was not added in PZK-011. The DB/API foundation from PZK-003 is used for proposal snapshots, while the public website examples remain deploy-time static assets in v1.
 - No Bella/ads tasks were changed; the Bella PDFs were used only as source assets for this engineering-calculator task.
+- PZK-017 update: the PZK-011 public-static delivery shape is no longer current. The same PDF assets now live under `backend/assets/project-examples` and are served only by tokenized backend routes after contact capture.
 
 Verification:
 
@@ -937,7 +938,7 @@ Completion notes:
 - Confirmed CI already exists at `.github/workflows/ci.yml`; it runs frozen install, typecheck, build, deploy/script tests, contract tests, webapp tests, backend tests, Playwright browser install, and webapp E2E on pull requests and pushes to `main`/`master`. No new CI workflow was needed for PZK-012.
 - Aligned frontend env examples: `webapp/.env.example` now documents quoted `VITE_API_URL`, and `website/.env.example` includes `PUBLIC_API_URL`, `PUBLIC_WEBAPP_URL`, and `PUBLIC_WEBSITE_URL`.
 - Reviewed root `.env.example` and `backend/.env.example`; required local database, auth/session, admin bootstrap, Spaces, PDF, Telegram, public URL, and contact placeholders are present and contain placeholders/blank values rather than real secrets.
-- Updated `.gitignore` for generated local temp/download/export/proposal-output folders and `*.tmp` files while intentionally not ignoring all PDFs, because committed public example PDFs under `website/public/project-examples` are real project assets.
+- Updated `.gitignore` for generated local temp/download/export/proposal-output folders and `*.tmp` files while intentionally not ignoring all PDFs, because project PDFs may be committed as real project assets. PZK-017 later moved example delivery assets from public website static files to private backend assets.
 - Aligned `AGENTS.md` and `CLAUDE.md` branch guidance with the current `main` handoff branch.
 
 Verification:
@@ -1186,7 +1187,7 @@ Verification:
 
 ### PZK-017 - Lead-Gated Project Examples And Preliminary Offer Delivery
 
-Status: Pending
+Status: Complete
 
 Goal:
 
@@ -1211,6 +1212,33 @@ Out of scope:
 - Full detailed questionnaire wizard.
 - Telegram group listening agent.
 - Contract generation.
+
+Completion notes:
+
+- Replaced anonymous public example PDF links on the Astro website with an inline lead-capture flow in the examples section.
+- Moved the two real example PDFs out of `website/public/project-examples` into private backend assets under `backend/assets/project-examples`.
+- Added `project_example_requests` persistence with idempotency, request fingerprint, normalized phone, consent snapshot, UTM/referrer, and source `example_request`.
+- Added public backend routes:
+  - `POST /api/public/project-example-requests` saves the contact and returns tokenized delivery links.
+  - `GET /api/public/project-example-requests/{token}/examples/{slug}` serves the selected PDF with `Cache-Control: private, max-age=0, no-store` and `X-Robots-Tag: noindex, nofollow`.
+- Added admin visibility on the leads page through a separate `Запросы примеров проектов` panel, showing source label `Запрос примера проекта`, contact, requested examples, and tokenized PDF links.
+- Preserved the existing preliminary КП/proposal flow: contact is still required, totals are recalculated server-side, old proposal artifacts remain immutable, and fallback proposal proof cards no longer embed direct static example PDF URLs.
+- Public project example metadata no longer exposes `fileUrl`, and newly generated КП proof cards no longer embed direct admin ProjectExample file URLs.
+- The PZK-011 public-static PDF delivery shape is superseded for production by this PZK-017 backend-token route.
+
+Verification:
+
+- `bun run test:contracts` passed: 19/19.
+- `bun run test:backend:unit` passed: 36/36.
+- `bun run typecheck` passed across backend, contracts, webapp, and website.
+- `bun run test:webapp` passed: 40/40.
+- `bun run test:backend:integration` passed: 34/34, including tokenized example PDF delivery and admin visibility.
+- `bun run build` passed; inherited Vite chunk-size warning and local TLS env warning remain.
+- `website/dist/project-examples` is absent after build, and no old `project-examples/*.pdf` paths are present in the built website.
+- `bun run --cwd backend prisma:validate` passed.
+- Browser verification passed on temporary local backend/website ports: examples form submission returned `200/201`, success state exposed a tokenized PDF link, the tokenized PDF fetch returned `200`, and the old static `/project-examples/proekt-primer-ov.pdf` path returned `404`.
+- Browser verification screenshot: `.scratch/pzk017-public-examples-success.png`.
+- `git diff --check` passed with only expected LF/CRLF working-copy warnings.
 
 ### PZK-018 - Commercial Offer Choice Page
 
@@ -1313,7 +1341,6 @@ These do not block the PZK-015 production launch, but should be resolved for pol
 
 - Exact brand name to show: `ИП Позняк`, another name, or a future studio/bureau name?
 - Exact contact phone/email/Telegram for production.
-- Current sample PDFs are public downloads. PZK-017 should replace anonymous direct downloads with lead-gated delivery and decide whether examples must move behind backend token-protected routes.
 - Configure production Telegram env when notifications or PZK-020 client delivery should be turned on.
 - Should PDF offers have an expiration period, for example 7 or 14 days?
 - Should leads be exportable to CSV in v1?
@@ -1481,3 +1508,7 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer McClintock: `gpt-5.5 xhigh`; flagged e2e accessible-name churn, preserving API enum values while localizing labels, forced horizontal scroll in leads/detail, auth error localization boundaries, unit/currency consistency, and typography-policy risk. Recommendations incorporated.
 - 2026-07-17 PZK-016 post-task review:
   - Reviewer Herschel: 9.6/10; confirmed Russian admin UI, API enum boundary preservation, removal of forced lead/detail horizontal-scroll patterns, mobile card layouts, PDF/status/notes/service CRUD coverage, and e2e/test updates. No required changes remained; PZK-016 gate cleared.
+- 2026-07-17 PZK-017 post-task review round 1:
+  - Reviewer Franklin: 9.0/10; no hard blockers, but flagged direct admin ProjectExample `fileUrl` leakage into new КП, public `/api/public/project-examples` exposing `fileUrl`, generic calculation-specific rate-limit wording for example requests, and unrelated design/prototype files needing to remain unstaged. Fixes incorporated before final review.
+- 2026-07-17 PZK-017 focused post-task review round 2:
+  - Reviewer Pauli: 9.6/10; confirmed public example summaries omit `fileUrl`, КП proof cards no longer emit direct PDF URLs, tokenized PDF delivery is behind saved contact requests, admin visibility is present, and unrelated landing V4/prototype files must remain outside the PZK-017 commit. No required blockers remained; PZK-017 gate cleared.

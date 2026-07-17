@@ -9,6 +9,8 @@ import {
   loginRequestSchema,
   logoutRequestSchema,
   meResponseSchema,
+  projectExampleRequestListQuerySchema,
+  projectExampleRequestListResponseSchema,
   refreshRequestSchema,
   refreshResponseSchema,
   serviceCreateRequestSchema,
@@ -25,6 +27,8 @@ import {
   type LoginRequest,
   type LogoutRequest,
   type MeResponse,
+  type ProjectExampleRequestListQueryInput,
+  type ProjectExampleRequestListResponse,
   type RefreshRequest,
   type RefreshResponse,
   type ServiceCreateRequest,
@@ -143,6 +147,19 @@ export class ApiClient {
     return this.request(`/api/admin/calculations${toQueryString(query)}`, calculationListResponseSchema, {
       auth: true,
     })
+  }
+
+  listProjectExampleRequests(
+    input: ProjectExampleRequestListQueryInput = {},
+  ): Promise<ProjectExampleRequestListResponse> {
+    const query = projectExampleRequestListQuerySchema.parse(input)
+    return this.request(
+      `/api/admin/project-example-requests${toQueryString(query)}`,
+      projectExampleRequestListResponseSchema,
+      {
+        auth: true,
+      },
+    )
   }
 
   getCalculation(id: string): Promise<{ calculation: CalculationRecord }> {
