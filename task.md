@@ -1184,14 +1184,137 @@ Verification:
 - `git diff --check` passed with only expected LF/CRLF working-copy warnings.
 - PZK-016 post-task review gate cleared with reviewer Herschel score 9.6/10 and no required blockers.
 
+### PZK-017 - Lead-Gated Project Examples And Preliminary Offer Delivery
+
+Status: Pending
+
+Goal:
+
+- Stop giving away project example PDFs anonymously from the public page.
+- Capture client contact details before delivering example projects or preliminary offer artifacts.
+- Preserve examples as trust/proof assets while turning them into a measurable lead source.
+
+Task brief:
+
+- `docs/design/public-conversion-questionnaire-roadmap-2026-07-17.md`
+
+Scope:
+
+- Replace direct public example download CTAs with a lead/contact capture flow.
+- Save example requests as leads or lead events with source such as `example_request`.
+- Deliver examples after contact capture by tokenized link, on-page success state, or a future Telegram delivery channel.
+- Decide during implementation whether static public PDF files are acceptable for v1 or whether examples must move behind backend token-protected routes.
+- Keep existing proposal/PDF immutability for old leads.
+
+Out of scope:
+
+- Full detailed questionnaire wizard.
+- Telegram group listening agent.
+- Contract generation.
+
+### PZK-018 - Commercial Offer Choice Page
+
+Status: Pending
+
+Goal:
+
+- Change the public `Получить коммерческое предложение` flow so a visitor who has configured the calculator chooses between a fast preliminary КП and a detailed questionnaire path.
+
+Task brief:
+
+- `docs/design/public-conversion-questionnaire-roadmap-2026-07-17.md`
+
+Required flow:
+
+- User selects area and project sections in the calculator.
+- User clicks `Получить коммерческое предложение`.
+- User lands on a choice page:
+  - `Пройти подробный опросник` for a more accurate technical assignment and offer;
+  - `Скачать предварительное КП` based on the calculator inputs.
+- The preliminary КП path must still require name, phone, and consent before the proposal/PDF link is delivered.
+- Backend must continue recalculating totals server-side and must not trust client-side totals.
+
+Out of scope:
+
+- Implementing the full questionnaire content.
+- Telegram-only delivery as the sole path.
+- Changing admin CRM beyond what is needed to display the new lead source/flow.
+
+### PZK-019 - Detailed Questionnaire And Technical Assignment Wizard
+
+Status: Pending
+
+Goal:
+
+- Turn `docs/design/Опросный лист.xlsx` into a step-by-step questionnaire that collects enough information to draft a technical assignment for engineering systems.
+
+Task brief:
+
+- `docs/design/public-conversion-questionnaire-roadmap-2026-07-17.md`
+
+Required behavior:
+
+- Questions are grouped by logical project sections.
+- User sees progress toward completion.
+- Questions provide answer options where possible.
+- Each question supports:
+  - selecting a predefined option;
+  - entering a custom answer;
+  - `Пока не знаю`;
+  - `Пропустить`.
+- Answers are saved incrementally and linked to a lead/project record.
+- Admin can review the collected answers as a draft technical assignment.
+- Filled/sample answers from the XLSX must not be exposed publicly if they contain real or client-like data.
+
+Out of scope:
+
+- Telegram group listening.
+- Fully automated final technical assignment approval without admin review.
+- Contract generation.
+
+### PZK-020 - Telegram Delivery And Project Context Bot
+
+Status: Pending
+
+Goal:
+
+- Use Telegram as an optional client delivery and project-context channel after contact capture, not as an anonymous replacement for the website lead flow.
+
+Task brief:
+
+- `docs/design/public-conversion-questionnaire-roadmap-2026-07-17.md`
+
+Phase 1:
+
+- Let a client receive example projects or preliminary КП through Telegram after contact capture.
+- Link the Telegram chat/user to the lead when possible.
+- Log successful/failed delivery in the admin-visible record.
+
+Phase 2:
+
+- Support a project Telegram group after the lead becomes a real project.
+- Store relevant messages/files/voice transcripts where consent and bot permissions allow it.
+- Produce a daily draft update for the technical assignment:
+  - newly discovered facts;
+  - open questions;
+  - contradictions;
+  - decisions requiring confirmation.
+- Admin must review and accept changes before they become part of the working ТЗ.
+
+Out of scope:
+
+- Making Telegram the only way to receive a document.
+- Automatically changing the final technical assignment without admin approval.
+- Exposing Telegram bot secrets in frontend env, browser responses, or logs.
+
 ## 11. Post-Launch Follow-Ups
 
 These do not block the PZK-015 production launch, but should be resolved for polish, operations, or v2 work:
 
 - Exact brand name to show: `ИП Позняк`, another name, or a future studio/bureau name?
 - Exact contact phone/email/Telegram for production.
-- Current sample PDFs are public downloads. Decide later whether future/larger sample PDFs should stay public, move to CDN/Spaces, or be gated by phone.
-- Configure production Telegram env when notifications should be turned on.
+- Current sample PDFs are public downloads. PZK-017 should replace anonymous direct downloads with lead-gated delivery and decide whether examples must move behind backend token-protected routes.
+- Configure production Telegram env when notifications or PZK-020 client delivery should be turned on.
 - Should PDF offers have an expiration period, for example 7 or 14 days?
 - Should leads be exportable to CSV in v1?
 - Exact BYN symbol/notation to use everywhere: confirm final glyph/mark before UI/PDF polish.
