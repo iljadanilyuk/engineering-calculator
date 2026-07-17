@@ -397,9 +397,18 @@ function serviceRublesMap(calculation: CalculationResult) {
     />
     <header class="header">
       <div class="shell header-inner">
-        <a class="brand" href="#top" aria-label="ИП Позняк">
-          <strong>ИП Позняк</strong>
-          <span>Проектирование инженерных систем</span>
+        <a class="brand" href="#top" aria-label="ИП Позняк — проектирование инженерных систем">
+          <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true">
+            <rect class="brand-mark-bg" x="2" y="2" width="40" height="40" rx="10" />
+            <path class="brand-mark-p" d="M13 31V13h18v18" />
+            <path class="brand-mark-flow" d="M13 25h8c3.5 0 4.8-2.5 4.8-6" />
+            <circle class="brand-mark-node" cx="13" cy="25" r="2.2" />
+            <circle class="brand-mark-node" cx="25.8" cy="19" r="2.2" />
+          </svg>
+          <span class="brand-copy">
+            <strong>ИП Позняк</strong>
+            <span>Инженерные системы</span>
+          </span>
         </a>
         <nav class="nav" aria-label="Навигация">
           <a href="#calculator">Калькулятор</a>
@@ -2043,25 +2052,84 @@ function serviceRublesMap(calculation: CalculationResult) {
   .header-inner {
     min-height: 74px;
     display: grid;
-    grid-template-columns: 220px 1fr auto;
+    grid-template-columns: 240px 1fr auto;
     align-items: center;
     gap: 28px;
   }
 
-  .brand strong,
-  .brand span {
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    width: fit-content;
+  }
+
+  .brand-mark {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    overflow: visible;
+  }
+
+  .brand-mark-bg {
+    fill: var(--navy);
+  }
+
+  .brand-mark-p,
+  .brand-mark-flow {
+    fill: none;
+    stroke: #ffffff;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .brand-mark-p {
+    stroke-width: 3.2;
+  }
+
+  .brand-mark-flow {
+    stroke: #85c2ff;
+    stroke-width: 2.4;
+  }
+
+  .brand-mark-node {
+    fill: #ffffff;
+    stroke: #85c2ff;
+    stroke-width: 1.6;
+  }
+
+  .brand-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .brand-copy strong,
+  .brand-copy > span {
     display: block;
   }
 
-  .brand strong {
-    font-size: 18px;
+  .brand-copy strong {
+    font-family: var(--font-heading);
+    font-size: 19px;
+    font-weight: 800;
     line-height: 1.1;
   }
 
-  .brand span {
-    margin-top: 4px;
+  .brand-copy > span {
     color: var(--muted);
     font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .brand:hover .brand-mark-bg {
+    fill: var(--blue);
+  }
+
+  .brand:hover .brand-copy strong {
+    color: var(--blue);
   }
 
   .nav {
@@ -3208,7 +3276,7 @@ function serviceRublesMap(calculation: CalculationResult) {
 
   @media (max-width: 1100px) {
     .header-inner {
-      grid-template-columns: 220px 1fr;
+      grid-template-columns: 240px 1fr;
     }
 
     .nav {
@@ -3267,14 +3335,20 @@ function serviceRublesMap(calculation: CalculationResult) {
       gap: 14px;
     }
 
-    .brand strong {
-      font-size: 14px;
+    .brand-copy strong {
+      font-size: 16px;
     }
 
-    .brand span {
-      max-width: 160px;
+    .brand-copy > span {
+      max-width: 150px;
       font-size: 10px;
       line-height: 1.25;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      flex-basis: 38px;
     }
 
     .top-cta {
