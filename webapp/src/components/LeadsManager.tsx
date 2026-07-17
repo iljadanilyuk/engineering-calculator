@@ -430,11 +430,12 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                 />
               </CardAction>
             </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <DetailItem label="Телефон" value={lead.clientPhone} />
-              <DetailItem label="Объект" value={lead.objectName ?? 'Не указан'} />
-              <DetailItem label="Площадь" value={formatArea(lead.areaSqm)} />
-              <DetailItem label="Сумма КП" value={`${formatByn(lead.totalBynRoundedRubles)} · ${formatUsd(lead.totalUsdCents)}`} />
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <DetailItem label="Телефон" value={lead.clientPhone} />
+                <DetailItem label="Источник" value={leadSourceLabel(lead.source)} />
+                <DetailItem label="Объект" value={lead.objectName ?? 'Не указан'} />
+                <DetailItem label="Площадь" value={formatArea(lead.areaSqm)} />
+                <DetailItem label="Сумма КП" value={`${formatByn(lead.totalBynRoundedRubles)} · ${formatUsd(lead.totalUsdCents)}`} />
             </CardContent>
           </Card>
 
@@ -577,11 +578,14 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 function LeadClientSummary({
   lead,
 }: {
-  lead: Pick<CalculationListItem, 'clientName' | 'objectName'>
+  lead: Pick<CalculationListItem, 'clientName' | 'objectName' | 'source'>
 }) {
   return (
     <div className="grid gap-1">
       <Typography variant="bodySmMedium">{lead.clientName}</Typography>
+      <Typography variant="caption" tone="muted">
+        Источник: {leadSourceLabel(lead.source)}
+      </Typography>
       {lead.objectName && (
         <Typography variant="caption" tone="muted">
           {lead.objectName}
@@ -898,7 +902,9 @@ function ProjectExampleRequestsPanel({
                         rel="noreferrer"
                         aria-label={`Открыть ${example.title} для ${request.clientName}`}
                       >
-                        {example.code} PDF
+                        <Typography as="span" variant="control">
+                          {example.code} PDF
+                        </Typography>
                       </a>
                     </Button>
                   ))}
@@ -1036,6 +1042,7 @@ function exchangeRateSourceLabel(source: string) {
 
 function leadSourceLabel(source: string | null) {
   if (source === 'example_request') return 'Запрос примера проекта'
+  if (source === 'public_offer_preliminary') return 'Предварительное КП'
   if (source === 'public_website') return 'Публичный сайт'
   if (source === 'public_calculator') return 'Калькулятор'
   return source ?? 'Не указан'

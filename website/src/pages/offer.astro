@@ -1,0 +1,1640 @@
+---
+import {
+  calculateEngineeringOffer,
+  type CalculationResult,
+} from '@poznyak-engineering-calculator/contracts'
+import {
+  areaLimits,
+  defaultAreaSqm,
+  defaultSelectedServiceIds,
+  exchangeRate,
+  fallbackServices,
+} from '../lib/public-calculator'
+
+const initialCalculation = calculateEngineeringOffer({
+  areaSqm: defaultAreaSqm,
+  selectedServiceIds: defaultSelectedServiceIds,
+  services: fallbackServices,
+  exchangeRate,
+})
+
+const offerData = {
+  defaultAreaSqm,
+  areaLimits,
+  exchangeRate,
+  fallbackServices,
+  selectedServiceIds: defaultSelectedServiceIds,
+  selectedProjectType: 'private',
+}
+
+const formatRubles = (value: number) => new Intl.NumberFormat('ru-RU').format(value)
+
+function allocateDisplayBynRubles(calculation: CalculationResult) {
+  const floorRows = calculation.lineItems.map((lineItem, index) => ({
+    serviceId: lineItem.serviceId,
+    rubles: Math.floor(lineItem.totalBynCents / 100),
+    remainder: lineItem.totalBynCents % 100,
+    index,
+  }))
+  const floorTotal = floorRows.reduce((total, row) => total + row.rubles, 0)
+  const remainingRubles = calculation.totals.totalBynRoundedRubles - floorTotal
+  const rowsByRemainder = [...floorRows].sort(
+    (first, second) => second.remainder - first.remainder || first.index - second.index,
+  )
+
+  for (const row of rowsByRemainder.slice(0, Math.max(0, remainingRubles))) {
+    row.rubles += 1
+  }
+
+  return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
+}
+
+const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
+---
+
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <meta
+      name="description"
+      content="Выбор сценария получения коммерческого предложения по инженерному проекту: подробный опросник или предварительное КП после контакта."
+    />
+    <title>Выбор коммерческого предложения - ИП Позняк</title>
+    <script
+      id="offer-data"
+      type="application/json"
+      is:inline
+      set:html={JSON.stringify(offerData)}
+    />
+  </head>
+  <body>
+    <header class="header">
+      <div class="shell header-inner">
+        <a class="brand" href="/" aria-label="ИП Позняк, на главную">
+          <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+            <rect class="brand-mark-bg" width="48" height="48" rx="14" />
+            <path class="brand-mark-p" d="M15 34V14h10.2c5.1 0 8.8 3.2 8.8 8s-3.7 8-8.8 8H20" />
+            <path class="brand-mark-flow" d="M15 34c7-1.2 10.8-4.2 12.7-8.2" />
+            <circle class="brand-mark-node" cx="13" cy="25" r="2.2" />
+            <circle class="brand-mark-node" cx="25.8" cy="19" r="2.2" />
+          </svg>
+          <span class="brand-copy">
+            <strong>ИП Позняк</strong>
+            <span>Инженерные системы</span>
+          </span>
+        </a>
+        <nav class="nav" aria-label="Навигация">
+          <a href="/#calculator">Изменить расчет</a>
+          <a href="/#documents">Примеры проектов</a>
+          <a href="/#faq">Вопросы</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="offer-hero" aria-labelledby="offer-title">
+        <div class="shell offer-layout">
+          <div class="offer-copy">
+            <div class="eyebrow">Следующий шаг после калькулятора</div>
+            <h1 id="offer-title">Выберите, как получить коммерческое предложение</h1>
+            <p>
+              Можно быстро скачать предварительное КП по выбранной площади и разделам или перейти к
+              подробному опроснику для более точного технического задания.
+            </p>
+            <p class="state-status" data-state-status role="status">
+              Загружаем актуальные тарифы для расчета.
+            </p>
+          </div>
+
+          <aside class="summary-card" aria-label="Выбранный расчет">
+            <div class="summary-head">
+              <span>Ваш расчет</span>
+              <a href="/#calculator">Изменить</a>
+            </div>
+            <dl class="summary-metrics">
+              <div>
+                <dt>Площадь</dt>
+                <dd><span data-summary-area>{defaultAreaSqm}</span> м²</dd>
+              </div>
+              <div>
+                <dt>Тип объекта</dt>
+                <dd data-summary-type>Частный дом</dd>
+              </div>
+            </dl>
+            <div class="summary-list" data-summary-list>
+              {
+                initialCalculation.lineItems.map((lineItem) => (
+                  <div class="summary-row">
+                    <span>{lineItem.serviceSnapshot.title}</span>
+                    <strong>
+                      {formatRubles(initialSummaryRubles.get(lineItem.serviceId) ?? 0)}
+                      <img
+                        class="currency-symbol"
+                        src="/landing-v4/byn-symbol.svg"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span class="sr-only"> BYN</span>
+                    </strong>
+                  </div>
+                ))
+              }
+            </div>
+            <div class="summary-total">
+              <span>Предварительно</span>
+              <strong data-total-byn>
+                {formatRubles(initialCalculation.totals.totalBynRoundedRubles)}
+                <img class="currency-symbol" src="/landing-v4/byn-symbol.svg" alt="" aria-hidden="true" />
+                <span class="sr-only"> BYN</span>
+              </strong>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="choice-title">
+        <div class="shell">
+          <div class="section-head">
+            <div class="section-kicker">Два сценария</div>
+            <h2 id="choice-title">Что удобнее сейчас?</h2>
+          </div>
+
+          <div class="choice-grid">
+            <article class="choice-card fast-card">
+              <div class="choice-code">01</div>
+              <h3>Скачать предварительное КП</h3>
+              <p>
+                Быстрый документ по данным калькулятора. Перед выдачей КП нужно оставить имя, телефон
+                и согласие на обработку данных.
+              </p>
+              <ul>
+                <li>использует выбранную площадь и разделы;</li>
+                <li>суммы пересчитываются на backend;</li>
+                <li>PDF открывается по защищенной ссылке.</li>
+              </ul>
+              <button class="button primary" type="button" data-preliminary-start disabled>
+                Скачать предварительное КП
+              </button>
+            </article>
+
+            <article class="choice-card detailed-card">
+              <div class="choice-code">02</div>
+              <h3>Пройти подробный опросник</h3>
+              <p>
+                Подходит, если нужно сразу собрать исходные данные: системы, оборудование, пожелания,
+                ограничения объекта и будущий черновик ТЗ.
+              </p>
+              <ul>
+                <li>точнее для сложных объектов;</li>
+                <li>полезно перед договором и проектированием;</li>
+                <li>занимает больше времени.</li>
+              </ul>
+              <button class="button secondary" type="button" data-questionnaire-start>
+                Выбрать подробный опросник
+              </button>
+              <p class="choice-note" data-questionnaire-note hidden>
+                Вы выбрали подробный сценарий. Полный wizard будет реализован следующим этапом; сейчас
+                расчет сохранен для будущего перехода, а preliminary КП можно получить в быстрой ветке.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="preliminary-section" id="preliminary" aria-labelledby="preliminary-title" hidden data-preliminary-panel>
+        <div class="shell preliminary-grid">
+          <div class="preliminary-copy">
+            <div class="section-kicker">Предварительное КП</div>
+            <h2 id="preliminary-title">Контакт перед скачиванием</h2>
+            <p>
+              После отправки backend заново рассчитает стоимость по опубликованным тарифам и вернет
+              ссылку на страницу КП и PDF.
+            </p>
+          </div>
+
+          <form class="lead-form" data-preliminary-form novalidate>
+            <label for="lead-name">
+              <span>Ваше имя</span>
+              <input
+                id="lead-name"
+                data-lead-name
+                type="text"
+                autocomplete="name"
+                placeholder="Ваше имя"
+                aria-describedby="lead-name-error"
+              />
+            </label>
+            <p class="field-error" id="lead-name-error" data-lead-name-error hidden>
+              Укажите имя: минимум 2 символа.
+            </p>
+
+            <label for="lead-phone">
+              <span>Телефон</span>
+              <input
+                id="lead-phone"
+                data-lead-phone
+                type="tel"
+                inputmode="tel"
+                autocomplete="tel"
+                placeholder="Телефон"
+                aria-describedby="lead-phone-error"
+              />
+            </label>
+            <p class="field-error" id="lead-phone-error" data-lead-phone-error hidden>
+              Укажите телефон в белорусском или международном формате.
+            </p>
+
+            <label for="lead-object">
+              <span>Кратко опишите объект и задачу</span>
+              <textarea
+                id="lead-object"
+                data-lead-object
+                rows="4"
+                maxlength="160"
+                placeholder="Например: дом 180 м², отопление и водоснабжение"
+              ></textarea>
+            </label>
+
+            <label class="consent-row" for="lead-consent">
+              <input
+                id="lead-consent"
+                data-lead-consent
+                type="checkbox"
+                aria-describedby="lead-consent-error privacy-note"
+              />
+              <span>Согласен на обработку персональных данных для подготовки КП и обратной связи.</span>
+            </label>
+            <p class="field-error" id="lead-consent-error" data-lead-consent-error hidden>
+              Нужно согласие перед отправкой контакта.
+            </p>
+
+            <button class="button primary" type="submit" data-submit-trigger>
+              Получить коммерческое предложение
+            </button>
+            <p data-lead-status role="status">
+              Заполните контакты: предварительное КП будет доступно после отправки формы.
+            </p>
+            <div class="lead-success" data-lead-success hidden></div>
+            <p class="privacy-note" id="privacy-note">
+              На сервер отправляются имя, телефон, согласие, площадь, выбранные разделы проекта,
+              краткое описание объекта при заполнении и технические метки источника заявки.
+            </p>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
+<script>
+  import {
+    calculateEngineeringOffer,
+    publicCalculatorConfigResponseSchema,
+    publicCalculationSaveResponseSchema,
+    type CalculationResult,
+    type EngineeringService,
+    type ServiceRecord,
+  } from '@poznyak-engineering-calculator/contracts'
+
+  type ProjectType = 'private' | 'commercial'
+  type CalculatorService = EngineeringService & { isPublic?: boolean }
+  type OfferData = {
+    defaultAreaSqm: string
+    areaLimits: {
+      min: number
+      max: number
+      step: number
+    }
+    exchangeRate: {
+      source: 'manual' | 'nbrb' | 'fallback'
+      usdToBynRate: string
+      asOf?: string
+    }
+    fallbackServices: CalculatorService[]
+    selectedServiceIds: string[]
+    selectedProjectType: ProjectType
+  }
+  type OfferChoiceState = {
+    areaSqm?: string
+    selectedServiceIds?: string[]
+    projectType?: ProjectType
+  }
+
+  const dataElement = document.querySelector<HTMLScriptElement>('#offer-data')
+  const data = JSON.parse(dataElement?.textContent ?? '{}') as OfferData
+  const stateStatus = document.querySelector<HTMLElement>('[data-state-status]')
+  const summaryArea = document.querySelector<HTMLElement>('[data-summary-area]')
+  const summaryType = document.querySelector<HTMLElement>('[data-summary-type]')
+  const summaryList = document.querySelector<HTMLElement>('[data-summary-list]')
+  const totalByn = document.querySelector<HTMLElement>('[data-total-byn]')
+  const preliminaryButton = document.querySelector<HTMLButtonElement>('[data-preliminary-start]')
+  const questionnaireButton = document.querySelector<HTMLButtonElement>('[data-questionnaire-start]')
+  const questionnaireNote = document.querySelector<HTMLElement>('[data-questionnaire-note]')
+  const preliminaryPanel = document.querySelector<HTMLElement>('[data-preliminary-panel]')
+  const leadForm = document.querySelector<HTMLFormElement>('[data-preliminary-form]')
+  const leadNameInput = document.querySelector<HTMLInputElement>('[data-lead-name]')
+  const leadPhoneInput = document.querySelector<HTMLInputElement>('[data-lead-phone]')
+  const leadObjectInput = document.querySelector<HTMLTextAreaElement>('[data-lead-object]')
+  const leadConsent = document.querySelector<HTMLInputElement>('[data-lead-consent]')
+  const leadNameError = document.querySelector<HTMLElement>('[data-lead-name-error]')
+  const leadPhoneError = document.querySelector<HTMLElement>('[data-lead-phone-error]')
+  const leadConsentError = document.querySelector<HTMLElement>('[data-lead-consent-error]')
+  const submitTrigger = document.querySelector<HTMLButtonElement>('[data-submit-trigger]')
+  const leadStatus = document.querySelector<HTMLElement>('[data-lead-status]')
+  const leadSuccess = document.querySelector<HTMLElement>('[data-lead-success]')
+
+  const numberFormatter = new Intl.NumberFormat('ru-RU')
+  const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
+  const projectTypeLabels: Record<ProjectType, string> = {
+    private: 'Частный дом',
+    commercial: 'Коммерческий объект',
+  }
+  const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
+  const offerStateStorageKey = 'pzk-offer-choice-state-v1'
+
+  const initialChoiceState = readOfferChoiceState()
+  const hasExplicitServiceSelection = Array.isArray(initialChoiceState.selectedServiceIds)
+  let services = normalizeServices(data.fallbackServices)
+  let selectedProjectType: ProjectType = initialChoiceState.projectType ?? data.selectedProjectType ?? 'private'
+  let selectedServiceIds = new Set(
+    hasExplicitServiceSelection
+      ? initialChoiceState.selectedServiceIds
+      : data.selectedServiceIds,
+  )
+  let areaSqm = parseArea(initialChoiceState.areaSqm ?? data.defaultAreaSqm).canonical
+  let currentCalculation: CalculationResult | null = null
+  let hasApiConfig = false
+  let isSubmitting = false
+  let submissionIdempotencyKey = createIdempotencyKey()
+
+  attachHandlers()
+  void loadPublicConfig()
+
+  function attachHandlers() {
+    preliminaryButton?.addEventListener('click', () => {
+      if (!currentCalculation || currentCalculation.lineItems.length === 0) {
+        setLeadStatus('Сначала вернитесь к калькулятору и выберите хотя бы один раздел проекта.', 'error')
+        return
+      }
+      if (!apiBaseUrl || !hasApiConfig) {
+        setLeadStatus('Скачивание КП требует подключенный backend API.', 'error')
+        return
+      }
+
+      persistOfferChoiceState('preliminary')
+      if (preliminaryPanel) preliminaryPanel.hidden = false
+      preliminaryPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      leadNameInput?.focus({ preventScroll: true })
+      setLeadStatus('Заполните контакты: preliminary КП будет готово после отправки формы.')
+    })
+
+    questionnaireButton?.addEventListener('click', () => {
+      persistOfferChoiceState('questionnaire')
+      questionnaireButton.setAttribute('aria-pressed', 'true')
+      questionnaireButton.textContent = 'Подробный опросник выбран'
+      if (questionnaireNote) questionnaireNote.hidden = false
+      questionnaireNote?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      setStateStatus('Выбран подробный сценарий. Полный опросник будет доступен в следующем этапе.')
+    })
+
+    leadNameInput?.addEventListener('input', () => {
+      validateLeadForm(false)
+      resetSubmissionState()
+    })
+
+    leadPhoneInput?.addEventListener('input', () => {
+      validateLeadForm(false)
+      resetSubmissionState()
+    })
+
+    leadObjectInput?.addEventListener('input', () => {
+      resetSubmissionState()
+    })
+
+    leadConsent?.addEventListener('change', () => {
+      validateLeadForm(false)
+      resetSubmissionState()
+    })
+
+    leadForm?.addEventListener('submit', (event) => {
+      event.preventDefault()
+      void submitLead()
+    })
+  }
+
+  async function loadPublicConfig() {
+    if (!apiBaseUrl) {
+      hasApiConfig = false
+      setStateStatus('Публичный API не подключен: показан сохраненный расчет, скачивание КП недоступно.', 'error')
+      setLeadStatus('Скачивание КП требует подключенный backend API.', 'error')
+      render()
+      return
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/calculator-config`, {
+        headers: { Accept: 'application/json' },
+      })
+
+      if (!response.ok) throw new Error(`Calculator config request failed: ${response.status}`)
+
+      const payload = publicCalculatorConfigResponseSchema.parse(await response.json())
+      const publicServices = normalizeServices(payload.services)
+      data.exchangeRate = payload.exchangeRate
+
+      if (publicServices.length === 0) {
+        services = []
+        selectedServiceIds = new Set()
+        hasApiConfig = false
+        setStateStatus('В API нет опубликованных услуг. Вернитесь к калькулятору позже.', 'error')
+        setLeadStatus('Скачивание КП временно недоступно: нет опубликованных услуг.', 'error')
+      } else {
+        services = publicServices
+        resolveSelectedServices()
+        hasApiConfig = true
+        setStateStatus('Выбор калькулятора сохранен. Актуальные тарифы загружены из backend.')
+        setLeadStatus('Заполните контакты: предварительное КП будет доступно после отправки формы.')
+      }
+    } catch {
+      hasApiConfig = false
+      setStateStatus('API недоступен: расчет показан для ориентира, скачивание КП сейчас нельзя выполнить.', 'error')
+      setLeadStatus('API недоступен: попробуйте получить КП позже.', 'error')
+    }
+
+    render()
+  }
+
+  function readOfferChoiceState(): OfferChoiceState {
+    const searchParams = new URLSearchParams(window.location.search)
+    const servicesFromQuery = (searchParams.get('services') ?? '')
+      .split(',')
+      .map((serviceId) => serviceId.trim())
+      .filter(Boolean)
+    const typeFromQuery = searchParams.get('type')
+    const hasServicesQuery = searchParams.has('services')
+    const queryState: OfferChoiceState = {
+      areaSqm: searchParams.get('area') ?? undefined,
+      selectedServiceIds: hasServicesQuery ? servicesFromQuery : undefined,
+      projectType: typeFromQuery === 'commercial' ? 'commercial' : typeFromQuery === 'private' ? 'private' : undefined,
+    }
+
+    if (queryState.areaSqm || queryState.selectedServiceIds || queryState.projectType) {
+      return queryState
+    }
+
+    try {
+      const rawState = sessionStorage.getItem(offerStateStorageKey)
+      if (!rawState) return {}
+      const parsed = JSON.parse(rawState) as OfferChoiceState
+      return {
+        areaSqm: typeof parsed.areaSqm === 'string' ? parsed.areaSqm : undefined,
+        selectedServiceIds: Array.isArray(parsed.selectedServiceIds)
+          ? parsed.selectedServiceIds.filter((serviceId) => typeof serviceId === 'string')
+          : undefined,
+        projectType: parsed.projectType === 'commercial' || parsed.projectType === 'private'
+          ? parsed.projectType
+          : undefined,
+      }
+    } catch {
+      return {}
+    }
+  }
+
+  function normalizeServices(source: Array<CalculatorService | ServiceRecord>): CalculatorService[] {
+    return source
+      .filter((service) => service.isActive && supportedPricingTypes.has(service.pricingType))
+      .map((service) => ({
+        id: service.id,
+        title: service.title,
+        description: service.description ?? null,
+        pricingType: service.pricingType,
+        priceUsdCents: service.priceUsdCents,
+        isActive: service.isActive,
+        sortOrder: service.sortOrder,
+        pricingRule: service.pricingRule ?? undefined,
+        formulaVersion: service.formulaVersion ?? undefined,
+        createdAt: service.createdAt,
+        updatedAt: service.updatedAt,
+        isPublic: 'isPublic' in service ? service.isPublic : true,
+      }))
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+  }
+
+  function resolveSelectedServices() {
+    const availableServiceIds = new Set(services.map((service) => service.id))
+    const validSelectedServiceIds = [...selectedServiceIds].filter((serviceId) =>
+      availableServiceIds.has(serviceId),
+    )
+    const shouldPreserveExplicitEmptySelection = hasExplicitServiceSelection && selectedServiceIds.size === 0
+    selectedServiceIds = new Set(
+      shouldPreserveExplicitEmptySelection
+        ? []
+        : validSelectedServiceIds.length > 0
+          ? validSelectedServiceIds
+          : defaultSelectedServiceIds(services),
+    )
+  }
+
+  function render() {
+    const parsedArea = parseArea(areaSqm)
+    areaSqm = parsedArea.canonical
+    const canCalculate = parsedArea.valid && services.length > 0
+
+    if (!canCalculate) {
+      currentCalculation = null
+      renderSummary(null)
+      updateSubmitState()
+      return
+    }
+
+    resolveSelectedServices()
+    currentCalculation = calculateEngineeringOffer({
+      areaSqm,
+      selectedServiceIds: [...selectedServiceIds],
+      services,
+      exchangeRate: data.exchangeRate,
+    })
+
+    renderSummary(currentCalculation)
+    updateSubmitState()
+  }
+
+  function renderSummary(calculation: CalculationResult | null) {
+    if (summaryArea) summaryArea.textContent = calculation ? compactArea(calculation.areaSqm) : compactArea(areaSqm)
+    if (summaryType) summaryType.textContent = projectTypeLabels[selectedProjectType]
+
+    if (!summaryList || !totalByn) return
+
+    if (!calculation || calculation.lineItems.length === 0) {
+      summaryList.innerHTML = `<div class="summary-row muted"><span>Разделы не выбраны</span><strong>0 ${currencyMarkup()}</strong></div>`
+      totalByn.innerHTML = `0 ${currencyMarkup()}`
+      return
+    }
+
+    const displayRubles = allocateDisplayBynRubles(calculation)
+    summaryList.innerHTML = calculation.lineItems
+      .map(
+        (lineItem) => `
+          <div class="summary-row">
+            <span>${escapeHtml(lineItem.serviceSnapshot.title)}</span>
+            <strong>${formatRubles(displayRubles.get(lineItem.serviceId) ?? 0)} ${currencyMarkup()}</strong>
+          </div>
+        `,
+      )
+      .join('')
+    totalByn.innerHTML = `${formatRubles(calculation.totals.totalBynRoundedRubles)} ${currencyMarkup()}`
+  }
+
+  async function submitLead() {
+    if (isSubmitting) return
+
+    const validation = validateLeadForm(true)
+    if (!validation.valid) {
+      setLeadStatus('Проверьте поля формы перед отправкой.', 'error')
+      return
+    }
+
+    if (!apiBaseUrl || !hasApiConfig || !currentCalculation) {
+      setLeadStatus('Скачивание КП недоступно: публичный API сейчас не подключен.', 'error')
+      return
+    }
+
+    isSubmitting = true
+    updateSubmitState()
+    setLeadStatus('Сохраняю контакт и пересчитываю КП на backend...', 'loading')
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/calculations`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          idempotencyKey: submissionIdempotencyKey,
+          clientName: validation.clientName,
+          clientPhone: validation.clientPhone,
+          objectName: leadObjectName(),
+          calculation: {
+            areaSqm: currentCalculation.areaSqm,
+            selectedServiceIds: currentCalculation.selectedServiceIds,
+          },
+          consentAccepted: true,
+          source: 'public_offer_preliminary',
+          referrer: document.referrer || undefined,
+          utm: readAttributionMetadata(),
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        applyServerValidationErrors(payload)
+        throw new Error(publicSubmitErrorMessage(response.status, payload))
+      }
+
+      const parsed = publicCalculationSaveResponseSchema.parse(payload)
+      showLeadSuccess(parsed.calculation, response.status === 200)
+    } catch (error) {
+      setLeadStatus(
+        error instanceof Error ? error.message : 'Не удалось подготовить КП. Попробуйте еще раз.',
+        'error',
+      )
+    } finally {
+      isSubmitting = false
+      updateSubmitState()
+    }
+  }
+
+  function validateLeadForm(showErrors: boolean) {
+    const clientName = leadNameInput?.value.trim() ?? ''
+    const clientPhone = leadPhoneInput?.value.trim() ?? ''
+    const phoneDigits = clientPhone.replace(/\D/g, '')
+    const nameValid = clientName.length >= 2 && clientName.length <= 120
+    const phoneValid =
+      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
+      phoneDigits.length >= 8 &&
+      phoneDigits.length <= 15 &&
+      !/^(\d)\1+$/.test(phoneDigits)
+    const consentValid = leadConsent?.checked === true
+
+    setFieldValidity(leadNameInput, leadNameError, nameValid, showErrors)
+    setFieldValidity(leadPhoneInput, leadPhoneError, phoneValid, showErrors)
+    setFieldValidity(leadConsent, leadConsentError, consentValid, showErrors)
+
+    return {
+      valid: nameValid && phoneValid && consentValid,
+      clientName,
+      clientPhone,
+    }
+  }
+
+  function setFieldValidity(
+    input: HTMLInputElement | null,
+    errorElement: HTMLElement | null,
+    isValid: boolean,
+    showError: boolean,
+  ) {
+    if (input) {
+      if (isValid) {
+        input.removeAttribute('aria-invalid')
+      } else {
+        input.setAttribute('aria-invalid', 'true')
+      }
+    }
+
+    if (errorElement) {
+      errorElement.hidden = isValid || !showError
+    }
+  }
+
+  function resetSubmissionState() {
+    submissionIdempotencyKey = createIdempotencyKey()
+    hideLeadSuccess()
+  }
+
+  function persistOfferChoiceState(selectedFlow: 'questionnaire' | 'preliminary') {
+    try {
+      sessionStorage.setItem(
+        offerStateStorageKey,
+        JSON.stringify({
+          areaSqm: currentCalculation?.areaSqm ?? areaSqm,
+          selectedServiceIds: currentCalculation?.selectedServiceIds ?? [...selectedServiceIds],
+          projectType: selectedProjectType,
+          selectedFlow,
+          savedAt: new Date().toISOString(),
+        }),
+      )
+    } catch {
+      // Losing session storage should not block either choice path.
+    }
+  }
+
+  function createIdempotencyKey() {
+    if ('randomUUID' in crypto) {
+      return crypto.randomUUID()
+    }
+
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`
+  }
+
+  function updateSubmitState() {
+    const unavailable =
+      isSubmitting ||
+      !apiBaseUrl ||
+      !hasApiConfig ||
+      currentCalculation === null ||
+      currentCalculation.lineItems.length === 0
+
+    if (preliminaryButton) {
+      preliminaryButton.disabled = unavailable
+    }
+
+    if (!submitTrigger) return
+    submitTrigger.disabled = unavailable
+    submitTrigger.textContent = isSubmitting ? 'Готовлю КП...' : 'Получить коммерческое предложение'
+  }
+
+  function showLeadSuccess(
+    calculation: {
+      publicToken: string
+      clientPhone: string
+      totalUsdCents: number
+      totalBynRoundedRubles: number
+      proposal:
+        | { status: 'ready'; offerNumber: string; urlPath: string; pdfUrlPath: string }
+        | { status: 'html_only'; offerNumber: string; urlPath: string }
+        | null
+    },
+    returnedExisting: boolean,
+  ) {
+    if (leadSuccess) {
+      const proposal = calculation.proposal
+      const proposalStateText =
+        proposal?.status === 'ready'
+          ? `КП ${escapeHtml(proposal.offerNumber)} и PDF готовы.`
+          : proposal?.status === 'html_only'
+            ? `КП ${escapeHtml(proposal.offerNumber)} доступно как страница.`
+            : 'КП сохранено.'
+      leadSuccess.hidden = false
+      leadSuccess.innerHTML = `
+        <strong>${returnedExisting ? 'Этот расчет уже сохранен' : 'Контакт сохранен'}</strong>
+        <span>Backend пересчитал итог: ${formatRubles(calculation.totalBynRoundedRubles)} ${currencyMarkup()}</span>
+        <span>Телефон сохранен как ${escapeHtml(calculation.clientPhone)}.</span>
+        <span>${proposalStateText}</span>
+        ${
+          proposal
+            ? `<div class="proposal-actions">
+                <a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.urlPath)}" target="_blank" rel="noopener">Открыть КП</a>
+                ${
+                  proposal.status === 'ready'
+                    ? `<a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.pdfUrlPath)}" target="_blank" rel="noopener">Скачать PDF</a>`
+                    : ''
+                }
+              </div>`
+            : ''
+        }
+      `
+    }
+
+    setLeadStatus(
+      returnedExisting
+        ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
+        : calculation.proposal?.status === 'ready'
+          ? 'Заявка принята. Коммерческое предложение и PDF готовы по ссылке.'
+          : 'Заявка принята. Коммерческое предложение сохранено по ссылке.',
+      'ready',
+    )
+  }
+
+  function hideLeadSuccess() {
+    if (!leadSuccess) return
+    leadSuccess.hidden = true
+    leadSuccess.innerHTML = ''
+  }
+
+  function applyServerValidationErrors(payload: unknown) {
+    if (!payload || typeof payload !== 'object' || !('error' in payload)) return
+    const details = (payload as { error?: { details?: unknown } }).error?.details
+    if (!Array.isArray(details)) return
+
+    const phoneIssue = details.find((issue) =>
+      Array.isArray((issue as { path?: unknown }).path)
+        ? ((issue as { path: unknown[] }).path ?? []).includes('clientPhone')
+        : false,
+    )
+
+    if (phoneIssue) {
+      setFieldValidity(leadPhoneInput, leadPhoneError, false, true)
+    }
+  }
+
+  function publicSubmitErrorMessage(status: number, payload: unknown) {
+    const serverMessage =
+      payload && typeof payload === 'object' && 'error' in payload
+        ? (payload as { error?: { message?: string } }).error?.message
+        : undefined
+
+    if (status === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
+    if (status === 409) return 'Тарифы изменились. Вернитесь к калькулятору и повторите расчет.'
+    if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
+    return serverMessage ?? 'Не удалось подготовить КП. Попробуйте еще раз.'
+  }
+
+  function readAttributionMetadata() {
+    const searchParams = new URLSearchParams(window.location.search)
+    const metadata: Record<string, string> = {}
+
+    searchParams.forEach((value, key) => {
+      if (!/^(utm_[a-z0-9_]+|gclid|yclid|fbclid)$/i.test(key)) return
+      const trimmedValue = value.trim()
+      if (!trimmedValue) return
+      metadata[key.slice(0, 64)] = trimmedValue.slice(0, 500)
+    })
+
+    return Object.keys(metadata).length > 0 ? metadata : undefined
+  }
+
+  function leadObjectName() {
+    const comment = leadObjectInput?.value.trim() ?? ''
+    const base = `Выбор КП: предварительное. Тип проекта: ${projectTypeLabels[selectedProjectType]}`
+    return comment ? `${base}. ${comment}`.slice(0, 160) : base
+  }
+
+  function defaultSelectedServiceIds(source: CalculatorService[]) {
+    return source.slice(0, Math.min(3, source.length)).map((service) => service.id)
+  }
+
+  function parseArea(value: string) {
+    const canonical = value.trim().replace(',', '.')
+
+    if (!/^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(canonical)) {
+      return { valid: false, canonical: data.defaultAreaSqm }
+    }
+
+    const numericValue = Number(canonical)
+    if (numericValue < data.areaLimits.min || numericValue > data.areaLimits.max) {
+      return { valid: false, canonical: data.defaultAreaSqm }
+    }
+
+    return { valid: true, canonical }
+  }
+
+  function setStateStatus(message: string, state?: 'error') {
+    if (!stateStatus) return
+    stateStatus.textContent = message
+    stateStatus.classList.toggle('is-error', state === 'error')
+  }
+
+  function setLeadStatus(message: string, state?: 'ready' | 'error' | 'loading') {
+    if (!leadStatus) return
+    leadStatus.textContent = message
+    leadStatus.classList.toggle('is-ready', state === 'ready')
+    leadStatus.classList.toggle('is-error', state === 'error')
+    leadStatus.classList.toggle('is-loading', state === 'loading')
+  }
+
+  function formatRubles(value: number) {
+    return numberFormatter.format(value)
+  }
+
+  function compactArea(value: string) {
+    return value.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+  }
+
+  function currencyMarkup() {
+    return '<img class="currency-symbol" src="/landing-v4/byn-symbol.svg" alt="" aria-hidden="true"><span class="sr-only"> BYN</span>'
+  }
+
+  function allocateDisplayBynRubles(calculation: CalculationResult) {
+    const floorRows = calculation.lineItems.map((lineItem, index) => ({
+      serviceId: lineItem.serviceId,
+      rubles: Math.floor(lineItem.totalBynCents / 100),
+      remainder: lineItem.totalBynCents % 100,
+      index,
+    }))
+    const floorTotal = floorRows.reduce((total, row) => total + row.rubles, 0)
+    const remainingRubles = calculation.totals.totalBynRoundedRubles - floorTotal
+    const rowsByRemainder = [...floorRows].sort(
+      (first, second) => second.remainder - first.remainder || first.index - second.index,
+    )
+
+    for (const row of rowsByRemainder.slice(0, Math.max(0, remainingRubles))) {
+      row.rubles += 1
+    }
+
+    return new Map(rowsByRemainder.map((row) => [row.serviceId, row.rubles]))
+  }
+
+  function escapeHtml(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+</script>
+
+<style is:global>
+  :root {
+    color-scheme: light;
+    --navy: #081a2f;
+    --navy-2: #0d2b4c;
+    --blue: #0b5fb5;
+    --blue-2: #084d93;
+    --blue-soft: #edf5fc;
+    --ink: #102033;
+    --body: #4d5b6a;
+    --muted: #7a8794;
+    --line: #dbe3eb;
+    --line-strong: #c5d0db;
+    --paper: #f6f8fb;
+    --surface: #ffffff;
+    --danger: #b6401a;
+    --success: #0b5f46;
+    --shadow: 0 18px 50px rgba(16, 32, 51, 0.1);
+    --shell: 1160px;
+    --font-body: Inter, "Segoe UI", Arial, sans-serif;
+    --font-heading: Nunito, Inter, "Segoe UI", Arial, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  dl,
+  dd {
+    margin: 0;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+    letter-spacing: 0;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .shell {
+    width: min(var(--shell), calc(100% - 48px));
+    margin-inline: auto;
+  }
+
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid rgba(219, 227, 235, 0.95);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(14px);
+  }
+
+  .header-inner {
+    min-height: 74px;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    width: fit-content;
+  }
+
+  .brand-mark {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    overflow: visible;
+  }
+
+  .brand-mark-bg {
+    fill: var(--navy);
+  }
+
+  .brand-mark-p,
+  .brand-mark-flow {
+    fill: none;
+    stroke: #ffffff;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .brand-mark-p {
+    stroke-width: 3.2;
+  }
+
+  .brand-mark-flow {
+    stroke: #85c2ff;
+    stroke-width: 2.4;
+  }
+
+  .brand-mark-node {
+    fill: #ffffff;
+    stroke: #85c2ff;
+    stroke-width: 1.6;
+  }
+
+  .brand-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .brand-copy strong,
+  .brand-copy > span {
+    display: block;
+  }
+
+  .brand-copy strong {
+    font-family: var(--font-heading);
+    font-size: 19px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .brand-copy > span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: flex-end;
+    gap: 28px;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .nav a:hover {
+    color: var(--blue);
+  }
+
+  .offer-hero {
+    border-bottom: 1px solid var(--line);
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.78)),
+      url("/landing-v4/project-preview-plan-08.jpg") center / cover;
+  }
+
+  .offer-layout {
+    min-height: 430px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 56px;
+    align-items: center;
+    padding: 56px 0;
+  }
+
+  .eyebrow,
+  .section-kicker {
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    max-width: 660px;
+    margin-top: 14px;
+    font-size: clamp(34px, 3.45vw, 52px);
+    line-height: 1.06;
+    font-weight: 800;
+  }
+
+  .offer-copy p {
+    max-width: 660px;
+    margin-top: 20px;
+    color: var(--body);
+    font-size: 18px;
+  }
+
+  .state-status {
+    width: fit-content;
+    border: 1px solid rgba(11, 95, 181, 0.18);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px 12px;
+    color: var(--blue) !important;
+    font-size: 13px !important;
+    font-weight: 750;
+  }
+
+  .state-status.is-error {
+    border-color: rgba(182, 64, 26, 0.22);
+    color: var(--danger) !important;
+  }
+
+  .summary-card {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 26px;
+    box-shadow: var(--shadow);
+  }
+
+  .summary-head,
+  .summary-row,
+  .summary-total,
+  .summary-metrics {
+    display: grid;
+    gap: 12px;
+  }
+
+  .summary-head {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .summary-head a {
+    border-bottom: 1px solid currentColor;
+  }
+
+  .summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 20px;
+  }
+
+  .summary-metrics div {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+    padding: 12px;
+  }
+
+  .summary-metrics dt {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .summary-metrics dd {
+    margin-top: 4px;
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-weight: 800;
+  }
+
+  .summary-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 22px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+  }
+
+  .summary-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .summary-row strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .summary-row.muted {
+    color: var(--muted);
+  }
+
+  .currency-symbol {
+    width: 0.72em;
+    height: 0.72em;
+    display: inline-block;
+    object-fit: contain;
+    vertical-align: -0.04em;
+  }
+
+  .summary-total {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    margin-top: 24px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f7f9fc, #eef3f8);
+    padding: 22px;
+  }
+
+  .summary-total span {
+    color: var(--body);
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .summary-total strong {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 800;
+  }
+
+  .section {
+    padding: 72px 0;
+  }
+
+  .section-head {
+    margin-bottom: 30px;
+  }
+
+  h2 {
+    margin-top: 8px;
+    font-size: clamp(30px, 3vw, 44px);
+    line-height: 1.1;
+    font-weight: 800;
+  }
+
+  .choice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+
+  .choice-card {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 18px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 28px;
+    box-shadow: var(--shadow);
+  }
+
+  .fast-card {
+    border-color: rgba(11, 95, 181, 0.28);
+  }
+
+  .choice-code {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--blue-soft);
+    color: var(--blue);
+    font-family: var(--font-heading);
+    font-weight: 800;
+  }
+
+  .choice-card h3 {
+    font-size: 25px;
+    line-height: 1.18;
+  }
+
+  .choice-card p {
+    color: var(--body);
+    font-size: 14px;
+  }
+
+  .choice-card ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .choice-card li {
+    position: relative;
+    padding-left: 18px;
+  }
+
+  .choice-card li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.65em;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--blue);
+  }
+
+  .choice-note {
+    border: 1px solid rgba(11, 95, 181, 0.18);
+    border-radius: 8px;
+    background: var(--blue-soft);
+    padding: 12px;
+    color: var(--ink) !important;
+    font-weight: 700;
+  }
+
+  .button {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 20px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    transition: 0.18s ease;
+  }
+
+  .button.primary {
+    background: var(--blue);
+    color: #ffffff;
+    box-shadow: 0 10px 26px rgba(11, 95, 181, 0.16);
+  }
+
+  .button.primary:hover {
+    background: var(--blue-2);
+  }
+
+  .button.secondary {
+    border-color: var(--line-strong);
+    background: #ffffff;
+    color: var(--ink);
+  }
+
+  .button.secondary:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  .preliminary-section {
+    background: var(--navy);
+    color: #ffffff;
+    padding: 72px 0;
+  }
+
+  .preliminary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 430px);
+    gap: 56px;
+    align-items: start;
+  }
+
+  .preliminary-copy p {
+    max-width: 560px;
+    margin-top: 14px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 16px;
+  }
+
+  .lead-form {
+    display: grid;
+    gap: 10px;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 20px;
+    color: var(--ink);
+    box-shadow: 0 24px 58px rgba(0, 0, 0, 0.22);
+  }
+
+  .lead-form label {
+    display: grid;
+    gap: 5px;
+  }
+
+  .lead-form label span,
+  .lead-form p {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .lead-form label span {
+    margin-bottom: 7px;
+    font-weight: 800;
+  }
+
+  .lead-form input:not([type="checkbox"]),
+  .lead-form textarea {
+    width: 100%;
+    min-height: 52px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0 16px;
+  }
+
+  .lead-form textarea {
+    min-height: 98px;
+    padding: 12px 14px;
+    resize: vertical;
+  }
+
+  .lead-form input[aria-invalid] {
+    border-color: var(--danger);
+    background: #fff8f4;
+  }
+
+  .field-error {
+    color: var(--danger) !important;
+    font-weight: 700 !important;
+  }
+
+  .consent-row {
+    display: grid !important;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 11px;
+    border: 1px solid rgba(219, 227, 235, 0.85);
+    border-radius: 10px;
+    background: #f8fbfe;
+    padding: 11px 12px;
+  }
+
+  .consent-row input {
+    width: 18px;
+    height: 18px;
+    margin: 1px 0 0;
+    accent-color: var(--blue);
+  }
+
+  .consent-row span {
+    margin: 0 !important;
+    color: var(--body) !important;
+    font-size: 12px !important;
+    line-height: 1.35;
+  }
+
+  .lead-form .button {
+    width: 100%;
+  }
+
+  .lead-form p.is-ready {
+    color: var(--success);
+  }
+
+  .lead-form p.is-error {
+    color: var(--danger);
+  }
+
+  .lead-form p.is-loading {
+    color: var(--blue);
+  }
+
+  .privacy-note {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+
+  .lead-success {
+    display: grid;
+    gap: 5px;
+    border: 1px solid rgba(11, 95, 181, 0.22);
+    border-radius: 10px;
+    background: #eef5fb;
+    padding: 12px;
+    color: var(--body);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .lead-success strong,
+  .lead-success span {
+    display: block;
+  }
+
+  .lead-success strong {
+    color: var(--navy);
+    font-size: 13px;
+  }
+
+  .proposal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .proposal-link {
+    width: fit-content;
+    border-bottom: 1px solid var(--blue);
+    color: var(--blue);
+    font-weight: 800;
+  }
+
+  .brand:focus-visible,
+  .nav a:focus-visible,
+  .button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid rgba(11, 95, 181, 0.35);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 900px) {
+    .nav {
+      display: none;
+    }
+
+    .offer-layout,
+    .choice-grid,
+    .preliminary-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .shell {
+      width: min(100% - 28px, var(--shell));
+    }
+
+    .header-inner {
+      min-height: 66px;
+      grid-template-columns: 1fr;
+    }
+
+    .brand-copy strong {
+      font-size: 16px;
+    }
+
+    .offer-layout,
+    .section,
+    .preliminary-section {
+      padding: 42px 0;
+    }
+
+    h1 {
+      font-size: clamp(28px, 8vw, 36px);
+    }
+
+    .offer-copy p {
+      font-size: 16px;
+    }
+
+    .summary-card,
+    .choice-card {
+      padding: 18px;
+    }
+
+    .summary-metrics,
+    .summary-total {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

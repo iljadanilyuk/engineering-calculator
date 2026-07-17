@@ -3,88 +3,16 @@ import {
   calculateEngineeringOffer,
   publicProjectExampleAssets,
   type CalculationResult,
-  type EngineeringService,
 } from '@poznyak-engineering-calculator/contracts'
+import {
+  areaLimits,
+  defaultAreaSqm,
+  defaultSelectedServiceIds,
+  exchangeRate,
+  fallbackServices,
+} from '../lib/public-calculator'
 
-const defaultAreaSqm = '180'
-const areaLimits = {
-  min: 50,
-  max: 500,
-  step: 5,
-}
-const exchangeRate = {
-  source: 'fallback' as const,
-  usdToBynRate: '2.8668',
-  asOf: '2026-07-08T00:00:00.000Z',
-}
-
-const fallbackServices = [
-  {
-    id: 'boiler-room-3d',
-    title: 'Проект котельной + 3D',
-    description: 'План котельной, обвязка, подбор оборудования',
-    pricingType: 'fixed',
-    priceUsdCents: 20_000,
-    isActive: true,
-    sortOrder: 10,
-  },
-  {
-    id: 'radiator-heating',
-    title: 'Радиаторное отопление',
-    description: 'Схемы, подбор приборов, гидравлика',
-    pricingType: 'per_sqm',
-    priceUsdCents: 50,
-    isActive: true,
-    sortOrder: 20,
-  },
-  {
-    id: 'warm-floor',
-    title: 'Теплые полы',
-    description: 'Схемы укладки, узлы и расчеты',
-    pricingType: 'per_sqm',
-    priceUsdCents: 60,
-    isActive: true,
-    sortOrder: 30,
-  },
-  {
-    id: 'water-supply',
-    title: 'Водопровод',
-    description: 'Холодное и горячее водоснабжение',
-    pricingType: 'per_sqm',
-    priceUsdCents: 50,
-    isActive: true,
-    sortOrder: 40,
-  },
-  {
-    id: 'sewerage',
-    title: 'Канализация',
-    description: 'Внутренняя бытовая канализация',
-    pricingType: 'per_sqm',
-    priceUsdCents: 60,
-    isActive: true,
-    sortOrder: 50,
-  },
-  {
-    id: 'ventilation',
-    title: 'Вентиляция',
-    description: 'Приточно-вытяжная вентиляция',
-    pricingType: 'fixed',
-    priceUsdCents: 25_000,
-    isActive: true,
-    sortOrder: 60,
-  },
-  {
-    id: 'conditioning',
-    title: 'Кондиционирование',
-    description: 'Система кондиционирования',
-    pricingType: 'fixed',
-    priceUsdCents: 25_000,
-    isActive: true,
-    sortOrder: 70,
-  },
-] satisfies EngineeringService[]
-
-const selectedServiceIds = fallbackServices.slice(0, 3).map((service) => service.id)
+const selectedServiceIds = defaultSelectedServiceIds
 const initialCalculation = calculateEngineeringOffer({
   areaSqm: defaultAreaSqm,
   selectedServiceIds,
@@ -417,7 +345,7 @@ function serviceRublesMap(calculation: CalculationResult) {
           <a href="#process">Как работаем</a>
           <a href="#faq">Вопросы и ответы</a>
         </nav>
-        <a class="top-cta" href="#lead">Получить КП</a>
+        <a class="top-cta" href="/offer/" data-offer-link>Получить КП</a>
       </div>
     </header>
 
@@ -650,7 +578,7 @@ function serviceRublesMap(calculation: CalculationResult) {
                   <span class="sr-only"> BYN</span>
                 </div>
               </div>
-              <a class="button primary result-cta" href="#lead">
+              <a class="button primary result-cta" href="/offer/" data-offer-link>
                 Получить коммерческое предложение
               </a>
               <div class="result-note">Ответим в течение рабочего дня.</div>
@@ -882,7 +810,7 @@ function serviceRublesMap(calculation: CalculationResult) {
             <div class="cta-copy">
               <h2 id="lead-title">Готовы начать проект?</h2>
               <p>
-                Оставьте заявку — подготовим коммерческое предложение по вашему объекту.
+                Выберите быстрый preliminary PDF или подробный сценарий для будущего технического задания.
               </p>
               <div class="cta-facts">
                 <div class="cta-fact">
@@ -900,69 +828,22 @@ function serviceRublesMap(calculation: CalculationResult) {
               </div>
             </div>
 
-            <form class="lead-form" id="lead-shell" data-lead-form novalidate>
-              <label for="lead-name">
-                <span>Ваше имя</span>
-                <input
-                  id="lead-name"
-                  data-lead-name
-                  type="text"
-                  autocomplete="name"
-                  placeholder="Ваше имя"
-                  aria-describedby="lead-name-error"
-                />
-              </label>
-              <p class="field-error" id="lead-name-error" data-lead-name-error hidden>
-                Укажите имя: минимум 2 символа.
+            <div class="lead-form lead-choice-card" id="lead-shell">
+              <strong>Коммерческое предложение</strong>
+              <p>
+                Сначала откроется страница выбора. Preliminary КП можно скачать только после имени,
+                телефона и согласия; подробный опросник остается отдельным следующим шагом.
               </p>
-              <label for="lead-phone">
-                <span>Телефон</span>
-                <input
-                  id="lead-phone"
-                  data-lead-phone
-                  type="tel"
-                  inputmode="tel"
-                  autocomplete="tel"
-                  placeholder="Телефон"
-                  aria-describedby="lead-phone-error"
-                />
-              </label>
-              <p class="field-error" id="lead-phone-error" data-lead-phone-error hidden>
-                Укажите телефон в белорусском или международном формате.
+              <div class="lead-choice-actions">
+                <a class="button primary" href="/offer/" data-offer-link>
+                  Выбрать сценарий КП
+                </a>
+                <a class="proposal-link" href="#calculator">Изменить расчет</a>
+              </div>
+              <p class="privacy-note">
+                На странице выбора backend примет только исходные параметры расчета и пересчитает итог сам.
               </p>
-              <label for="lead-object">
-                <span>Кратко опишите объект и задачу</span>
-                <textarea
-                  id="lead-object"
-                  data-lead-object
-                  rows="4"
-                  maxlength="160"
-                  placeholder="Кратко опишите объект и задачу"
-                ></textarea>
-              </label>
-              <label class="consent-row" for="lead-consent">
-                <input
-                  id="lead-consent"
-                  data-lead-consent
-                  type="checkbox"
-                  aria-describedby="lead-consent-error privacy-note"
-                />
-                <span>Согласен на обработку персональных данных</span>
-              </label>
-              <p class="field-error" id="lead-consent-error" data-lead-consent-error hidden>
-                Подтвердите согласие перед отправкой.
-              </p>
-              <button class="button primary" type="submit" data-lead-shell-trigger>
-                Получить коммерческое предложение
-              </button>
-              <p class="privacy-note" id="privacy-note">
-                Данные используются только для связи по расчету и подготовки предложения.
-              </p>
-              <p data-lead-shell-status role="status">
-                Заполните контакты: после отправки откроется ссылка на коммерческое предложение и PDF.
-              </p>
-              <div class="lead-success" data-lead-success hidden></div>
-            </form>
+            </div>
 
             <div class="contacts">
               <h3>Контакты</h3>
@@ -1017,7 +898,6 @@ function serviceRublesMap(calculation: CalculationResult) {
   import {
     calculateEngineeringOffer,
     publicCalculatorConfigResponseSchema,
-    publicCalculationSaveResponseSchema,
     projectExampleRequestSaveResponseSchema,
     type CalculationResult,
     type EngineeringService,
@@ -1058,17 +938,7 @@ function serviceRublesMap(calculation: CalculationResult) {
   const projectTypeButtons = [
     ...document.querySelectorAll<HTMLButtonElement>('[data-project-type]'),
   ]
-  const leadForm = document.querySelector<HTMLFormElement>('[data-lead-form]')
-  const leadNameInput = document.querySelector<HTMLInputElement>('[data-lead-name]')
-  const leadPhoneInput = document.querySelector<HTMLInputElement>('[data-lead-phone]')
-  const leadObjectInput = document.querySelector<HTMLTextAreaElement>('[data-lead-object]')
-  const leadConsent = document.querySelector<HTMLInputElement>('[data-lead-consent]')
-  const leadNameError = document.querySelector<HTMLElement>('[data-lead-name-error]')
-  const leadPhoneError = document.querySelector<HTMLElement>('[data-lead-phone-error]')
-  const leadConsentError = document.querySelector<HTMLElement>('[data-lead-consent-error]')
-  const leadTrigger = document.querySelector<HTMLButtonElement>('[data-lead-shell-trigger]')
-  const leadStatus = document.querySelector<HTMLElement>('[data-lead-shell-status]')
-  const leadSuccess = document.querySelector<HTMLElement>('[data-lead-success]')
+  const offerLinks = [...document.querySelectorAll<HTMLAnchorElement>('[data-offer-link]')]
   const exampleForm = document.querySelector<HTMLFormElement>('[data-example-form]')
   const exampleNameInput = document.querySelector<HTMLInputElement>('[data-example-name]')
   const examplePhoneInput = document.querySelector<HTMLInputElement>('[data-example-phone]')
@@ -1085,21 +955,15 @@ function serviceRublesMap(calculation: CalculationResult) {
   const numberFormatter = new Intl.NumberFormat('ru-RU')
   const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
   const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
-  const projectTypeLabels: Record<ProjectType, string> = {
-    private: 'Частный дом',
-    commercial: 'Коммерческий объект',
-  }
+  const offerStateStorageKey = 'pzk-offer-choice-state-v1'
 
   let services = normalizeServices(data.fallbackServices)
   let selectedServiceIds = new Set(data.selectedServiceIds)
   let selectedProjectType: ProjectType = data.selectedProjectType ?? 'private'
   let currentCalculation: CalculationResult | null = null
-  let currentCalculationSignature = ''
-  let hasApiConfig = false
-  let isSubmitting = false
   let isExampleSubmitting = false
-  let submissionIdempotencyKey = createIdempotencyKey()
   let exampleRequestIdempotencyKey = createIdempotencyKey()
+  let hasUserChangedServices = false
 
   render()
   attachHandlers()
@@ -1129,32 +993,14 @@ function serviceRublesMap(calculation: CalculationResult) {
         if (nextType !== 'private' && nextType !== 'commercial') return
         selectedProjectType = nextType
         updateProjectTypeButtons()
-        resetLeadSubmissionState()
+        updateOfferLink()
       })
     })
 
-    leadNameInput?.addEventListener('input', () => {
-      validateLeadForm(false)
-      resetLeadSubmissionState()
-    })
-
-    leadPhoneInput?.addEventListener('input', () => {
-      validateLeadForm(false)
-      resetLeadSubmissionState()
-    })
-
-    leadObjectInput?.addEventListener('input', () => {
-      resetLeadSubmissionState()
-    })
-
-    leadConsent?.addEventListener('change', () => {
-      validateLeadForm(false)
-      resetLeadSubmissionState()
-    })
-
-    leadForm?.addEventListener('submit', (event) => {
-      event.preventDefault()
-      void submitLead()
+    offerLinks.forEach((offerLink) => {
+      offerLink.addEventListener('click', () => {
+        persistOfferChoiceState()
+      })
     })
 
     document.querySelectorAll<HTMLButtonElement>('[data-example-select]').forEach((button) => {
@@ -1210,9 +1056,8 @@ function serviceRublesMap(calculation: CalculationResult) {
   async function loadPublicConfig() {
     if (!apiBaseUrl) {
       setSourceMessage('Базовые тарифы для предварительного расчета.')
-      setLeadStatus('Сохранение заявки требует подключенный backend API.')
       setExampleStatus('Выдача PDF-примеров требует подключенный backend API.')
-      updateSubmitState()
+      updateOfferLink()
       updateExampleSubmitState()
       return
     }
@@ -1231,23 +1076,18 @@ function serviceRublesMap(calculation: CalculationResult) {
       if (publicServices.length === 0) {
         services = []
         selectedServiceIds = new Set()
-        hasApiConfig = false
         setSourceMessage('Нет опубликованных услуг в API.')
       } else {
         services = publicServices
-        selectedServiceIds = new Set(defaultSelectedServiceIds(publicServices))
-        hasApiConfig = true
+        reconcileSelectedServices(!hasUserChangedServices)
         setSourceMessage('Тарифы загружены из админ-панели.')
-        setLeadStatus('Заполните контакты: заявка сохранится, КП будет подготовлено по расчету.')
       }
 
       render()
     } catch (error) {
       services = normalizeServices(data.fallbackServices)
-      selectedServiceIds = new Set(data.selectedServiceIds)
-      hasApiConfig = false
+      reconcileSelectedServices(!hasUserChangedServices)
       setSourceMessage('API недоступен, показаны базовые тарифы.')
-      setLeadStatus('API недоступен: расчет можно посмотреть, но заявку сейчас нельзя сохранить.')
       if (error instanceof Error && error.message.includes('failed: 409')) {
         setExampleStatus('Калькулятор ждет настройку тарифа, но PDF-примеры можно запросить после контакта.')
       } else {
@@ -1296,7 +1136,7 @@ function serviceRublesMap(calculation: CalculationResult) {
       renderTotals(null)
       renderSummary(null)
       if (serviceEmpty) serviceEmpty.hidden = services.length > 0
-      updateSubmitState()
+      updateOfferLink()
       return
     }
 
@@ -1312,7 +1152,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     renderTotals(calculation)
     renderSummary(calculation)
     if (serviceEmpty) serviceEmpty.hidden = true
-    updateSubmitState()
+    updateOfferLink()
   }
 
   function renderServices(
@@ -1357,6 +1197,7 @@ function serviceRublesMap(calculation: CalculationResult) {
         } else {
           selectedServiceIds.add(serviceId)
         }
+        hasUserChangedServices = true
         render(serviceId)
       })
     })
@@ -1404,75 +1245,9 @@ function serviceRublesMap(calculation: CalculationResult) {
   }
 
   function setCurrentCalculation(calculation: CalculationResult | null) {
-    const signature = calculation ? calculationSignature(calculation) : ''
     currentCalculation = calculation
 
-    if (signature !== currentCalculationSignature) {
-      currentCalculationSignature = signature
-      submissionIdempotencyKey = createIdempotencyKey()
-      hideLeadSuccess()
-    }
-  }
-
-  async function submitLead() {
-    if (isSubmitting) return
-
-    const validation = validateLeadForm(true)
-
-    if (!validation.valid) {
-      setLeadStatus('Проверьте поля формы перед отправкой.', 'error')
-      return
-    }
-
-    if (!apiBaseUrl || !hasApiConfig || !currentCalculation) {
-      setLeadStatus('Сохранение недоступно: публичный API сейчас не подключен.', 'error')
-      return
-    }
-
-    isSubmitting = true
-    updateSubmitState()
-    setLeadStatus('Сохраняю расчет и контакты...', 'loading')
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/public/calculations`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          idempotencyKey: submissionIdempotencyKey,
-          clientName: validation.clientName,
-          clientPhone: validation.clientPhone,
-          objectName: leadObjectName(),
-          calculation: {
-            areaSqm: currentCalculation.areaSqm,
-            selectedServiceIds: [...selectedServiceIds],
-          },
-          consentAccepted: true,
-          source: 'public_website',
-          referrer: document.referrer || undefined,
-          utm: readAttributionMetadata(),
-        }),
-      })
-      const payload = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        applyServerValidationErrors(payload)
-        throw new Error(publicSubmitErrorMessage(response.status, payload))
-      }
-
-      const parsed = publicCalculationSaveResponseSchema.parse(payload)
-      showLeadSuccess(parsed.calculation, response.status === 200)
-    } catch (error) {
-      setLeadStatus(
-        error instanceof Error ? error.message : 'Не удалось сохранить заявку. Попробуйте еще раз.',
-        'error',
-      )
-    } finally {
-      isSubmitting = false
-      updateSubmitState()
-    }
+    updateOfferLink()
   }
 
   async function submitExampleRequest() {
@@ -1532,29 +1307,6 @@ function serviceRublesMap(calculation: CalculationResult) {
     }
   }
 
-  function validateLeadForm(showErrors: boolean) {
-    const clientName = leadNameInput?.value.trim() ?? ''
-    const clientPhone = leadPhoneInput?.value.trim() ?? ''
-    const phoneDigits = clientPhone.replace(/\D/g, '')
-    const nameValid = clientName.length >= 2 && clientName.length <= 120
-    const phoneValid =
-      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
-      phoneDigits.length >= 8 &&
-      phoneDigits.length <= 15 &&
-      !/^(\d)\1+$/.test(phoneDigits)
-    const consentValid = leadConsent?.checked === true
-
-    setFieldValidity(leadNameInput, leadNameError, nameValid, showErrors)
-    setFieldValidity(leadPhoneInput, leadPhoneError, phoneValid, showErrors)
-    setFieldValidity(leadConsent, leadConsentError, consentValid, showErrors)
-
-    return {
-      valid: nameValid && phoneValid && consentValid,
-      clientName,
-      clientPhone,
-    }
-  }
-
   function validateExampleForm(showErrors: boolean) {
     const clientName = exampleNameInput?.value.trim() ?? ''
     const clientPhone = examplePhoneInput?.value.trim() ?? ''
@@ -1603,15 +1355,6 @@ function serviceRublesMap(calculation: CalculationResult) {
     }
   }
 
-  function updateSubmitState() {
-    if (!leadTrigger) return
-
-    const unavailable =
-      isSubmitting || !apiBaseUrl || !hasApiConfig || currentCalculation === null || currentCalculation.lineItems.length === 0
-    leadTrigger.disabled = unavailable
-    leadTrigger.textContent = isSubmitting ? 'Сохраняю...' : 'Получить коммерческое предложение'
-  }
-
   function updateExampleSubmitState() {
     if (!exampleTrigger) return
 
@@ -1629,58 +1372,6 @@ function serviceRublesMap(calculation: CalculationResult) {
     exampleForm?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     exampleNameInput?.focus({ preventScroll: true })
     setExampleStatus('Оставьте контакт: выбранный PDF откроется здесь по защищенной ссылке.')
-  }
-
-  function showLeadSuccess(
-    calculation: {
-      publicToken: string
-      clientPhone: string
-      totalUsdCents: number
-      totalBynRoundedRubles: number
-      proposal:
-        | { status: 'ready'; offerNumber: string; urlPath: string; pdfUrlPath: string }
-        | { status: 'html_only'; offerNumber: string; urlPath: string }
-        | null
-    },
-    returnedExisting: boolean,
-  ) {
-    if (leadSuccess) {
-      const proposal = calculation.proposal
-      const proposalStateText =
-        proposal?.status === 'ready'
-          ? `КП ${escapeHtml(proposal.offerNumber)} и PDF готовы.`
-          : proposal?.status === 'html_only'
-            ? `КП ${escapeHtml(proposal.offerNumber)} доступно как страница.`
-            : 'КП сохранено.'
-      leadSuccess.hidden = false
-      leadSuccess.innerHTML = `
-        <strong>${returnedExisting ? 'Этот расчет уже сохранен' : 'Заявка сохранена'}</strong>
-        <span>Итог: ${formatRubles(calculation.totalBynRoundedRubles)} ${currencyMarkup()}</span>
-        <span>Телефон сохранен как ${escapeHtml(calculation.clientPhone)}.</span>
-        <span>${proposalStateText}</span>
-        ${
-          proposal
-            ? `<div class="proposal-actions">
-                <a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.urlPath)}" target="_blank" rel="noopener">Открыть КП</a>
-                ${
-                  proposal.status === 'ready'
-                    ? `<a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.pdfUrlPath)}" target="_blank" rel="noopener">Скачать PDF</a>`
-                    : ''
-                }
-              </div>`
-            : ''
-        }
-      `
-    }
-
-    setLeadStatus(
-      returnedExisting
-        ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
-        : calculation.proposal?.status === 'ready'
-          ? 'Заявка принята. Коммерческое предложение и PDF готовы по ссылке.'
-          : 'Заявка принята. Коммерческое предложение сохранено по ссылке.',
-      'ready',
-    )
   }
 
   function showExampleSuccess(
@@ -1720,21 +1411,10 @@ function serviceRublesMap(calculation: CalculationResult) {
     )
   }
 
-  function hideLeadSuccess() {
-    if (!leadSuccess) return
-    leadSuccess.hidden = true
-    leadSuccess.innerHTML = ''
-  }
-
   function hideExampleSuccess() {
     if (!exampleSuccess) return
     exampleSuccess.hidden = true
     exampleSuccess.innerHTML = ''
-  }
-
-  function resetLeadSubmissionState() {
-    submissionIdempotencyKey = createIdempotencyKey()
-    hideLeadSuccess()
   }
 
   function resetExampleRequestState() {
@@ -1742,19 +1422,21 @@ function serviceRublesMap(calculation: CalculationResult) {
     hideExampleSuccess()
   }
 
-  function applyServerValidationErrors(payload: unknown) {
-    if (!payload || typeof payload !== 'object' || !('error' in payload)) return
-    const details = (payload as { error?: { details?: unknown } }).error?.details
-    if (!Array.isArray(details)) return
+  function persistOfferChoiceState() {
+    if (!currentCalculation) return
 
-    const phoneIssue = details.find((issue) =>
-      Array.isArray((issue as { path?: unknown }).path)
-        ? ((issue as { path: unknown[] }).path ?? []).includes('clientPhone')
-        : false,
-    )
-
-    if (phoneIssue) {
-      setFieldValidity(leadPhoneInput, leadPhoneError, false, true)
+    try {
+      sessionStorage.setItem(
+        offerStateStorageKey,
+        JSON.stringify({
+          areaSqm: currentCalculation.areaSqm,
+          selectedServiceIds: currentCalculation.selectedServiceIds,
+          projectType: selectedProjectType,
+          savedAt: new Date().toISOString(),
+        }),
+      )
+    } catch {
+      // Session storage is only a convenience; URL parameters carry the state too.
     }
   }
 
@@ -1772,18 +1454,6 @@ function serviceRublesMap(calculation: CalculationResult) {
     if (phoneIssue) {
       setFieldValidity(examplePhoneInput, examplePhoneError, false, true)
     }
-  }
-
-  function publicSubmitErrorMessage(status: number, payload: unknown) {
-    const serverMessage =
-      payload && typeof payload === 'object' && 'error' in payload
-        ? (payload as { error?: { message?: string } }).error?.message
-        : undefined
-
-    if (status === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
-    if (status === 409) return 'Тарифы изменились. Обновите страницу и повторите расчет.'
-    if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-    return serverMessage ?? 'Не удалось сохранить заявку. Попробуйте еще раз.'
   }
 
   function exampleRequestErrorMessage(status: number, payload: unknown) {
@@ -1818,30 +1488,12 @@ function serviceRublesMap(calculation: CalculationResult) {
     return Object.keys(metadata).length > 0 ? metadata : undefined
   }
 
-  function calculationSignature(calculation: CalculationResult) {
-    return JSON.stringify({
-      areaSqm: calculation.areaSqm,
-      selectedServiceIds: calculation.selectedServiceIds,
-      exchangeRateScaled: calculation.exchangeRate.usdToBynRateScaled,
-      totalUsdCents: calculation.totals.totalUsdCents,
-      totalBynCents: calculation.totals.totalBynCents,
-    })
-  }
-
   function createIdempotencyKey() {
     if ('randomUUID' in crypto) {
       return crypto.randomUUID()
     }
 
     return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`
-  }
-
-  function setLeadStatus(message: string, state?: 'ready' | 'error' | 'loading') {
-    if (!leadStatus) return
-    leadStatus.textContent = message
-    leadStatus.classList.toggle('is-ready', state === 'ready')
-    leadStatus.classList.toggle('is-error', state === 'error')
-    leadStatus.classList.toggle('is-loading', state === 'loading')
   }
 
   function setExampleStatus(message: string, state?: 'ready' | 'error' | 'loading') {
@@ -1879,14 +1531,43 @@ function serviceRublesMap(calculation: CalculationResult) {
     })
   }
 
-  function leadObjectName() {
-    const comment = leadObjectInput?.value.trim() ?? ''
-    const base = `Тип проекта: ${projectTypeLabels[selectedProjectType]}`
-    return comment ? `${base}. ${comment}`.slice(0, 160) : base
+  function updateOfferLink() {
+    if (offerLinks.length === 0) return
+
+    const params = new URLSearchParams()
+    const areaSqm = currentCalculation?.areaSqm ?? parseArea(areaInput?.value ?? data.defaultAreaSqm).canonical
+    const serviceIds = currentCalculation?.selectedServiceIds ?? [...selectedServiceIds]
+    params.set('area', areaSqm)
+    params.set('type', selectedProjectType)
+    params.set('services', serviceIds.join(','))
+    const attribution = readAttributionMetadata()
+    if (attribution) {
+      Object.entries(attribution).forEach(([key, value]) => {
+        params.set(key, value)
+      })
+    }
+
+    const href = `/offer/?${params.toString()}`
+    offerLinks.forEach((offerLink) => {
+      offerLink.href = href
+    })
   }
 
   function defaultSelectedServiceIds(source: CalculatorService[]) {
     return source.slice(0, Math.min(3, source.length)).map((service) => service.id)
+  }
+
+  function reconcileSelectedServices(fallbackToDefaults: boolean) {
+    const availableServiceIds = new Set(services.map((service) => service.id))
+    const validSelectedServiceIds = [...selectedServiceIds].filter((serviceId) =>
+      availableServiceIds.has(serviceId),
+    )
+
+    selectedServiceIds = new Set(
+      validSelectedServiceIds.length > 0 || !fallbackToDefaults
+        ? validSelectedServiceIds
+        : defaultSelectedServiceIds(services),
+    )
   }
 
   function formatRubles(value: number) {
@@ -3189,6 +2870,30 @@ function serviceRublesMap(calculation: CalculationResult) {
     padding: 20px;
     color: var(--ink);
     box-shadow: 0 24px 58px rgba(0, 0, 0, 0.22);
+  }
+
+  .lead-choice-card {
+    align-content: start;
+    gap: 16px;
+  }
+
+  .lead-choice-card > strong {
+    color: var(--blue);
+    font-family: var(--font-heading);
+    font-size: 22px;
+    line-height: 1.15;
+  }
+
+  .lead-choice-card > p {
+    color: var(--body);
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .lead-choice-actions {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
   }
 
   .lead-form .button {

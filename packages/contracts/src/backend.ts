@@ -263,6 +263,7 @@ export const calculationListItemSchema = calculationRecordSchema.pick({
   status: true,
   statusUpdatedAt: true,
   notes: true,
+  source: true,
   proposalArtifacts: true,
   createdAt: true,
   updatedAt: true,

@@ -1015,6 +1015,7 @@ function calculationToListItem(
     status: record.status,
     statusUpdatedAt: record.statusUpdatedAt,
     notes: record.notes,
+    source: record.source,
     proposalArtifacts: record.proposalArtifacts,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
