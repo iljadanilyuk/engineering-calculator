@@ -28,39 +28,39 @@ test('manages submitted calculation leads in admin mini-crm', async ({ page }) =
   })
 
   await page.goto('/app/leads')
-  await page.getByLabel('Email').fill(e2eAdminEmail)
-  await page.getByLabel('Password').fill(e2ePassword)
-  await page.getByRole('button', { name: 'Login' }).click()
-  await expect(page.getByRole('heading', { name: 'Leads Mini-CRM' })).toBeVisible()
+  await page.getByLabel('Эл. почта').fill(e2eAdminEmail)
+  await page.getByLabel('Пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Войти' }).click()
+  await expect(page.getByRole('heading', { name: 'Заявки' })).toBeVisible()
 
-  await page.getByLabel('Search').fill(leadName)
+  await page.getByLabel('Поиск').fill(leadName)
   const leadRow = page.locator('tbody tr').filter({ hasText: leadName })
   await expect(leadRow).toBeVisible()
-  await expect(leadRow).toContainText('New')
-  await expect(leadRow).toContainText('64 m2')
-  await expect(leadRow).toContainText('563 Br')
-  await expect(leadRow.getByRole('link', { name: `PDF for ${leadName}` })).toBeVisible()
+  await expect(leadRow).toContainText('Новая')
+  await expect(leadRow).toContainText('64 м²')
+  await expect(leadRow).toContainText('563 BYN')
+  await expect(leadRow.getByRole('link', { name: `Открыть PDF для ${leadName}` })).toBeVisible()
 
-  await page.getByRole('combobox', { name: 'Status filter' }).click()
-  await page.getByRole('option', { name: 'New' }).click()
+  await page.getByRole('combobox', { name: 'Фильтр по статусу' }).click()
+  await page.getByRole('option', { name: 'Новая' }).click()
   await expect(leadRow).toBeVisible()
 
-  await leadRow.getByRole('link', { name: 'Open' }).click()
+  await leadRow.getByRole('link', { name: 'Открыть', exact: true }).click()
   const detailRegion = page.getByRole('region', { name: leadName })
   await expect(detailRegion).toBeVisible()
   await expect(page.getByText(`E2E House ${suffix}`)).toBeVisible()
   await expect(page.getByText(`E2E Lead Heating ${suffix}`).first()).toBeVisible()
   await expect(page.getByText('3.2 BYN/USD')).toBeVisible()
 
-  await page.getByRole('combobox', { name: 'Lead status' }).click()
-  await page.getByRole('option', { name: 'Contacted' }).click()
-  await expect(page.getByText('Status saved')).toBeVisible()
+  await page.getByRole('combobox', { name: 'Статус заявки' }).click()
+  await page.getByRole('option', { name: 'Связались' }).click()
+  await expect(page.getByText('Статус сохранен')).toBeVisible()
 
-  await page.getByLabel('Notes').fill(`Browser note ${suffix}`)
-  await page.getByRole('button', { name: 'Save notes' }).click()
-  await expect(page.getByText('Notes saved')).toBeVisible()
+  await page.getByLabel('Внутренние заметки').fill(`Browser note ${suffix}`)
+  await page.getByRole('button', { name: 'Сохранить заметки' }).click()
+  await expect(page.getByText('Заметки сохранены')).toBeVisible()
 
-  const pdfLink = page.getByRole('link', { name: `Open original PDF for ${leadName}` }).first()
+  const pdfLink = page.getByRole('link', { name: `Открыть PDF для ${leadName}` }).first()
   const href = await pdfLink.getAttribute('href')
   expect(href).toContain(submission.proposal.publicToken)
   expect(href).toContain('/pdf')
@@ -68,7 +68,23 @@ test('manages submitted calculation leads in admin mini-crm', async ({ page }) =
   const pdfResponse = await page.request.get(href!)
   expect(pdfResponse.status()).toBe(200)
   expect(pdfResponse.headers()['x-proposal-checksum-sha256']).toMatch(/^[a-f0-9]{64}$/)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(page)
+
+  await page.goto('/app/leads')
+  await page.getByLabel('Поиск').fill(leadName)
+  await expect(page.getByRole('link', { name: `Открыть PDF для ${leadName}` })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
 })
+
+async function expectNoHorizontalOverflow(page: import('@playwright/test').Page) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    )
+    .toBe(true)
+}
 
 async function loginAdminApi(backendUrl: string) {
   const login = await fetch(`${backendUrl}/api/auth/login`, {

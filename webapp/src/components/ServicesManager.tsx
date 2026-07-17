@@ -129,7 +129,7 @@ export function ServicesManager() {
 
   function openEditDialog(service: ServiceRecord) {
     if (!isSupportedPricingType(service.pricingType)) {
-      setActionError('Formula services are future scope. Archive or reorder them for now.')
+      setActionError('Формульные услуги пока нельзя редактировать в админке. Их можно архивировать или менять порядок.')
       return
     }
 
@@ -145,13 +145,13 @@ export function ServicesManager() {
 
     const priceUsdCents = parseUsdCents(formState.priceUsd)
     if (priceUsdCents === null) {
-      setFormError('Enter a positive USD price with up to two decimals.')
+      setFormError('Введите положительную цену в USD, максимум с двумя знаками после запятой.')
       return
     }
 
     const sortOrder = Number(formState.sortOrder)
     if (!Number.isInteger(sortOrder) || sortOrder < -1_000_000 || sortOrder > 1_000_000) {
-      setFormError('Sort order must be an integer between -1000000 and 1000000.')
+      setFormError('Порядок должен быть целым числом от -1000000 до 1000000.')
       return
     }
 
@@ -245,39 +245,38 @@ export function ServicesManager() {
   return (
     <section className="grid gap-6" aria-labelledby="services-heading">
       <div className="grid gap-4 sm:grid-cols-3">
-        <ServiceMetric label="Active services" value={activeCount} />
-        <ServiceMetric label="Public calculator" value={publicCount} />
-        <ServiceMetric label="Archived" value={archivedCount} />
+        <ServiceMetric label="Активные" value={activeCount} />
+        <ServiceMetric label="В калькуляторе" value={publicCount} />
+        <ServiceMetric label="Архив" value={archivedCount} />
       </div>
 
       <Card className="rounded-lg">
         <CardHeader>
           <div className="grid gap-2">
-            <CardTitle id="services-heading">Services and prices</CardTitle>
+            <CardTitle id="services-heading">Услуги и цены</CardTitle>
             <CardDescription>
-              Base prices are stored in USD. BYN previews use the current admin exchange rate.
+              Базовые цены хранятся в USD. Предпросмотр BYN считает текущий курс админки.
             </CardDescription>
           </div>
-          <CardAction>
+          <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
             <Button type="button" onClick={openCreateDialog}>
-              Add service
+              Добавить услугу
             </Button>
           </CardAction>
         </CardHeader>
         <CardContent className="grid gap-4">
           {exchangeRateQuery.isError && (
             <Alert>
-              <AlertTitle>BYN preview unavailable</AlertTitle>
+              <AlertTitle>Предпросмотр BYN недоступен</AlertTitle>
               <AlertDescription>
-                Configure the USD/BYN exchange rate in settings to show BYN previews. Service CRUD
-                stays available.
+                Настройте курс USD/BYN, чтобы видеть пересчет. Редактирование услуг остается доступным.
               </AlertDescription>
             </Alert>
           )}
 
           {actionError && (
             <Alert variant="destructive">
-              <AlertTitle>Service action failed</AlertTitle>
+              <AlertTitle>Не удалось выполнить действие с услугой</AlertTitle>
               <AlertDescription>{actionError}</AlertDescription>
             </Alert>
           )}
@@ -285,133 +284,104 @@ export function ServicesManager() {
           {servicesQuery.isLoading ? (
             <div className="flex items-center gap-3 py-8">
               <Spinner />
-              <Typography tone="muted">Loading services...</Typography>
+              <Typography tone="muted">Загружаем услуги...</Typography>
             </div>
           ) : servicesQuery.isError ? (
             <Alert variant="destructive">
-              <AlertTitle>Could not load services</AlertTitle>
+              <AlertTitle>Не удалось загрузить услуги</AlertTitle>
               <AlertDescription>{errorMessage(servicesQuery.error)}</AlertDescription>
             </Alert>
           ) : sortedServices.length === 0 ? (
             <div className="grid gap-3 rounded-lg border border-dashed p-8">
-              <Typography variant="h6">No services yet</Typography>
+              <Typography variant="h6">Услуг пока нет</Typography>
               <Typography tone="muted">
-                Add the first service to publish it in the public calculator.
+                Добавьте первую услугу, чтобы показать ее в публичном калькуляторе.
               </Typography>
               <Button type="button" className="w-fit" onClick={openCreateDialog}>
-                Add service
+                Добавить услугу
               </Button>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[120px]">Order</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Pricing</TableHead>
-                  <TableHead>USD</TableHead>
-                  <TableHead>BYN preview</TableHead>
-                  <TableHead>Public</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="hidden lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[120px]">Порядок</TableHead>
+                      <TableHead>Услуга</TableHead>
+                      <TableHead>Расчет</TableHead>
+                      <TableHead>USD</TableHead>
+                      <TableHead>BYN</TableHead>
+                      <TableHead>Показывать</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead className="text-right">Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedServices.map((service, index) => (
+                      <TableRow
+                        key={service.id}
+                        className={cn(!service.isActive && 'bg-muted/30 text-muted-foreground')}
+                      >
+                        <TableCell>
+                          <ServiceOrderControls
+                            service={service}
+                            index={index}
+                            total={sortedServices.length}
+                            disabled={isMutating}
+                            onMove={moveService}
+                          />
+                        </TableCell>
+                        <TableCell className="min-w-[220px] whitespace-normal">
+                          <ServiceTitle service={service} />
+                        </TableCell>
+                        <TableCell>{pricingTypeLabel(service.pricingType)}</TableCell>
+                        <TableCell>{formatUsdPrice(service)}</TableCell>
+                        <TableCell>{formatBynPreview(service, exchangeRate)}</TableCell>
+                        <TableCell>
+                          <ServicePublicSwitch
+                            service={service}
+                            disabled={updateService.isPending}
+                            onChange={toggleVisibility}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <ServiceStatusBadge service={service} />
+                        </TableCell>
+                        <TableCell>
+                          <ServiceActions
+                            service={service}
+                            confirmArchiveId={confirmArchiveId}
+                            disabled={updateService.isPending}
+                            onEdit={openEditDialog}
+                            onArchive={toggleArchive}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="grid gap-3 lg:hidden">
                 {sortedServices.map((service, index) => (
-                  <TableRow
+                  <ServiceMobileCard
                     key={service.id}
-                    className={cn(!service.isActive && 'bg-muted/30 text-muted-foreground')}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Move ${service.title} up`}
-                          disabled={index === 0 || isMutating}
-                          onClick={() => void moveService(service, -1)}
-                        >
-                          <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Move ${service.title} down`}
-                          disabled={index === sortedServices.length - 1 || isMutating}
-                          onClick={() => void moveService(service, 1)}
-                        >
-                          <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} />
-                        </Button>
-                        <Typography as="span" variant="controlXs" tone="muted">
-                          {service.sortOrder}
-                        </Typography>
-                      </div>
-                    </TableCell>
-                    <TableCell className="min-w-[260px] whitespace-normal">
-                      <div className="grid gap-1">
-                        <Typography variant="bodySmMedium">{service.title}</Typography>
-                        {service.description && (
-                          <Typography variant="caption" tone="muted">
-                            {service.description}
-                          </Typography>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{pricingTypeLabel(service.pricingType)}</TableCell>
-                    <TableCell>{formatUsdPrice(service)}</TableCell>
-                    <TableCell>{formatBynPreview(service, exchangeRate)}</TableCell>
-                    <TableCell>
-                      <Switch
-                        aria-label={`Public visibility for ${service.title}`}
-                        checked={service.isPublic && isSupportedPricingType(service.pricingType)}
-                        disabled={
-                          !service.isActive ||
-                          !isSupportedPricingType(service.pricingType) ||
-                          updateService.isPending
-                        }
-                        onCheckedChange={(checked) => void toggleVisibility(service, checked)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={service.isActive ? 'outline' : 'secondary'}>
-                        {service.isActive ? 'Active' : 'Archived'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={!isSupportedPricingType(service.pricingType)}
-                          title={
-                            isSupportedPricingType(service.pricingType)
-                              ? undefined
-                              : 'Formula editor is future scope'
-                          }
-                          onClick={() => openEditDialog(service)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={confirmArchiveId === service.id ? 'destructive' : 'ghost'}
-                          size="sm"
-                          disabled={updateService.isPending}
-                          onClick={() => void toggleArchive(service)}
-                        >
-                          {service.isActive
-                            ? confirmArchiveId === service.id ? 'Confirm archive' : 'Archive'
-                            : 'Restore'}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                    service={service}
+                    index={index}
+                    total={sortedServices.length}
+                    exchangeRate={exchangeRate}
+                    confirmArchiveId={confirmArchiveId}
+                    orderDisabled={isMutating}
+                    updateDisabled={updateService.isPending}
+                    onMove={moveService}
+                    onVisibilityChange={toggleVisibility}
+                    onEdit={openEditDialog}
+                    onArchive={toggleArchive}
+                  />
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -420,22 +390,22 @@ export function ServicesManager() {
         <DialogContent className="sm:max-w-2xl">
           <form className="grid gap-6" onSubmit={(event) => void handleSubmit(event)}>
             <DialogHeader>
-              <DialogTitle>{editingService ? 'Edit service' : 'Add service'}</DialogTitle>
+              <DialogTitle>{editingService ? 'Редактировать услугу' : 'Добавить услугу'}</DialogTitle>
               <DialogDescription>
-                Fixed and per-square-meter services require a positive base USD price.
+                Для фиксированных услуг и цены за м² нужна положительная базовая цена в USD.
               </DialogDescription>
             </DialogHeader>
 
             {formError && (
               <Alert variant="destructive">
-                <AlertTitle>Could not save service</AlertTitle>
+                <AlertTitle>Не удалось сохранить услугу</AlertTitle>
                 <AlertDescription>{formError}</AlertDescription>
               </Alert>
             )}
 
             <FieldGroup className="gap-4">
               <Field>
-                <FieldLabel htmlFor="service-title">Title</FieldLabel>
+                <FieldLabel htmlFor="service-title">Название</FieldLabel>
                 <Input
                   id="service-title"
                   value={formState.title}
@@ -446,7 +416,7 @@ export function ServicesManager() {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="service-description">Description</FieldLabel>
+                <FieldLabel htmlFor="service-description">Описание</FieldLabel>
                 <Textarea
                   id="service-description"
                   value={formState.description}
@@ -459,7 +429,7 @@ export function ServicesManager() {
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <Field>
-                  <FieldLabel htmlFor="service-pricing-type">Pricing type</FieldLabel>
+                  <FieldLabel htmlFor="service-pricing-type">Тип расчета</FieldLabel>
                   <Select
                     value={formState.pricingType}
                     onValueChange={(value) =>
@@ -473,14 +443,14 @@ export function ServicesManager() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="per_sqm">Per square meter</SelectItem>
-                      <SelectItem value="fixed">Fixed</SelectItem>
+                      <SelectItem value="per_sqm">За м²</SelectItem>
+                      <SelectItem value="fixed">Фиксированная</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="service-price-usd">USD price</FieldLabel>
+                  <FieldLabel htmlFor="service-price-usd">Цена в USD</FieldLabel>
                   <Input
                     id="service-price-usd"
                     value={formState.priceUsd}
@@ -493,12 +463,12 @@ export function ServicesManager() {
                     required
                   />
                   <FieldDescription>
-                    {formState.pricingType === 'per_sqm' ? 'USD per m2.' : 'Fixed USD total.'}
+                    {formState.pricingType === 'per_sqm' ? 'USD за м².' : 'Фиксированная сумма в USD.'}
                   </FieldDescription>
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="service-sort-order">Sort order</FieldLabel>
+                  <FieldLabel htmlFor="service-sort-order">Порядок</FieldLabel>
                   <Input
                     id="service-sort-order"
                     value={formState.sortOrder}
@@ -519,9 +489,9 @@ export function ServicesManager() {
                   onCheckedChange={(checked) => setFormState({ ...formState, isPublic: checked })}
                 />
                 <div className="grid gap-1">
-                  <FieldLabel htmlFor="service-public">Show in public calculator</FieldLabel>
+                  <FieldLabel htmlFor="service-public">Показывать в калькуляторе</FieldLabel>
                   <FieldDescription>
-                    Archived services are hidden automatically even if this switch was on.
+                    Архивные услуги скрываются автоматически, даже если переключатель включен.
                   </FieldDescription>
                 </div>
               </Field>
@@ -530,11 +500,11 @@ export function ServicesManager() {
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="outline">
-                  Cancel
+                  Отмена
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save service'}
+                {isSaving ? 'Сохраняем...' : 'Сохранить услугу'}
               </Button>
             </DialogFooter>
           </form>
@@ -544,12 +514,223 @@ export function ServicesManager() {
   )
 }
 
+function ServiceOrderControls({
+  service,
+  index,
+  total,
+  disabled,
+  onMove,
+}: {
+  service: ServiceRecord
+  index: number
+  total: number
+  disabled: boolean
+  onMove: (service: ServiceRecord, direction: -1 | 1) => void | Promise<void>
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`Переместить ${service.title} выше`}
+        disabled={index === 0 || disabled}
+        onClick={() => void onMove(service, -1)}
+      >
+        <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`Переместить ${service.title} ниже`}
+        disabled={index === total - 1 || disabled}
+        onClick={() => void onMove(service, 1)}
+      >
+        <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} />
+      </Button>
+      <Typography as="span" variant="controlXs" tone="muted">
+        {service.sortOrder}
+      </Typography>
+    </div>
+  )
+}
+
+function ServiceTitle({ service }: { service: ServiceRecord }) {
+  return (
+    <div className="grid gap-1">
+      <Typography variant="bodySmMedium">{service.title}</Typography>
+      {service.description && (
+        <Typography variant="caption" tone="muted">
+          {service.description}
+        </Typography>
+      )}
+    </div>
+  )
+}
+
+function ServicePublicSwitch({
+  service,
+  disabled,
+  onChange,
+}: {
+  service: ServiceRecord
+  disabled: boolean
+  onChange: (service: ServiceRecord, isPublic: boolean) => void | Promise<void>
+}) {
+  return (
+    <Switch
+      aria-label={`Показывать в калькуляторе: ${service.title}`}
+      checked={service.isPublic && isSupportedPricingType(service.pricingType)}
+      disabled={
+        !service.isActive ||
+        !isSupportedPricingType(service.pricingType) ||
+        disabled
+      }
+      onCheckedChange={(checked) => void onChange(service, checked)}
+    />
+  )
+}
+
+function ServiceStatusBadge({ service }: { service: ServiceRecord }) {
+  return (
+    <Badge variant={service.isActive ? 'outline' : 'secondary'}>
+      {service.isActive ? 'Активна' : 'В архиве'}
+    </Badge>
+  )
+}
+
+function ServiceActions({
+  service,
+  confirmArchiveId,
+  disabled,
+  onEdit,
+  onArchive,
+}: {
+  service: ServiceRecord
+  confirmArchiveId: string | null
+  disabled: boolean
+  onEdit: (service: ServiceRecord) => void
+  onArchive: (service: ServiceRecord) => void | Promise<void>
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={!isSupportedPricingType(service.pricingType)}
+        title={
+          isSupportedPricingType(service.pricingType)
+            ? undefined
+            : 'Формульные услуги пока нельзя редактировать'
+        }
+        onClick={() => onEdit(service)}
+      >
+        Редактировать
+      </Button>
+      <Button
+        type="button"
+        variant={confirmArchiveId === service.id ? 'destructive' : 'ghost'}
+        size="sm"
+        disabled={disabled}
+        onClick={() => void onArchive(service)}
+      >
+        {service.isActive
+          ? confirmArchiveId === service.id ? 'Подтвердить архив' : 'В архив'
+          : 'Вернуть'}
+      </Button>
+    </div>
+  )
+}
+
+function ServiceMobileCard({
+  service,
+  index,
+  total,
+  exchangeRate,
+  confirmArchiveId,
+  orderDisabled,
+  updateDisabled,
+  onMove,
+  onVisibilityChange,
+  onEdit,
+  onArchive,
+}: {
+  service: ServiceRecord
+  index: number
+  total: number
+  exchangeRate: { usdToBynRateScaled: number } | null
+  confirmArchiveId: string | null
+  orderDisabled: boolean
+  updateDisabled: boolean
+  onMove: (service: ServiceRecord, direction: -1 | 1) => void | Promise<void>
+  onVisibilityChange: (service: ServiceRecord, isPublic: boolean) => void | Promise<void>
+  onEdit: (service: ServiceRecord) => void
+  onArchive: (service: ServiceRecord) => void | Promise<void>
+}) {
+  return (
+    <div className={cn('grid gap-4 rounded-lg border p-4', !service.isActive && 'bg-muted/30 text-muted-foreground')}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <ServiceTitle service={service} />
+        <ServiceStatusBadge service={service} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <ServiceMobileFact label="Расчет" value={pricingTypeLabel(service.pricingType)} />
+        <ServiceMobileFact label="USD" value={formatUsdPrice(service)} />
+        <ServiceMobileFact label="BYN" value={formatBynPreview(service, exchangeRate)} />
+        <ServiceMobileFact label="Порядок" value={String(service.sortOrder)} />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+        <Typography variant="bodySmMedium">Показывать в калькуляторе</Typography>
+        <ServicePublicSwitch
+          service={service}
+          disabled={updateDisabled}
+          onChange={onVisibilityChange}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+        <ServiceOrderControls
+          service={service}
+          index={index}
+          total={total}
+          disabled={orderDisabled}
+          onMove={onMove}
+        />
+        <ServiceActions
+          service={service}
+          confirmArchiveId={confirmArchiveId}
+          disabled={updateDisabled}
+          onEdit={onEdit}
+          onArchive={onArchive}
+        />
+      </div>
+    </div>
+  )
+}
+
+function ServiceMobileFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <Typography variant="caption" tone="muted">
+        {label}
+      </Typography>
+      <Typography className="tabular-nums" variant="bodySmMedium">
+        {value}
+      </Typography>
+    </div>
+  )
+}
+
 function ServiceMetric({ label, value }: { label: string; value: number }) {
   return (
     <Card size="sm" className="rounded-lg">
       <CardHeader>
         <CardDescription>{label}</CardDescription>
-        <CardTitle>{numberFormatter.format(value)}</CardTitle>
+        <CardTitle className="tabular-nums">{numberFormatter.format(value)}</CardTitle>
       </CardHeader>
     </Card>
   )
@@ -583,31 +764,31 @@ function isSupportedPricingType(pricingType: ServiceRecord['pricingType']) {
 }
 
 function pricingTypeLabel(pricingType: ServiceRecord['pricingType']) {
-  if (pricingType === 'fixed') return 'Fixed'
-  if (pricingType === 'per_sqm') return 'Per m2'
-  return 'Formula'
+  if (pricingType === 'fixed') return 'Фиксированная'
+  if (pricingType === 'per_sqm') return 'За м²'
+  return 'Формула'
 }
 
 function formatUsdPrice(service: ServiceRecord) {
-  const suffix = service.pricingType === 'per_sqm' ? '/m2' : ''
-  return `${formatUsdInput(service.priceUsdCents)} $${suffix}`
+  const suffix = service.pricingType === 'per_sqm' ? '/м²' : ''
+  return `${formatUsdInput(service.priceUsdCents)} USD${suffix}`
 }
 
 function formatBynPreview(
   service: ServiceRecord,
   exchangeRate: { usdToBynRateScaled: number } | null,
 ) {
-  if (!exchangeRate) return 'No rate'
-  if (!isSupportedPricingType(service.pricingType)) return 'Future formula'
+  if (!exchangeRate) return 'Курс не задан'
+  if (!isSupportedPricingType(service.pricingType)) return 'Формула позже'
 
   const bynCents = convertUsdCentsToBynCents(
     service.priceUsdCents,
     exchangeRate.usdToBynRateScaled,
   )
   const rubles = roundBynCentsToRubles(bynCents)
-  const suffix = service.pricingType === 'per_sqm' ? '/m2' : ''
+  const suffix = service.pricingType === 'per_sqm' ? '/м²' : ''
 
-  return `${numberFormatter.format(rubles)} Br${suffix}`
+  return `${numberFormatter.format(rubles)} BYN${suffix}`
 }
 
 function parseUsdCents(value: string) {
@@ -630,5 +811,5 @@ function formatUsdInput(cents: number) {
 function errorMessage(error: unknown) {
   if (error instanceof ApiRequestError) return error.message
   if (error instanceof Error) return error.message
-  return 'Unexpected error'
+  return 'Неожиданная ошибка'
 }

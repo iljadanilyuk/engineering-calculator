@@ -1131,6 +1131,59 @@ Verification:
 - `git status --short --branch` was clean before deployment spec generation. Generated `.scratch/deploy` specs were not committed.
 - PZK-015 post-task review gate cleared with reviewer Feynman score 9.7/10 and no required blockers.
 
+### PZK-016 - Admin Russian UX And Workflow Audit
+
+Status: complete
+
+Goal:
+
+- Translate the current admin webapp to Russian and make it feel like a practical working cabinet for this product, not a generic English technical dashboard.
+- Audit and improve the admin UX for the owner's real workflows: leads, statuses, notes, proposal/PDF links, services, prices, and future handoff into project technical assignment and contract generation.
+- Remove or replace uncomfortable horizontal-scroll table patterns, especially in leads and lead detail views, with responsive desktop/mobile layouts.
+
+Scope:
+
+- Webapp/admin UI only unless a small API-facing adjustment is required to preserve existing behavior.
+- Keep current backend calculation, proposal/PDF, lead save, auth, DigitalOcean, DNS, env/secrets, and public website behavior unchanged.
+- Future contract/TZ/Telegram-agent functionality should be considered in the information architecture, but not implemented in this task.
+
+Task brief:
+
+- `docs/design/admin-panel-russian-ux-task-2026-07-17.md`
+
+Mandatory workflow:
+
+- Before implementation, run a `gpt-5.5 xhigh` pre-task sub-agent for UX/i18n/refactor risks.
+- After implementation, run `gpt-5.5 xhigh` review sub-agent(s).
+- Do not mark complete until at least one reviewer scores `9.5/10` or higher.
+- Update this tracker with completion notes, verification notes, and review log before commit.
+
+Completion notes:
+
+- Translated the protected admin shell, login/forbidden/loading states, service management, lead list, lead detail, status/notes/PDF controls, empty/loading/error states, and e2e-accessible labels to Russian.
+- Kept backend/API enum values unchanged while localizing only UI labels for lead statuses, pricing types, filters, switches, buttons, and validation/auth messages.
+- Reworked the admin shell terminology around `Заявки`, `Услуги и цены`, and future workflow placeholders for `Проекты/ТЗ` and `Договоры` without adding backend routes or future contract/Telegram features.
+- Replaced the forced horizontal lead list table pattern with a desktop table plus mobile/tablet lead cards. The old `min-w-[1120px]` lead table and `min-w-[720px]` lead-detail breakdown were removed.
+- Converted lead detail calculation breakdown into responsive structured rows, with contact, status, notes, КП/PDF, selected-service snapshot, and future workflow blocks kept distinct.
+- Added responsive services mobile cards while preserving desktop service CRUD density, reorder controls, public visibility toggles, formula-row disabled state, archive/restore flow, and BYN preview behavior.
+- Standardized admin display units to `м²`, `BYN`, and `USD`; dates remain formatted with `ru-RU`.
+- Updated Playwright e2e selectors and assertions for Russian accessible names and added mobile no-horizontal-overflow checks for login, services, leads, and lead detail.
+- Public website, backend calculation/domain logic, proposal/PDF generation, DigitalOcean/DNS/env/secrets, and Codex plugin layer were not changed.
+
+Verification:
+
+- PZK-016 pre-task `gpt-5.5 xhigh` review completed with UX/i18n/refactor risks incorporated.
+- `docker info` passed before Docker-backed e2e/browser verification.
+- `bun run typecheck` passed.
+- `bun run --cwd webapp lint` passed.
+- `bun run test:webapp` passed: 40/40.
+- `bun run build:webapp` passed; inherited Vite chunk-size warning remains.
+- `bun run e2e:webapp` passed: 5/5.
+- Browser verification passed with a temporary Playwright spec using the e2e fixture stack: desktop login -> services -> leads -> lead detail; mobile 390px login -> services -> leads -> lead detail; PDF fetch returned `200`; every checked view satisfied `document.documentElement.scrollWidth <= window.innerWidth + 1`.
+- Browser verification screenshots were saved under `.scratch`: `pzk016-desktop-login.png`, `pzk016-desktop-services.png`, `pzk016-desktop-leads.png`, `pzk016-desktop-lead-detail.png`, `pzk016-mobile-login.png`, `pzk016-mobile-services.png`, `pzk016-mobile-leads.png`, and `pzk016-mobile-lead-detail.png`.
+- `git diff --check` passed with only expected LF/CRLF working-copy warnings.
+- PZK-016 post-task review gate cleared with reviewer Herschel score 9.6/10 and no required blockers.
+
 ## 11. Post-Launch Follow-Ups
 
 These do not block the PZK-015 production launch, but should be resolved for polish, operations, or v2 work:
@@ -1301,3 +1354,7 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer McClintock: 9.2/10; required time-scoping old Project/no-resource statements, annotating PZK-014 `www` placeholder history as superseded by PZK-015 apex production, and reframing open launch questions as post-launch follow-ups. Changes incorporated.
   - Reviewer Ramanujan: 9.3/10; required fixing the top-level deployment target section that still said the Project had no resources. Changes incorporated.
   - Reviewer Feynman: 9.7/10; confirmed stale deployment phrases are gone from active wording, no production secrets are present, only the expected markdown files are modified, and PZK-015 gate is cleared.
+- 2026-07-17 PZK-016 pre-task review:
+  - Reviewer McClintock: `gpt-5.5 xhigh`; flagged e2e accessible-name churn, preserving API enum values while localizing labels, forced horizontal scroll in leads/detail, auth error localization boundaries, unit/currency consistency, and typography-policy risk. Recommendations incorporated.
+- 2026-07-17 PZK-016 post-task review:
+  - Reviewer Herschel: 9.6/10; confirmed Russian admin UI, API enum boundary preservation, removal of forced lead/detail horizontal-scroll patterns, mobile card layouts, PDF/status/notes/service CRUD coverage, and e2e/test updates. No required changes remained; PZK-016 gate cleared.

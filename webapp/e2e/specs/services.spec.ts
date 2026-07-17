@@ -17,34 +17,36 @@ test('manages services and public calculator eligibility', async ({ page }) => {
   await createFormulaService(backendUrl, adminAccessToken, formulaTitle)
 
   await page.goto('/app')
-  await page.getByLabel('Email').fill(e2eAdminEmail)
-  await page.getByLabel('Password').fill(e2ePassword)
-  await page.getByRole('button', { name: 'Login' }).click()
-  await expect(page.getByRole('heading', { name: 'Services management' })).toBeVisible()
+  await page.getByLabel('Эл. почта').fill(e2eAdminEmail)
+  await page.getByLabel('Пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Войти' }).click()
+  await expect(page.getByRole('heading', { name: 'Услуги и цены' })).toBeVisible()
   const formulaRow = page.locator('tbody tr').filter({ hasText: formulaTitle })
-  await expect(formulaRow.getByRole('cell', { name: 'Future formula', exact: true })).toBeVisible()
-  await expect(formulaRow.getByRole('switch', { name: `Public visibility for ${formulaTitle}` })).toBeDisabled()
-  await expect(formulaRow.getByRole('button', { name: 'Edit' })).toBeDisabled()
+  await expect(formulaRow.getByRole('cell', { name: 'Формула', exact: true })).toBeVisible()
+  await expect(formulaRow.getByRole('switch', { name: `Показывать в калькуляторе: ${formulaTitle}` })).toBeDisabled()
+  await expect(formulaRow.getByRole('button', { name: 'Редактировать' })).toBeDisabled()
   await expectPublicServices(page, backendUrl, formulaTitle, false)
 
   await createService(page, {
     title: heatingTitle,
     description: 'Browser-created heating service',
-    pricingType: 'Per square meter',
+    pricingType: 'За м²',
     priceUsd: '2.50',
   })
   await createService(page, {
     title: boilerTitle,
     description: 'Browser-created boiler room service',
-    pricingType: 'Fixed',
+    pricingType: 'Фиксированная',
     priceUsd: '200',
   })
 
-  await expect(page.getByText(heatingTitle)).toBeVisible()
-  await expect(page.getByText(boilerTitle)).toBeVisible()
-  await expect(page.getByText('8 Br/m2')).toBeVisible()
+  const heatingRow = page.locator('tbody tr').filter({ hasText: heatingTitle })
+  const boilerRow = page.locator('tbody tr').filter({ hasText: boilerTitle })
+  await expect(heatingRow).toBeVisible()
+  await expect(boilerRow).toBeVisible()
+  await expect(heatingRow).toContainText('8 BYN/м²')
 
-  await page.getByRole('button', { name: `Move ${boilerTitle} up` }).click()
+  await page.getByRole('button', { name: `Переместить ${boilerTitle} выше` }).click()
   await expect
     .poll(async () => {
       const rowTexts = await page.locator('tbody tr').allTextContents()
@@ -55,26 +57,28 @@ test('manages services and public calculator eligibility', async ({ page }) => {
     })
     .toBe(true)
 
-  const heatingRow = page.locator('tbody tr').filter({ hasText: heatingTitle })
-  await heatingRow.getByRole('button', { name: 'Edit' }).click()
-  await page.getByLabel('Title').fill(editedHeatingTitle)
-  await page.getByLabel('USD price').fill('3')
-  await page.getByRole('button', { name: 'Save service' }).click()
-  await expect(page.getByText(editedHeatingTitle)).toBeVisible()
-  await expect(page.getByText('10 Br/m2')).toBeVisible()
-
+  await heatingRow.getByRole('button', { name: 'Редактировать' }).click()
+  await page.getByLabel('Название').fill(editedHeatingTitle)
+  await page.getByLabel('Цена в USD').fill('3')
+  await page.getByRole('button', { name: 'Сохранить услугу' }).click()
   const editedHeatingRow = page.locator('tbody tr').filter({ hasText: editedHeatingTitle })
-  await editedHeatingRow.getByRole('switch', { name: `Public visibility for ${editedHeatingTitle}` }).click()
+  await expect(editedHeatingRow).toBeVisible()
+  await expect(editedHeatingRow).toContainText('10 BYN/м²')
+  await editedHeatingRow.getByRole('switch', { name: `Показывать в калькуляторе: ${editedHeatingTitle}` }).click()
   await expectPublicServices(page, backendUrl, editedHeatingTitle, false)
   await expectPublicServices(page, backendUrl, boilerTitle, true)
 
-  await editedHeatingRow.getByRole('switch', { name: `Public visibility for ${editedHeatingTitle}` }).click()
+  await editedHeatingRow.getByRole('switch', { name: `Показывать в калькуляторе: ${editedHeatingTitle}` }).click()
   await expectPublicServices(page, backendUrl, editedHeatingTitle, true)
 
-  await editedHeatingRow.getByRole('button', { name: 'Archive' }).click()
-  await editedHeatingRow.getByRole('button', { name: 'Confirm archive' }).click()
-  await expect(editedHeatingRow.getByText('Archived')).toBeVisible()
+  await editedHeatingRow.getByRole('button', { name: 'В архив' }).click()
+  await editedHeatingRow.getByRole('button', { name: 'Подтвердить архив' }).click()
+  await expect(editedHeatingRow.getByText('В архиве')).toBeVisible()
   await expectPublicServices(page, backendUrl, editedHeatingTitle, false)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('heading', { name: 'Услуги и цены' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
 })
 
 async function createService(
@@ -82,18 +86,26 @@ async function createService(
   input: {
     title: string
     description: string
-    pricingType: 'Fixed' | 'Per square meter'
+    pricingType: 'Фиксированная' | 'За м²'
     priceUsd: string
   },
 ) {
-  await page.getByRole('button', { name: 'Add service' }).first().click()
-  await page.getByLabel('Title').fill(input.title)
-  await page.getByLabel('Description').fill(input.description)
-  await page.getByRole('combobox', { name: 'Pricing type' }).click()
+  await page.getByRole('button', { name: 'Добавить услугу' }).first().click()
+  await page.getByLabel('Название').fill(input.title)
+  await page.getByLabel('Описание').fill(input.description)
+  await page.getByRole('combobox', { name: 'Тип расчета' }).click()
   await page.getByRole('option', { name: input.pricingType }).click()
-  await page.getByLabel('USD price').fill(input.priceUsd)
-  await page.getByRole('button', { name: 'Save service' }).click()
-  await expect(page.getByText(input.title)).toBeVisible()
+  await page.getByLabel('Цена в USD').fill(input.priceUsd)
+  await page.getByRole('button', { name: 'Сохранить услугу' }).click()
+  await expect(page.locator('tbody tr').filter({ hasText: input.title })).toBeVisible()
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    )
+    .toBe(true)
 }
 
 async function configureExchangeRate(backendUrl: string) {

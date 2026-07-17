@@ -61,17 +61,17 @@ export function AuthForm() {
           setFormError(errorMessageForRequest(caughtError))
           return
         }
-        setFormError('Unexpected auth error')
+        setFormError('Неожиданная ошибка авторизации')
       }
     },
   })
 
   return (
-    <Card className="w-full" aria-label="Admin login">
+    <Card className="w-full" aria-label="Вход администратора">
       <CardHeader>
-        <CardTitle>Admin login</CardTitle>
+        <CardTitle>Вход в админ-панель</CardTitle>
         <CardDescription>
-          Use the administrator account created with the backend setup command.
+          Используйте учетную запись администратора, созданную при настройке проекта.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -86,7 +86,7 @@ export function AuthForm() {
               name="email"
               children={(field) => (
                 <Field data-invalid={hasErrors(fieldErrors.email)}>
-                  <FieldLabel htmlFor={emailId}>Email</FieldLabel>
+                  <FieldLabel htmlFor={emailId}>Эл. почта</FieldLabel>
                   <Input
                     id={emailId}
                     name={field.name}
@@ -112,7 +112,7 @@ export function AuthForm() {
               name="password"
               children={(field) => (
                 <Field data-invalid={hasErrors(fieldErrors.password)}>
-                  <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+                  <FieldLabel htmlFor={passwordId}>Пароль</FieldLabel>
                   <Input
                     id={passwordId}
                     name={field.name}
@@ -139,7 +139,7 @@ export function AuthForm() {
               selector={(state) => state.isSubmitting}
               children={(isSubmitting) => (
                 <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? 'Signing in...' : 'Login'}
+                  {isSubmitting ? 'Входим...' : 'Войти'}
                 </Button>
               )}
             />
@@ -155,7 +155,7 @@ function FormAlert({ message }: { message: string | null }) {
 
   return (
     <Alert variant="destructive">
-      <AlertTitle>Login failed</AlertTitle>
+      <AlertTitle>Не удалось войти</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   )
@@ -163,11 +163,15 @@ function FormAlert({ message }: { message: string | null }) {
 
 function errorMessageForRequest(error: ApiRequestError) {
   if (error.status === 429) {
-    return 'Too many failed login attempts. Please try again later.'
+    return 'Слишком много попыток входа. Попробуйте позже.'
   }
 
   if (error.status === 403) {
-    return 'This account is not allowed to access the admin cabinet.'
+    return 'У этой учетной записи нет прав администратора.'
+  }
+
+  if (error.status === 401 || error.message === 'Invalid email or password') {
+    return 'Неверная почта или пароль'
   }
 
   return error.message
@@ -178,7 +182,7 @@ function toFieldErrors(issues: z.ZodIssue[]): FieldErrors {
     const field = issue.path[0]
     if (!isFieldName(field)) return errors
 
-    errors[field] = [...(errors[field] ?? []), { message: issue.message }]
+    errors[field] = [...(errors[field] ?? []), { message: localizedFieldError(issue.message) }]
     return errors
   }, {})
 }
@@ -205,4 +209,13 @@ function errorId(errors: FormError[] | undefined, id: string) {
 
 function isFieldName(field: unknown): field is FieldName {
   return field === 'email' || field === 'password'
+}
+
+function localizedFieldError(message: string) {
+  if (message === 'Invalid email address') return 'Введите корректную эл. почту'
+  if (message === 'Password must be at least 8 characters') {
+    return 'Пароль должен быть не короче 8 символов'
+  }
+
+  return message
 }

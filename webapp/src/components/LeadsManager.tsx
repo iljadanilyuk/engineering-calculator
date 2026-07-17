@@ -72,12 +72,12 @@ const statusOptions = [
 ] as const satisfies readonly CalculationStatus[]
 
 const statusLabels: Record<CalculationStatus, string> = {
-  new: 'New',
-  contacted: 'Contacted',
-  in_progress: 'In progress',
-  won: 'Won',
-  lost: 'Lost',
-  spam_test: 'Spam/Test',
+  new: 'Новая',
+  contacted: 'Связались',
+  in_progress: 'В работе',
+  won: 'Договорились',
+  lost: 'Отказ',
+  spam_test: 'Спам/тест',
 }
 
 const defaultFilters: LeadFilterState = {
@@ -144,25 +144,25 @@ export function LeadsManager() {
   return (
     <section className="grid gap-6" aria-labelledby="leads-heading">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <LeadMetric label="Active leads" value={summary?.activeCount ?? 0} />
-        <LeadMetric label="New" value={summary?.statusCounts.new ?? 0} />
-        <LeadMetric label="Won" value={summary?.statusCounts.won ?? 0} />
-        <LeadMetric label="Spam/Test" value={summary?.spamTestCount ?? 0} muted />
+        <LeadMetric label="Активные заявки" value={summary?.activeCount ?? 0} />
+        <LeadMetric label="Новые" value={summary?.statusCounts.new ?? 0} />
+        <LeadMetric label="Договорились" value={summary?.statusCounts.won ?? 0} />
+        <LeadMetric label="Спам/тест" value={summary?.spamTestCount ?? 0} muted />
       </div>
 
       <Card className="rounded-lg">
         <CardHeader>
           <div className="grid gap-2">
-            <CardTitle id="leads-heading">Submitted calculations</CardTitle>
+            <CardTitle id="leads-heading">Заявки из калькулятора</CardTitle>
             <CardDescription>
               {summary
-                ? `${numberFormatter.format(pageRange?.start ?? 0)}-${numberFormatter.format(pageRange?.end ?? 0)} of ${numberFormatter.format(summary.filteredCount)} filtered · ${numberFormatter.format(summary.totalCount)} total`
-                : 'Loading submitted calculations'}
+                ? `Показано ${numberFormatter.format(pageRange?.start ?? 0)}-${numberFormatter.format(pageRange?.end ?? 0)} из ${numberFormatter.format(summary.filteredCount)} · всего ${numberFormatter.format(summary.totalCount)}`
+                : 'Загружаем заявки'}
             </CardDescription>
           </div>
-          <CardAction>
+          <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
             <Button type="button" variant="outline" onClick={() => void leadsQuery.refetch()}>
-              Refresh
+              Обновить
             </Button>
           </CardAction>
         </CardHeader>
@@ -171,7 +171,7 @@ export function LeadsManager() {
 
           {actionError && (
             <Alert variant="destructive">
-              <AlertTitle>Lead update failed</AlertTitle>
+              <AlertTitle>Не удалось обновить заявку</AlertTitle>
               <AlertDescription>{actionError}</AlertDescription>
             </Alert>
           )}
@@ -179,97 +179,103 @@ export function LeadsManager() {
           {leadsQuery.isLoading ? (
             <div className="flex items-center gap-3 py-8">
               <Spinner />
-              <Typography tone="muted">Loading leads...</Typography>
+              <Typography tone="muted">Загружаем заявки...</Typography>
             </div>
           ) : leadsQuery.isError ? (
             <Alert variant="destructive">
-              <AlertTitle>Could not load leads</AlertTitle>
+              <AlertTitle>Не удалось загрузить заявки</AlertTitle>
               <AlertDescription>{errorMessage(leadsQuery.error)}</AlertDescription>
             </Alert>
           ) : leads.length === 0 ? (
             <div className="grid gap-3 rounded-lg border border-dashed p-8">
-              <Typography variant="h6">No submitted calculations</Typography>
-              <Typography tone="muted">Change filters or submit a public calculation first.</Typography>
+              <Typography variant="h6">Заявок нет</Typography>
+              <Typography tone="muted">Измените фильтры или дождитесь первой заявки с сайта.</Typography>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table className="min-w-[1120px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Area</TableHead>
-                    <TableHead>Selected services</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Total BYN</TableHead>
-                    <TableHead>USD</TableHead>
-                    <TableHead>Proposal</TableHead>
-                    <TableHead className="text-right">Detail</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {leads.map((lead) => (
-                    <TableRow
-                      key={lead.id}
-                      className={cn(lead.status === 'spam_test' && 'bg-muted/30 text-muted-foreground')}
-                    >
-                      <TableCell className="whitespace-nowrap">
-                        {formatDateTime(lead.createdAt)}
-                      </TableCell>
-                      <TableCell className="min-w-[180px] whitespace-normal">
-                        <div className="grid gap-1">
-                          <Typography variant="bodySmMedium">{lead.clientName}</Typography>
-                          {lead.objectName && (
-                            <Typography variant="caption" tone="muted">
-                              {lead.objectName}
-                            </Typography>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{lead.clientPhone}</TableCell>
-                      <TableCell className="whitespace-nowrap">{lead.areaSqm} m2</TableCell>
-                      <TableCell className="min-w-[240px] whitespace-normal">
-                        {servicesSummary(lead.serviceSnapshots)}
-                      </TableCell>
-                      <TableCell>
-                        <LeadStatusSelect
-                          value={lead.status}
-                          label={`Status for ${lead.clientName}`}
-                          disabled={updateLead.isPending}
-                          onChange={(status) => void changeStatus(lead, status)}
-                        />
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <Typography variant="bodySmMedium">
-                          {formatByn(lead.totalBynRoundedRubles)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {formatUsd(lead.totalUsdCents)}
-                      </TableCell>
-                      <TableCell>
-                        <ProposalLink lead={lead} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button asChild type="button" variant="outline" size="sm">
-                          <Link to="/app/leads/$leadId" params={{ leadId: lead.id }}>
-                            Open
-                          </Link>
-                        </Button>
-                      </TableCell>
+            <>
+              <div className="hidden lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Дата</TableHead>
+                      <TableHead>Клиент</TableHead>
+                      <TableHead>Телефон</TableHead>
+                      <TableHead>Площадь</TableHead>
+                      <TableHead>Услуги</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead>BYN</TableHead>
+                      <TableHead>USD</TableHead>
+                      <TableHead>КП/PDF</TableHead>
+                      <TableHead className="text-right">Карточка</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {leads.map((lead) => (
+                      <TableRow
+                        key={lead.id}
+                        className={cn(lead.status === 'spam_test' && 'bg-muted/30 text-muted-foreground')}
+                      >
+                        <TableCell className="whitespace-nowrap">
+                          {formatDateTime(lead.createdAt)}
+                        </TableCell>
+                        <TableCell className="min-w-[160px] whitespace-normal">
+                          <LeadClientSummary lead={lead} />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{lead.clientPhone}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatArea(lead.areaSqm)}</TableCell>
+                        <TableCell className="max-w-[220px] whitespace-normal">
+                          {servicesSummary(lead.serviceSnapshots)}
+                        </TableCell>
+                        <TableCell>
+                          <LeadStatusSelect
+                            value={lead.status}
+                            label={`Статус заявки ${lead.clientName}`}
+                            disabled={updateLead.isPending}
+                            onChange={(status) => void changeStatus(lead, status)}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <Typography className="tabular-nums" variant="bodySmMedium">
+                            {formatByn(lead.totalBynRoundedRubles)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {formatUsd(lead.totalUsdCents)}
+                        </TableCell>
+                        <TableCell>
+                          <ProposalLink lead={lead} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button asChild type="button" variant="outline" size="sm">
+                            <Link to="/app/leads/$leadId" params={{ leadId: lead.id }}>
+                              Открыть
+                            </Link>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="grid gap-3 lg:hidden">
+                {leads.map((lead) => (
+                  <LeadMobileCard
+                    key={lead.id}
+                    lead={lead}
+                    statusDisabled={updateLead.isPending}
+                    onStatusChange={changeStatus}
+                  />
+                ))}
+              </div>
+            </>
           )}
 
           {summary && summary.filteredCount > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
               <Typography variant="bodySm" tone="muted">
-                Showing {numberFormatter.format(pageRange?.start ?? 0)}-{numberFormatter.format(pageRange?.end ?? 0)} of{' '}
-                {numberFormatter.format(summary.filteredCount)} filtered leads
+                Показано {numberFormatter.format(pageRange?.start ?? 0)}-{numberFormatter.format(pageRange?.end ?? 0)} из{' '}
+                {numberFormatter.format(summary.filteredCount)}
               </Typography>
               <div className="flex gap-2">
                 <Button
@@ -279,7 +285,7 @@ export function LeadsManager() {
                   disabled={!pageRange?.canGoPrevious || leadsQuery.isFetching}
                   onClick={() => setOffset(Math.max(0, offset - summary.limit))}
                 >
-                  Previous
+                  Назад
                 </Button>
                 <Button
                   type="button"
@@ -288,7 +294,7 @@ export function LeadsManager() {
                   disabled={!pageRange?.canGoNext || leadsQuery.isFetching}
                   onClick={() => setOffset(offset + summary.limit)}
                 >
-                  Next
+                  Далее
                 </Button>
               </div>
             </div>
@@ -321,7 +327,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         id: lead.id,
         input: { status },
       })
-      setSavedMessage('Status saved')
+      setSavedMessage('Статус сохранен')
     } catch (error) {
       setActionError(errorMessage(error))
     }
@@ -340,7 +346,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         id: lead.id,
         input: { notes },
       })
-      setSavedMessage('Notes saved')
+      setSavedMessage('Заметки сохранены')
     } catch (error) {
       setActionError(errorMessage(error))
     }
@@ -348,9 +354,9 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
   if (leadQuery.isLoading) {
     return (
-      <section className="flex items-center gap-3 py-8" aria-label="Loading lead">
+      <section className="flex items-center gap-3 py-8" aria-label="Загрузка заявки">
         <Spinner />
-        <Typography tone="muted">Loading lead...</Typography>
+        <Typography tone="muted">Загружаем карточку заявки...</Typography>
       </section>
     )
   }
@@ -358,7 +364,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
   if (leadQuery.isError) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>Could not load lead</AlertTitle>
+        <AlertTitle>Не удалось загрузить заявку</AlertTitle>
         <AlertDescription>{errorMessage(leadQuery.error)}</AlertDescription>
       </Alert>
     )
@@ -370,7 +376,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
     <section className="grid gap-6" aria-labelledby="lead-detail-heading">
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild type="button" variant="outline" size="sm">
-          <Link to="/app/leads">Back to leads</Link>
+          <Link to="/app/leads">Назад к заявкам</Link>
         </Button>
         <Badge variant={lead.status === 'spam_test' ? 'secondary' : 'outline'}>
           {statusLabels[lead.status]}
@@ -379,7 +385,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
       {actionError && (
         <Alert variant="destructive">
-          <AlertTitle>Lead update failed</AlertTitle>
+          <AlertTitle>Не удалось обновить заявку</AlertTitle>
           <AlertDescription>{actionError}</AlertDescription>
         </Alert>
       )}
@@ -387,7 +393,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
       {savedMessage && (
         <Alert>
           <AlertTitle>{savedMessage}</AlertTitle>
-          <AlertDescription>Latest admin changes are stored.</AlertDescription>
+          <AlertDescription>Последние изменения в админке сохранены.</AlertDescription>
         </Alert>
       )}
 
@@ -398,79 +404,51 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               <div className="grid gap-2">
                 <CardTitle id="lead-detail-heading">{lead.clientName}</CardTitle>
                 <CardDescription>
-                  Created {formatDateTime(lead.createdAt)} · Updated {formatDateTime(lead.updatedAt)}
+                  Создана {formatDateTime(lead.createdAt)} · обновлена {formatDateTime(lead.updatedAt)}
                 </CardDescription>
               </div>
-              <CardAction>
+              <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
                 <ProposalLink
                   lead={lead}
-                  preferredLabel={hasPdfArtifact(lead.proposalArtifacts[0]) ? 'Open original PDF' : 'Open proposal'}
+                  preferredLabel={hasPdfArtifact(lead.proposalArtifacts[0]) ? 'Открыть PDF' : 'Открыть КП'}
                 />
               </CardAction>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <DetailItem label="Phone" value={lead.clientPhone} />
-              <DetailItem label="Object" value={lead.objectName ?? 'Not specified'} />
-              <DetailItem label="Area" value={`${lead.areaSqm} m2`} />
-              <DetailItem label="Offer total" value={`${formatByn(lead.totalBynRoundedRubles)} · ${formatUsd(lead.totalUsdCents)}`} />
+              <DetailItem label="Телефон" value={lead.clientPhone} />
+              <DetailItem label="Объект" value={lead.objectName ?? 'Не указан'} />
+              <DetailItem label="Площадь" value={formatArea(lead.areaSqm)} />
+              <DetailItem label="Сумма КП" value={`${formatByn(lead.totalBynRoundedRubles)} · ${formatUsd(lead.totalUsdCents)}`} />
             </CardContent>
           </Card>
 
           <Card className="rounded-lg">
             <CardHeader>
-              <CardTitle>Calculation breakdown</CardTitle>
+              <CardTitle>Состав расчета</CardTitle>
               <CardDescription>
-                Exchange rate {lead.exchangeRate.usdToBynRate} BYN/USD · {lead.exchangeRate.source}
+                Курс {lead.exchangeRate.usdToBynRate} BYN/USD · {exchangeRateSourceLabel(lead.exchangeRate.source)}
                 {lead.exchangeRate.asOf ? ` · ${formatDateTime(lead.exchangeRate.asOf)}` : ''}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-5">
-              <div className="overflow-x-auto">
-                <Table className="min-w-[720px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Service snapshot</TableHead>
-                      <TableHead>Pricing</TableHead>
-                      <TableHead>USD</TableHead>
-                      <TableHead>BYN</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {lead.calculationSnapshot.lineItems.map((lineItem) => (
-                      <TableRow key={lineItem.serviceId}>
-                        <TableCell className="min-w-[280px] whitespace-normal">
-                          <div className="grid gap-1">
-                            <Typography variant="bodySmMedium">
-                              {lineItem.serviceSnapshot.title}
-                            </Typography>
-                            {lineItem.serviceSnapshot.description && (
-                              <Typography variant="caption" tone="muted">
-                                {lineItem.serviceSnapshot.description}
-                              </Typography>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{linePricingLabel(lineItem)}</TableCell>
-                        <TableCell>{formatUsd(lineItem.totalUsdCents)}</TableCell>
-                        <TableCell>{formatByn(lineItem.totalBynRoundedRubles)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="grid overflow-hidden rounded-lg border">
+                {lead.calculationSnapshot.lineItems.map((lineItem) => (
+                  <CalculationLine key={lineItem.serviceId} lineItem={lineItem} />
+                ))}
               </div>
               <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 sm:grid-cols-3">
-                <DetailItem label="USD total" value={formatUsd(lead.totalUsdCents)} />
-                <DetailItem label="BYN cents" value={`${numberFormatter.format(lead.totalBynCents / 100)} Br`} />
-                <DetailItem label="BYN total" value={formatByn(lead.totalBynRoundedRubles)} />
+                <DetailItem label="Итого USD" value={formatUsd(lead.totalUsdCents)} />
+                <DetailItem label="BYN до округления" value={`${numberFormatter.format(lead.totalBynCents / 100)} BYN`} />
+                <DetailItem label="Итого BYN" value={formatByn(lead.totalBynRoundedRubles)} />
               </div>
             </CardContent>
           </Card>
 
           <Card className="rounded-lg">
             <CardHeader>
-              <CardTitle>Selected service snapshot</CardTitle>
+              <CardTitle>Снимок выбранных услуг</CardTitle>
               <CardDescription>
-                Stored from the original calculation, independent from current service prices.
+                Сохранен при отправке заявки и не зависит от текущих цен в админке.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -489,34 +467,34 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         <aside className="grid h-fit gap-6">
           <Card className="rounded-lg">
             <CardHeader>
-              <CardTitle>CRM status</CardTitle>
+              <CardTitle>Статус заявки</CardTitle>
               <CardDescription>
-                Last status change {formatDateTime(lead.statusUpdatedAt)}
+                Последнее изменение {formatDateTime(lead.statusUpdatedAt)}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
               <Field>
-                <FieldLabel>Status</FieldLabel>
+                <FieldLabel>Статус</FieldLabel>
                 <LeadStatusSelect
                   value={lead.status}
-                  label="Lead status"
+                  label="Статус заявки"
                   disabled={updateLead.isPending}
                   onChange={(status) => void changeStatus(status)}
                 />
               </Field>
-              <DetailItem label="statusUpdatedAt" value={formatDateTime(lead.statusUpdatedAt)} />
+              <DetailItem label="Статус обновлен" value={formatDateTime(lead.statusUpdatedAt)} />
             </CardContent>
           </Card>
 
           <Card className="rounded-lg">
             <CardHeader>
-              <CardTitle>Notes</CardTitle>
-              <CardDescription>Internal admin comment.</CardDescription>
+              <CardTitle>Внутренние заметки</CardTitle>
+              <CardDescription>Служебный комментарий, который виден только в админке.</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="grid gap-4" onSubmit={(event) => void saveNotes(event)}>
                 <Field>
-                  <FieldLabel htmlFor="lead-notes">Notes</FieldLabel>
+                  <FieldLabel htmlFor="lead-notes">Внутренние заметки</FieldLabel>
                   <Textarea
                     id="lead-notes"
                     key={`${lead.id}-${lead.notes ?? ''}`}
@@ -527,7 +505,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                   />
                 </Field>
                 <Button type="submit" disabled={updateLead.isPending}>
-                  Save notes
+                  Сохранить заметки
                 </Button>
               </form>
             </CardContent>
@@ -535,12 +513,12 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
           <Card className="rounded-lg">
             <CardHeader>
-              <CardTitle>Original proposal</CardTitle>
-              <CardDescription>Offer artifacts are opened by their saved public token.</CardDescription>
+              <CardTitle>КП/PDF</CardTitle>
+              <CardDescription>Открывается сохраненный артефакт исходного коммерческого предложения.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               {lead.proposalArtifacts.length === 0 ? (
-                <Typography tone="muted">No proposal artifact stored.</Typography>
+                <Typography tone="muted">КП/PDF для этой заявки не сохранен.</Typography>
               ) : (
                 lead.proposalArtifacts.map((artifact) => (
                   <div key={artifact.id} className="grid gap-2 rounded-lg border p-4">
@@ -551,7 +529,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                     <Button asChild type="button" variant="outline" size="sm">
                       <a href={proposalHref(artifact)} target="_blank" rel="noreferrer">
                         <Typography as="span" variant="control">
-                          {artifact.pdfUrlPath || artifact.pdfUrl ? 'Open original PDF' : 'Open proposal'}
+                          {artifact.pdfUrlPath || artifact.pdfUrl ? 'Открыть PDF' : 'Открыть КП'}
                         </Typography>
                       </a>
                     </Button>
@@ -560,9 +538,136 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               )}
             </CardContent>
           </Card>
+
+          <Card className="rounded-lg">
+            <CardHeader>
+              <CardTitle>Следующие этапы</CardTitle>
+              <CardDescription>
+                Место в карточке уже выделено под будущие ТЗ, договор и Telegram-уточнения.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Badge variant="secondary">ТЗ позже</Badge>
+              <Badge variant="secondary">Договор позже</Badge>
+              <Badge variant="secondary">Telegram позже</Badge>
+            </CardContent>
+          </Card>
         </aside>
       </div>
     </section>
+  )
+}
+
+function LeadClientSummary({
+  lead,
+}: {
+  lead: Pick<CalculationListItem, 'clientName' | 'objectName'>
+}) {
+  return (
+    <div className="grid gap-1">
+      <Typography variant="bodySmMedium">{lead.clientName}</Typography>
+      {lead.objectName && (
+        <Typography variant="caption" tone="muted">
+          {lead.objectName}
+        </Typography>
+      )}
+    </div>
+  )
+}
+
+function LeadMobileCard({
+  lead,
+  statusDisabled,
+  onStatusChange,
+}: {
+  lead: CalculationListItem
+  statusDisabled: boolean
+  onStatusChange: (lead: CalculationListItem, status: CalculationStatus) => void | Promise<void>
+}) {
+  return (
+    <div className={cn('grid gap-4 rounded-lg border p-4', lead.status === 'spam_test' && 'bg-muted/30 text-muted-foreground')}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <LeadClientSummary lead={lead} />
+        <LeadStatusBadge status={lead.status} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <LeadMobileFact label="Телефон" value={lead.clientPhone} />
+        <LeadMobileFact label="Дата" value={formatDateTime(lead.createdAt)} />
+        <LeadMobileFact label="Площадь" value={formatArea(lead.areaSqm)} />
+        <LeadMobileFact label="Сумма" value={formatByn(lead.totalBynRoundedRubles)} />
+      </div>
+
+      <div className="grid gap-1 border-t pt-3">
+        <Typography variant="caption" tone="muted">
+          Услуги
+        </Typography>
+        <Typography variant="bodySm">{servicesSummary(lead.serviceSnapshots)}</Typography>
+      </div>
+
+      <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <Field>
+          <FieldLabel>Статус</FieldLabel>
+          <LeadStatusSelect
+            value={lead.status}
+            label={`Статус заявки ${lead.clientName}`}
+            disabled={statusDisabled}
+            onChange={(status) => void onStatusChange(lead, status)}
+          />
+        </Field>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <ProposalLink lead={lead} />
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link to="/app/leads/$leadId" params={{ leadId: lead.id }}>
+              Открыть
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LeadStatusBadge({ status }: { status: CalculationStatus }) {
+  return (
+    <Badge variant={status === 'spam_test' ? 'secondary' : 'outline'}>
+      {statusLabels[status]}
+    </Badge>
+  )
+}
+
+function LeadMobileFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <Typography variant="caption" tone="muted">
+        {label}
+      </Typography>
+      <Typography className="tabular-nums" variant="bodySmMedium">
+        {value}
+      </Typography>
+    </div>
+  )
+}
+
+function CalculationLine({ lineItem }: { lineItem: CalculationLineItem }) {
+  return (
+    <div className="grid gap-3 border-b p-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+      <div className="grid gap-1">
+        <Typography variant="bodySmMedium">
+          {lineItem.serviceSnapshot.title}
+        </Typography>
+        {lineItem.serviceSnapshot.description && (
+          <Typography variant="caption" tone="muted">
+            {lineItem.serviceSnapshot.description}
+          </Typography>
+        )}
+        <Typography variant="caption" tone="muted">
+          {linePricingLabel(lineItem)}
+        </Typography>
+      </div>
+      <DetailItem label="USD" value={formatUsd(lineItem.totalUsdCents)} />
+      <DetailItem label="BYN" value={formatByn(lineItem.totalBynRoundedRubles)} />
+    </div>
   )
 }
 
@@ -576,59 +681,65 @@ function LeadFilters({
   onClear: () => void
 }) {
   return (
-    <FieldGroup className="grid gap-4 md:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_auto] md:items-end">
-      <Field>
-        <FieldLabel htmlFor="lead-search">Search</FieldLabel>
-        <Input
-          id="lead-search"
-          value={filters.search}
-          onChange={(event) => onChange({ ...filters, search: event.target.value })}
-          placeholder="Name or phone"
-        />
-      </Field>
-      <Field>
-        <FieldLabel>Status</FieldLabel>
-        <Select
-          value={filters.status}
-          onValueChange={(value) =>
-            onChange({
-              ...filters,
-              status: value === 'all' ? 'all' : calculationStatus(value),
-            })
-          }
-        >
-          <SelectTrigger aria-label="Status filter" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {statusOptions.map((status) => (
-              <SelectItem key={status} value={status}>
-                {statusLabels[status]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="lead-name">Name</FieldLabel>
-        <Input
-          id="lead-name"
-          value={filters.name}
-          onChange={(event) => onChange({ ...filters, name: event.target.value })}
-        />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="lead-phone">Phone</FieldLabel>
-        <Input
-          id="lead-phone"
-          value={filters.phone}
-          onChange={(event) => onChange({ ...filters, phone: event.target.value })}
-        />
-      </Field>
-      <div className="grid grid-cols-2 gap-2">
+    <FieldGroup className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
         <Field>
-          <FieldLabel htmlFor="lead-created-from">From</FieldLabel>
+          <FieldLabel htmlFor="lead-search">Поиск</FieldLabel>
+          <Input
+            id="lead-search"
+            value={filters.search}
+            onChange={(event) => onChange({ ...filters, search: event.target.value })}
+            placeholder="Имя или телефон"
+          />
+        </Field>
+        <Field>
+          <FieldLabel>Статус</FieldLabel>
+          <Select
+            value={filters.status}
+            onValueChange={(value) =>
+              onChange({
+                ...filters,
+                status: value === 'all' ? 'all' : calculationStatus(value),
+              })
+            }
+          >
+            <SelectTrigger aria-label="Фильтр по статусу" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все статусы</SelectItem>
+              {statusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {statusLabels[status]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Button type="button" variant="outline" onClick={onClear}>
+          Сбросить
+        </Button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Field>
+          <FieldLabel htmlFor="lead-name">Имя</FieldLabel>
+          <Input
+            id="lead-name"
+            value={filters.name}
+            onChange={(event) => onChange({ ...filters, name: event.target.value })}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="lead-phone">Телефон</FieldLabel>
+          <Input
+            id="lead-phone"
+            value={filters.phone}
+            onChange={(event) => onChange({ ...filters, phone: event.target.value })}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="lead-created-from">С даты</FieldLabel>
           <Input
             id="lead-created-from"
             type="date"
@@ -637,7 +748,7 @@ function LeadFilters({
           />
         </Field>
         <Field>
-          <FieldLabel htmlFor="lead-created-to">To</FieldLabel>
+          <FieldLabel htmlFor="lead-created-to">По дату</FieldLabel>
           <Input
             id="lead-created-to"
             type="date"
@@ -646,9 +757,6 @@ function LeadFilters({
           />
         </Field>
       </div>
-      <Button type="button" variant="outline" onClick={onClear}>
-        Clear
-      </Button>
     </FieldGroup>
   )
 }
@@ -666,7 +774,7 @@ function LeadStatusSelect({
 }) {
   return (
     <Select value={value} onValueChange={(next) => onChange(calculationStatus(next))} disabled={disabled}>
-      <SelectTrigger aria-label={label} className="w-[150px]">
+      <SelectTrigger aria-label={label} className="w-full min-w-[150px]">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -685,7 +793,7 @@ function LeadMetric({ label, value, muted = false }: { label: string; value: num
     <Card size="sm" className={cn('rounded-lg', muted && 'bg-muted/30')}>
       <CardHeader>
         <CardDescription>{label}</CardDescription>
-        <CardTitle>{numberFormatter.format(value)}</CardTitle>
+        <CardTitle className="tabular-nums">{numberFormatter.format(value)}</CardTitle>
       </CardHeader>
     </Card>
   )
@@ -710,8 +818,11 @@ function ProposalLink({
   preferredLabel?: string
 }) {
   const artifact = lead.proposalArtifacts[0]
-  if (!artifact) return <Typography tone="muted">No artifact</Typography>
+  if (!artifact) return <Typography tone="muted">Нет КП</Typography>
   const label = preferredLabel ?? proposalButtonLabel(artifact)
+  const ariaLabel = hasPdfArtifact(artifact)
+    ? `Открыть PDF для ${lead.clientName}`
+    : `Открыть КП для ${lead.clientName}`
 
   return (
     <Button asChild type="button" variant="ghost" size="sm">
@@ -719,7 +830,7 @@ function ProposalLink({
         href={proposalHref(artifact)}
         target="_blank"
         rel="noreferrer"
-        aria-label={`${label} for ${lead.clientName}`}
+        aria-label={ariaLabel}
       >
         <Typography as="span" variant="control">
           {label}
@@ -743,7 +854,7 @@ function filterStateToQuery(filters: LeadFilterState, offset: number): LeadListF
 }
 
 function servicesSummary(services: CalculationListItem['serviceSnapshots']) {
-  if (services.length === 0) return 'No services'
+  if (services.length === 0) return 'Нет услуг'
   const visible = services.slice(0, 2).map((service) => service.title).join(', ')
   return services.length > 2 ? `${visible} +${services.length - 2}` : visible
 }
@@ -755,7 +866,7 @@ function proposalHref(artifact: CalculationRecord['proposalArtifacts'][number]) 
 }
 
 function proposalButtonLabel(artifact: CalculationRecord['proposalArtifacts'][number]) {
-  return hasPdfArtifact(artifact) ? 'PDF' : 'Proposal'
+  return hasPdfArtifact(artifact) ? 'PDF' : 'КП'
 }
 
 function hasPdfArtifact(artifact: CalculationRecord['proposalArtifacts'][number] | undefined) {
@@ -774,7 +885,7 @@ function formatDateTime(value: string) {
 }
 
 function formatByn(rubles: number) {
-  return `${numberFormatter.format(rubles)} Br`
+  return `${numberFormatter.format(rubles)} BYN`
 }
 
 function formatUsd(cents: number) {
@@ -786,22 +897,32 @@ function formatUsd(cents: number) {
         maximumFractionDigits: 2,
       }).format(value)
 
-  return `~${formatted} $`
+  return `~${formatted} USD`
 }
 
 function linePricingLabel(lineItem: CalculationLineItem) {
-  if (lineItem.quantity.kind === 'fixed') return 'Fixed'
-  return `${lineItem.quantity.areaSqm} m2 x ${formatUsd(lineItem.unitPriceUsdCents)}`
+  if (lineItem.quantity.kind === 'fixed') return 'Фиксированная'
+  return `${formatArea(lineItem.quantity.areaSqm)} x ${formatUsd(lineItem.unitPriceUsdCents)}`
 }
 
 function pricingTypeLabel(pricingType: CalculationRecord['serviceSnapshots'][number]['pricingType']) {
-  if (pricingType === 'fixed') return 'Fixed'
-  if (pricingType === 'per_sqm') return 'Per m2'
-  return 'Formula'
+  if (pricingType === 'fixed') return 'Фиксированная'
+  if (pricingType === 'per_sqm') return 'За м²'
+  return 'Формула'
+}
+
+function formatArea(value: string | number) {
+  return `${value} м²`
+}
+
+function exchangeRateSourceLabel(source: string) {
+  if (source === 'manual') return 'вручную'
+  if (source === 'nbrb') return 'НБ РБ'
+  return source
 }
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiRequestError) return error.message
   if (error instanceof Error) return error.message
-  return 'Unexpected error'
+  return 'Неожиданная ошибка'
 }

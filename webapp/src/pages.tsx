@@ -27,21 +27,21 @@ export function RootLayout() {
           <Typography asChild variant="h6">
             <Link to="/">ИП Позняк</Link>
           </Typography>
-          <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
+          <nav className="ml-auto flex items-center gap-2" aria-label="Основная навигация">
             <Typography asChild variant="control" tone="muted">
               <Link to="/" className={navLinkClass}>
-                Login
+                Вход
               </Link>
             </Typography>
             <Typography asChild variant="control" tone="muted">
               <Link to="/app" className={navLinkClass}>
-                Admin
+                Админка
               </Link>
             </Typography>
           </nav>
           {auth.isAuthenticated && (
             <Button type="button" variant="outline" size="sm" onClick={() => void auth.logout()}>
-              Logout
+              Выйти
             </Button>
           )}
         </div>
@@ -104,13 +104,13 @@ function LoginScreen() {
     <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
       <div className="grid gap-5">
         <Badge variant="outline" className="w-fit">
-          Admin cabinet
+          Админ-панель
         </Badge>
         <Typography className="max-w-3xl" variant="h1">
-          Login for calculator administration.
+          Вход в управление калькулятором
         </Typography>
         <Typography className="max-w-2xl" tone="muted">
-          Manage services, exchange-rate settings, submitted calculations, and proposal records.
+          Рабочий кабинет для заявок, услуг, цен и сохраненных КП/PDF.
         </Typography>
       </div>
       <AuthForm />
@@ -124,16 +124,16 @@ function ForbiddenState() {
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
       <Badge variant="outline" className="w-fit">
-        Forbidden
+        Нет доступа
       </Badge>
       <div className="grid max-w-3xl gap-4">
-        <Typography variant="h1">Admin access required</Typography>
+        <Typography variant="h1">Нужны права администратора</Typography>
         <Typography className="max-w-2xl" tone="muted">
-          The current account is signed in but is not allowed to use the admin cabinet.
+          Эта учетная запись вошла в систему, но у нее нет доступа к админ-панели.
         </Typography>
       </div>
       <Button type="button" size="lg" className="w-fit" onClick={() => void auth.logout()}>
-        Logout
+        Выйти
       </Button>
     </section>
   )
@@ -152,27 +152,33 @@ function AdminShell({
   if (!user) return null
 
   const title = section === 'services'
-    ? 'Services management'
-    : section === 'leads' ? 'Leads Mini-CRM' : 'Lead detail'
+    ? 'Услуги и цены'
+    : section === 'leads' ? 'Заявки' : 'Карточка заявки'
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="grid gap-3">
           <Badge variant="outline" className="w-fit">
-            Admin cabinet
+            Управление калькулятором
           </Badge>
           <Typography variant="h1">{title}</Typography>
           <Typography tone="muted">
-            Signed in as {user.displayName ?? user.email} · {user.email}
+            Вы вошли как {user.displayName ?? user.email} · {user.email}
           </Typography>
         </div>
-        <nav className="flex flex-wrap gap-2" aria-label="Admin sections">
+        <nav className="flex flex-wrap gap-2" aria-label="Разделы админки">
           <Button asChild type="button" variant={section === 'services' ? 'default' : 'outline'} size="sm">
-            <Link to="/app/services">Services</Link>
+            <Link to="/app/services">Услуги и цены</Link>
           </Button>
           <Button asChild type="button" variant={section !== 'services' ? 'default' : 'outline'} size="sm">
-            <Link to="/app/leads">Leads</Link>
+            <Link to="/app/leads">Заявки</Link>
+          </Button>
+          <Button type="button" variant="ghost" size="sm" disabled>
+            Проекты/ТЗ
+          </Button>
+          <Button type="button" variant="ghost" size="sm" disabled>
+            Договоры
           </Button>
         </nav>
       </div>
@@ -193,7 +199,7 @@ function LoadingState() {
         <CardContent className="flex items-center gap-3">
           <Spinner />
           <Typography variant="bodySm" tone="muted">
-            Checking session...
+            Проверяем сессию...
           </Typography>
         </CardContent>
       </Card>

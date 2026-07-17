@@ -7,7 +7,7 @@ test('logs in to the protected admin shell and logs out', async ({ page }) => {
   await page.goto('/app')
 
   await expect(
-    page.getByRole('heading', { name: 'Login for calculator administration.' }),
+    page.getByRole('heading', { name: 'Вход в управление калькулятором' }),
   ).toBeVisible()
 
   const anonymousAdminApiStatus = await page.evaluate(async (backendUrl) => {
@@ -19,19 +19,19 @@ test('logs in to the protected admin shell and logs out', async ({ page }) => {
   }, backendUrl)
   expect(anonymousAdminApiStatus).toBe(401)
 
-  await page.getByRole('button', { name: 'Login' }).click()
-  await expect(page.getByText('Invalid email address')).toBeVisible()
-  await expect(page.getByText('Password must be at least 8 characters')).toBeVisible()
+  await page.getByRole('button', { name: 'Войти' }).click()
+  await expect(page.getByText('Введите корректную эл. почту')).toBeVisible()
+  await expect(page.getByText('Пароль должен быть не короче 8 символов')).toBeVisible()
 
-  await page.getByLabel('Email').fill(e2eAdminEmail)
-  await page.getByLabel('Password').fill('wrong-password')
-  await page.getByRole('button', { name: 'Login' }).click()
-  await expect(page.getByText('Invalid email or password')).toBeVisible()
+  await page.getByLabel('Эл. почта').fill(e2eAdminEmail)
+  await page.getByLabel('Пароль').fill('wrong-password')
+  await page.getByRole('button', { name: 'Войти' }).click()
+  await expect(page.getByText('Неверная почта или пароль')).toBeVisible()
 
-  await page.getByLabel('Password').fill(e2ePassword)
-  await page.getByRole('button', { name: 'Login' }).click()
+  await page.getByLabel('Пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Войти' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Services management' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Услуги и цены' })).toBeVisible()
   await expect(page.getByText(e2eAdminEmail)).toBeVisible()
   await expect
     .poll(async () =>
@@ -53,10 +53,25 @@ test('logs in to the protected admin shell and logs out', async ({ page }) => {
 
   await expect((await refreshAfterReload).status()).toBe(200)
   await expect((await meAfterReload).status()).toBe(200)
-  await expect(page.getByRole('heading', { name: 'Services management' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Услуги и цены' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Logout' }).click()
+  await page.getByRole('button', { name: 'Выйти' }).click()
   await expect(
-    page.getByRole('heading', { name: 'Login for calculator administration.' }),
+    page.getByRole('heading', { name: 'Вход в управление калькулятором' }),
   ).toBeVisible()
 })
+
+test('mobile login screen has no horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/app')
+  await expect(page.getByRole('heading', { name: 'Вход в управление калькулятором' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
+async function expectNoHorizontalOverflow(page: import('@playwright/test').Page) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    )
+    .toBe(true)
+}
