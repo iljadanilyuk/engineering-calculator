@@ -138,6 +138,8 @@ Backend App Platform service env:
 | `TRUST_PROXY_HEADERS` | run time | general | `true` |
 | `TELEGRAM_BOT_TOKEN` | run time | secret | add only after approved internal chat is confirmed |
 | `TELEGRAM_CHAT_ID` | run time | secret | add only after approved internal chat is confirmed |
+| `TELEGRAM_BOT_USERNAME` | run time | general | optional overall; required for client Telegram delivery deep links |
+| `TELEGRAM_WEBHOOK_SECRET` | run time | secret | optional overall; required for client Telegram delivery |
 | `PDF_CHROMIUM_EXECUTABLE_PATH` | run time | general/secret not needed | set only if the deployed image cannot discover Chromium |
 
 Do not put backend secrets, database URLs, JWT secrets, Telegram values, or storage keys in frontend build env.

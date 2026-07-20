@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  projectExampleRequestSaveResponseSchema,
   projectExampleCreateRequestSchema,
   projectExampleRequestCreateRequestSchema,
 } from './backend'
@@ -80,5 +81,34 @@ describe('backend contracts', () => {
         consentAccepted: false,
       }),
     ).toThrow()
+  })
+
+  test('validates public Telegram delivery metadata without requiring Telegram secrets', () => {
+    const result = projectExampleRequestSaveResponseSchema.parse({
+      request: {
+        publicToken: 'a'.repeat(32),
+        clientPhone: '+375291112233',
+        requestedExamples: [
+          {
+            slug: 'ov',
+            code: 'ОВ',
+            title: 'Example OV',
+            description: 'Example description',
+            fileName: 'proekt-primer-ov.pdf',
+            pageCount: 39,
+            fileSizeBytes: 5_607_314,
+            urlPath: `/api/public/project-example-requests/${'a'.repeat(32)}/examples/ov`,
+          },
+        ],
+        telegramDelivery: {
+          status: 'pending_start',
+          deepLinkUrl: `https://t.me/PoznyakCalcBot?start=${'b'.repeat(32)}`,
+        },
+        createdAt: '2026-07-20T00:00:00.000Z',
+      },
+    })
+
+    expect(result.request.telegramDelivery?.status).toBe('pending_start')
+    expect(result.request.telegramDelivery?.deepLinkUrl).not.toContain('telegram-secret-token')
   })
 })

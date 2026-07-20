@@ -131,7 +131,7 @@ Planned v1 env areas:
 - Auth/session: `JWT_SECRET`, token TTLs, `COOKIE_SECURE`, `TRUST_PROXY_HEADERS`
 - First admin setup: one-off `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_DISPLAY_NAME`
 - Public URLs/CORS: `CORS_ORIGINS` for public browser API origins, `AUTH_CORS_ORIGINS` for admin webapp cookie/auth origins, `PUBLIC_API_URL` for proposal/PDF links, `PUBLIC_WEBSITE_URL` for public page/example links inside proposal snapshots, and `PUBLIC_WEBAPP_URL` for admin detail links
-- Telegram notifications: `TELEGRAM_BOT_TOKEN` and approved internal `TELEGRAM_CHAT_ID`; leave either blank to skip notifications safely
+- Telegram notifications and client delivery: `TELEGRAM_BOT_TOKEN`, approved internal `TELEGRAM_CHAT_ID`, and for client document delivery also `TELEGRAM_BOT_USERNAME` plus `TELEGRAM_WEBHOOK_SECRET`; leave incomplete values blank to skip safely
 - PDF/proposal storage: persistent local volume, object storage, or another approved durable store
 - Public contacts: phone/email/Telegram shown on the public page and PDF
 

@@ -1370,7 +1370,7 @@ Review log:
 
 ### PZK-020 - Telegram Delivery And Project Context Bot
 
-Status: Pending
+Status: Complete
 
 Goal:
 
@@ -1402,6 +1402,44 @@ Out of scope:
 - Making Telegram the only way to receive a document.
 - Automatically changing the final technical assignment without admin approval.
 - Exposing Telegram bot secrets in frontend env, browser responses, or logs.
+
+Completion notes:
+
+- Added DB-backed `telegram_deliveries` records for preliminary proposals and lead-gated project-example requests, created transactionally with the business record.
+- Public post-contact responses can include a per-lead Telegram bot deep link when `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and `TELEGRAM_WEBHOOK_SECRET` are all configured.
+- Missing/incomplete Telegram env creates a disabled delivery record and leaves the normal tokenized web proposal/example links available.
+- Added authenticated `POST /api/public/telegram/webhook` handling for private-chat `/start <bindToken>` updates only.
+- Linked Telegram chat/user metadata to the delivery record when the client opens the bot deep link.
+- Added atomic delivery claiming so webhook retries/concurrent starts do not send the same proposal/example more than once.
+- Persisted sent/failed/disabled status, attempt count, timestamps, recipient metadata, and sanitized failure messages.
+- Admin leads and project-example requests now show Telegram delivery status/logs; public/admin contracts include safe Telegram metadata only.
+- Telegram bot token, webhook secret, internal chat ID, and opaque bind token are not returned to browser/admin API responses.
+- Added `docs/design/telegram-project-context-bot-architecture-2026-07-20.md` as the Phase 2 foundation.
+- Full project Telegram group listener, voice/file ingestion, daily AI summaries, and admin approval workflow are intentionally deferred to PZK-026.
+- No Codex plugin layer, paid DigitalOcean/cloud resources, or production Telegram webhook settings were changed.
+
+Verification:
+
+- `bun run typecheck:backend` passed.
+- `bun run test:backend:unit` passed: 40/40.
+- `bun run test:contracts` passed: 24/24.
+- `bun run test:backend:integration` passed: 38/38.
+- `bun run typecheck:webapp` passed.
+- `bun run typecheck:website` passed.
+- `bun run --cwd webapp test` passed: 40/40.
+- `bun run typecheck` passed.
+- `bun run test:deploy` passed: 20/20.
+- `bun run build` passed with existing warnings: Vite large webapp chunk and inherited local `NODE_TLS_REJECT_UNAUTHORIZED=0` during Astro build.
+- `bun run e2e:webapp` passed: 5/5.
+- `git diff --check` passed, with only expected Windows LF/CRLF warnings.
+
+Review log:
+
+- Pre-task reviewer Hypatia, `gpt-5.5 xhigh`: flagged separation between internal manager Telegram notifications and client document delivery, opaque bot bind tokens separate from public document tokens, admin-visible delivery logs, optional Telegram fallback web links, and deferring full project-context bot scope. Recommendations incorporated.
+- Post-task reviewers:
+  - Ptolemy: 8.0/10; required making webhook secret mandatory for client delivery, adding idempotent/concurrency-safe delivery claiming, ignoring non-private chats, redacting token-bearing Telegram errors, and showing full admin logs for project-example delivery. Fixes incorporated.
+  - Godel: 9.1/10; required disabled delivery when webhook secret is missing and regression coverage for redacted transport errors. Fixes incorporated.
+- Focused post-fix reviewer Anscombe, `gpt-5.5 xhigh`: 9.6/10; no required code changes, confirmed webhook-secret gating, private-chat-only `/start`, atomic delivery claim, sanitized failures, admin logs, frontend secret safety, and Telegram optional fallback. Gate cleared.
 
 ### PZK-021 - Admin Workspace V1 From Prototype
 
@@ -1615,6 +1653,39 @@ Review log:
 - Pre-task sub-agent Jason, `gpt-5.5 xhigh`: flagged cache/absolute URL/FAQ/PDF leak/image-context risks before closeout.
 - Post-task reviewer Jason, `gpt-5.5 xhigh`: 9.7/10, required fixes none, gate cleared.
 
+### PZK-026 - Telegram Project Group Listener And Daily TZ Drafts
+
+Status: Pending
+
+Goal:
+
+- Extend the PZK-020 Telegram foundation from one-time client document delivery into an optional project-context channel for real projects.
+
+Required behavior:
+
+- Allow an admin-approved project Telegram group/thread to be linked to a lead/project only after consent and bot permission checks.
+- Store inbound Telegram messages with enough metadata for audit/debugging without exposing bot secrets.
+- Support text first, then files/voice/transcripts only when storage, consent, retention, and privacy behavior are explicit.
+- Produce a daily draft update for the technical assignment:
+  - new facts;
+  - open questions;
+  - contradictions;
+  - decisions requiring confirmation.
+- Show draft updates in the admin cabinet for manual accept/edit/reject.
+- Never automatically change the final ТЗ or proposal without admin confirmation.
+- Telegram must remain optional; website/admin fallback workflows must continue to work without Telegram.
+
+Dependencies / notes:
+
+- Builds on `TelegramDelivery` and `docs/design/telegram-project-context-bot-architecture-2026-07-20.md`.
+- Should be split further if voice/file ingestion or AI summary review becomes too large for one task.
+
+Out of scope:
+
+- Production Telegram webhook configuration or cloud resource changes without explicit approval.
+- Committing Telegram secrets or exposing them through frontend env, browser responses, admin settings, or logs.
+- Fully automated final technical assignment approval.
+
 ## 11. Post-Launch Follow-Ups
 
 These do not block the PZK-015 production launch, but should be resolved for polish, operations, or v2 work:
@@ -1792,3 +1863,10 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Franklin: 9.0/10; no hard blockers, but flagged direct admin ProjectExample `fileUrl` leakage into new КП, public `/api/public/project-examples` exposing `fileUrl`, generic calculation-specific rate-limit wording for example requests, and unrelated design/prototype files needing to remain unstaged. Fixes incorporated before final review.
 - 2026-07-17 PZK-017 focused post-task review round 2:
   - Reviewer Pauli: 9.6/10; confirmed public example summaries omit `fileUrl`, КП proof cards no longer emit direct PDF URLs, tokenized PDF delivery is behind saved contact requests, admin visibility is present, and unrelated landing V4/prototype files must remain outside the PZK-017 commit. No required blockers remained; PZK-017 gate cleared.
+- 2026-07-20 PZK-020 pre-task review:
+  - Reviewer Hypatia: `gpt-5.5 xhigh`; flagged separation of internal Telegram notifications from client delivery, opaque bind tokens, admin-visible logs, optional web fallback, and deferring full project-context bot scope. Recommendations incorporated.
+- 2026-07-20 PZK-020 post-task review round 1:
+  - Reviewer Ptolemy: 8.0/10; required webhook-secret gating, idempotent delivery claiming, private-chat-only `/start`, Telegram error redaction, and full project-example admin logs. Changes incorporated.
+  - Reviewer Godel: 9.1/10; required disabled delivery without webhook secret and transport-error redaction coverage. Changes incorporated.
+- 2026-07-20 PZK-020 focused post-fix review round 2:
+  - Reviewer Anscombe: 9.6/10; confirmed webhook-secret gating, private-chat-only `/start`, atomic delivery claim, sanitized failures, admin logs, frontend secret safety, and optional web fallback. No required changes remained; PZK-020 gate cleared.

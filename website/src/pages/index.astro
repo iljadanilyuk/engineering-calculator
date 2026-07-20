@@ -1484,6 +1484,18 @@ function serviceRublesMap(calculation: CalculationResult) {
               `,
             )
             .join('')}
+          ${
+            request.telegramDelivery?.deepLinkUrl
+              ? `<a
+                  class="proposal-link"
+                  href="${escapeHtml(request.telegramDelivery.deepLinkUrl)}"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Получить в Telegram
+                </a>`
+              : ''
+          }
         </div>
       `
     }
@@ -1491,7 +1503,9 @@ function serviceRublesMap(calculation: CalculationResult) {
     setExampleStatus(
       returnedExisting
         ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
-        : 'Запрос принят. PDF-примеры готовы по защищенным ссылкам.',
+        : request.telegramDelivery?.deepLinkUrl
+          ? 'Запрос принят. PDF-примеры готовы по защищенным ссылкам; Telegram доступен как дополнительный канал.'
+          : 'Запрос принят. PDF-примеры готовы по защищенным ссылкам.',
       'ready',
     )
   }

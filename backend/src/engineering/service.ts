@@ -25,6 +25,7 @@ import {
   type ProjectExampleRequestListQuery,
   type ProjectExampleRequestRecord,
   type ProjectExampleUpdateRequest,
+  type PublicTelegramDelivery,
   type PublicCalculationRecord,
   type PublicProjectExampleRecord,
   type PublicProjectExampleRequestRecord,
@@ -37,6 +38,7 @@ import {
   type ServiceRecord,
   type ServiceReorderRequest,
   type ServiceUpdateRequest,
+  type TelegramDeliveryRecord,
 } from '@poznyak-engineering-calculator/contracts'
 import { createHash, randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
@@ -44,7 +46,13 @@ import { readFile } from 'node:fs/promises'
 import type { DbClient } from '../db'
 import { Prisma } from '../generated/prisma/client'
 import { AppError } from '../http/errors'
-import type { LeadNotifier } from '../notifications/telegram'
+import {
+  formatTelegramProjectExamplesDeliveryMessage,
+  formatTelegramProposalDeliveryMessage,
+  telegramDeepLink,
+  type TelegramDocumentSender,
+  type LeadNotifier,
+} from '../notifications/telegram'
 import {
   type CommercialProposalProjectExample,
   createCommercialProposalGenerator,
@@ -56,6 +64,7 @@ const defaultLeadSource = 'public_calculator'
 const defaultProjectExampleRequestSource = 'example_request'
 const defaultQuestionnaireSource = 'public_questionnaire'
 const duplicateDetectionWindowMs = 10 * 60 * 1_000
+const telegramBindTokenTtlMs = 7 * 24 * 60 * 60 * 1_000
 const consentVersion = 'pzk-public-lead-consent-v1'
 const consentText =
   'Согласен на обработку имени, телефона и выбранного расчета для подготовки коммерческого предложения.'
@@ -78,9 +87,26 @@ const orderedProposalInclude = {
     createdAt: 'asc' as const,
   },
 }
+const orderedTelegramDeliveryInclude = {
+  orderBy: {
+    createdAt: 'asc' as const,
+  },
+}
 const calculationDetailInclude = {
   proposals: orderedProposalInclude,
+  telegramDeliveries: orderedTelegramDeliveryInclude,
   questionnaire: true,
+}
+const projectExampleRequestInclude = {
+  telegramDeliveries: orderedTelegramDeliveryInclude,
+}
+const telegramDeliveryTargetInclude = {
+  calculation: {
+    include: {
+      proposals: orderedProposalInclude,
+    },
+  },
+  projectExampleRequest: true,
 }
 
 type ServiceRow = Awaited<ReturnType<DbClient['service']['findFirstOrThrow']>>
@@ -88,6 +114,7 @@ type CalculationRow = Awaited<ReturnType<DbClient['calculation']['findFirstOrThr
 type CalculationQuestionnaireRow = Awaited<ReturnType<DbClient['calculationQuestionnaire']['findFirstOrThrow']>>
 type ProjectExampleRow = Awaited<ReturnType<DbClient['projectExample']['findFirstOrThrow']>>
 type ProjectExampleRequestRow = Awaited<ReturnType<DbClient['projectExampleRequest']['findFirstOrThrow']>>
+type TelegramDeliveryRow = Awaited<ReturnType<DbClient['telegramDelivery']['findFirstOrThrow']>>
 type ProposalRow = {
   id: string
   publicToken: string
@@ -104,8 +131,15 @@ type ProposalRow = {
 type CalculationWithProposals = CalculationRow & { proposals: ProposalRow[] }
 type CalculationWithQuestionnaire = CalculationRow & {
   proposals: ProposalRow[]
+  telegramDeliveries?: TelegramDeliveryRow[]
   questionnaire: CalculationQuestionnaireRow | null
 }
+type ProjectExampleRequestWithDeliveries = ProjectExampleRequestRow & {
+  telegramDeliveries?: TelegramDeliveryRow[]
+}
+type TelegramDeliveryWithTargets = Prisma.TelegramDeliveryGetPayload<{
+  include: typeof telegramDeliveryTargetInclude
+}>
 type SaveCalculationMetadata = {
   referrer?: string
   ipAddress?: string
@@ -113,8 +147,19 @@ type SaveCalculationMetadata = {
 }
 type SaveProjectExampleRequestMetadata = SaveCalculationMetadata
 type SaveQuestionnaireMetadata = SaveCalculationMetadata
+type TelegramStartPayload = {
+  bindToken: string
+  chatId: string
+  chatType: 'private'
+  userId: string | null
+  username: string | null
+  firstName: string | null
+}
 type EngineeringDataServiceOptions = {
+  publicApiUrl?: string
   publicWebsiteUrl?: string
+  telegramBotUsername?: string
+  telegramWebhookSecret?: string
 }
 
 const projectExampleAssetBaseUrl = new URL('../../assets/project-examples/', import.meta.url)
@@ -137,6 +182,7 @@ export class EngineeringDataService {
     private readonly db: DbClient,
     private readonly proposalGenerator: ProposalGenerator = createCommercialProposalGenerator(),
     private readonly leadNotifier: LeadNotifier | null = null,
+    private readonly telegramDocumentSender: TelegramDocumentSender | null = null,
     private readonly options: EngineeringDataServiceOptions = {},
   ) {}
 
@@ -295,6 +341,7 @@ export class EngineeringDataService {
         publicCalculation: calculationToPublicRecord(
           existingIdempotentCalculation,
           existingIdempotentCalculation.proposals,
+          this.options.telegramBotUsername,
         ),
         created: false,
       }
@@ -340,6 +387,7 @@ export class EngineeringDataService {
         publicCalculation: calculationToPublicRecord(
           duplicateCalculation,
           duplicateCalculation.proposals,
+          this.options.telegramBotUsername,
         ),
         created: false,
       }
@@ -347,6 +395,8 @@ export class EngineeringDataService {
 
     const publicToken = await this.createUniqueCalculationToken()
     const proposalToken = await this.createUniqueProposalToken()
+    const telegramBindToken = await this.createUniqueTelegramBindToken()
+    const telegramDeliveryState = this.initialTelegramDeliveryState(telegramBindToken)
     const consentAcceptedAt = new Date()
     const offerNumber = offerNumberFromToken(proposalToken, consentAcceptedAt)
     const sourcePageUrl = normalizeOptionalText(
@@ -417,16 +467,37 @@ export class EngineeringDataService {
             calculationSnapshot: toJson(calculation),
           },
         })
+        const telegramDelivery = await tx.telegramDelivery.create({
+          data: {
+            targetType: 'proposal',
+            status: telegramDeliveryState.status,
+            statusMessage: telegramDeliveryState.statusMessage,
+            bindToken: telegramBindToken,
+            calculationId: row.id,
+            expiresAt: telegramDeliveryState.expiresAt,
+          },
+        })
 
-        return { row, proposals: [proposal] }
+        return { row, proposals: [proposal], telegramDeliveries: [telegramDelivery] }
       })
 
-      const savedCalculation = calculationToRecord(persisted.row, persisted.proposals)
+      const savedCalculation = calculationToRecord(
+        {
+          ...persisted.row,
+          telegramDeliveries: persisted.telegramDeliveries,
+          questionnaire: null,
+        },
+        persisted.proposals,
+      )
       await this.notifyLeadSubmitted(savedCalculation)
 
       return {
         calculation: savedCalculation,
-        publicCalculation: calculationToPublicRecord(persisted.row, persisted.proposals),
+        publicCalculation: calculationToPublicRecord(
+          { ...persisted.row, telegramDeliveries: persisted.telegramDeliveries },
+          persisted.proposals,
+          this.options.telegramBotUsername,
+        ),
         created: true,
       }
     } catch (error) {
@@ -436,7 +507,11 @@ export class EngineeringDataService {
           assertIdempotencyFingerprintMatches(existing, requestFingerprintHash)
           return {
             calculation: calculationToRecord(existing, existing.proposals),
-            publicCalculation: calculationToPublicRecord(existing, existing.proposals),
+            publicCalculation: calculationToPublicRecord(
+              existing,
+              existing.proposals,
+              this.options.telegramBotUsername,
+            ),
             created: false,
           }
         }
@@ -444,7 +519,11 @@ export class EngineeringDataService {
         if (duplicate) {
           return {
             calculation: calculationToRecord(duplicate, duplicate.proposals),
-            publicCalculation: calculationToPublicRecord(duplicate, duplicate.proposals),
+            publicCalculation: calculationToPublicRecord(
+              duplicate,
+              duplicate.proposals,
+              this.options.telegramBotUsername,
+            ),
             created: false,
           }
         }
@@ -477,37 +556,63 @@ export class EngineeringDataService {
       assertProjectExampleRequestFingerprintMatches(existingIdempotentRequest, requestFingerprintHash)
       return {
         request: projectExampleRequestToRecord(existingIdempotentRequest),
-        publicRequest: projectExampleRequestToPublicRecord(existingIdempotentRequest),
+        publicRequest: projectExampleRequestToPublicRecord(
+          existingIdempotentRequest,
+          this.options.telegramBotUsername,
+        ),
         created: false,
       }
     }
 
     const publicToken = await this.createUniqueProjectExampleRequestToken()
+    const telegramBindToken = await this.createUniqueTelegramBindToken()
+    const telegramDeliveryState = this.initialTelegramDeliveryState(telegramBindToken)
     const consentAcceptedAt = new Date()
 
     try {
-      const request = await this.db.projectExampleRequest.create({
-        data: {
-          publicToken,
-          idempotencyKey: input.idempotencyKey,
-          requestFingerprintHash,
-          clientName: input.clientName,
-          clientPhone: normalizedPhone,
-          requestedExampleSlugs: toJson(requestedExampleSlugs),
-          source,
-          referrer,
-          utm: input.utm === undefined ? undefined : toJson(input.utm),
-          consentAcceptedAt,
-          consentVersion: projectExampleRequestConsentVersion,
-          consentText: projectExampleRequestConsentText,
-          consentIpAddress: normalizeOptionalText(metadata.ipAddress, 255),
-          consentUserAgent: normalizeOptionalText(metadata.userAgent, 512),
-        },
+      const persisted = await this.db.$transaction(async (tx) => {
+        const request = await tx.projectExampleRequest.create({
+          data: {
+            publicToken,
+            idempotencyKey: input.idempotencyKey,
+            requestFingerprintHash,
+            clientName: input.clientName,
+            clientPhone: normalizedPhone,
+            requestedExampleSlugs: toJson(requestedExampleSlugs),
+            source,
+            referrer,
+            utm: input.utm === undefined ? undefined : toJson(input.utm),
+            consentAcceptedAt,
+            consentVersion: projectExampleRequestConsentVersion,
+            consentText: projectExampleRequestConsentText,
+            consentIpAddress: normalizeOptionalText(metadata.ipAddress, 255),
+            consentUserAgent: normalizeOptionalText(metadata.userAgent, 512),
+          },
+        })
+        const telegramDelivery = await tx.telegramDelivery.create({
+          data: {
+            targetType: 'project_examples',
+            status: telegramDeliveryState.status,
+            statusMessage: telegramDeliveryState.statusMessage,
+            bindToken: telegramBindToken,
+            projectExampleRequestId: request.id,
+            expiresAt: telegramDeliveryState.expiresAt,
+          },
+        })
+
+        return { request, telegramDeliveries: [telegramDelivery] }
       })
+      const requestWithDeliveries = {
+        ...persisted.request,
+        telegramDeliveries: persisted.telegramDeliveries,
+      }
 
       return {
-        request: projectExampleRequestToRecord(request),
-        publicRequest: projectExampleRequestToPublicRecord(request),
+        request: projectExampleRequestToRecord(requestWithDeliveries),
+        publicRequest: projectExampleRequestToPublicRecord(
+          requestWithDeliveries,
+          this.options.telegramBotUsername,
+        ),
         created: true,
       }
     } catch (error) {
@@ -517,7 +622,10 @@ export class EngineeringDataService {
           assertProjectExampleRequestFingerprintMatches(existing, requestFingerprintHash)
           return {
             request: projectExampleRequestToRecord(existing),
-            publicRequest: projectExampleRequestToPublicRecord(existing),
+            publicRequest: projectExampleRequestToPublicRecord(
+              existing,
+              this.options.telegramBotUsername,
+            ),
             created: false,
           }
         }
@@ -821,6 +929,7 @@ export class EngineeringDataService {
   async listProjectExampleRequests(input: ProjectExampleRequestListQuery) {
     const [requests, totalCount] = await Promise.all([
       this.db.projectExampleRequest.findMany({
+        include: projectExampleRequestInclude,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: input.limit,
         skip: input.offset,
@@ -1057,6 +1166,200 @@ export class EngineeringDataService {
     return projectExampleToRecord(example)
   }
 
+  async handleTelegramWebhookUpdate(update: unknown) {
+    const startPayload = telegramStartPayloadFromUpdate(update)
+    if (!startPayload) return { status: 'ignored' as const }
+
+    await this.bindAndDeliverTelegramDocument(startPayload)
+    return { status: 'processed' as const }
+  }
+
+  private async bindAndDeliverTelegramDocument(startPayload: TelegramStartPayload) {
+    const delivery = await this.db.telegramDelivery.findUnique({
+      where: { bindToken: startPayload.bindToken },
+      include: telegramDeliveryTargetInclude,
+    })
+
+    if (!delivery) return
+    if (delivery.status === 'sent') return
+
+    if (!(await this.claimTelegramDeliveryAttempt(delivery.id, startPayload))) {
+      return
+    }
+
+    if (delivery.expiresAt && delivery.expiresAt.getTime() < Date.now()) {
+      await this.updateTelegramDeliveryFailure(
+        delivery.id,
+        startPayload,
+        'Telegram start token expired',
+      )
+      return
+    }
+
+    const message = this.telegramDocumentMessage(delivery)
+    if (!message) {
+      await this.updateTelegramDeliveryFailure(
+        delivery.id,
+        startPayload,
+        'Telegram delivery target is no longer available',
+      )
+      return
+    }
+
+    if (!this.telegramDocumentSender) {
+      await this.updateTelegramDeliveryDisabled(delivery.id, startPayload)
+      return
+    }
+
+    try {
+      const result = await this.telegramDocumentSender.sendDocumentDelivery({
+        chatId: startPayload.chatId,
+        text: message,
+      })
+
+      if (result.status === 'disabled') {
+        await this.updateTelegramDeliveryDisabled(delivery.id, startPayload)
+        return
+      }
+
+      await this.db.telegramDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          status: 'sent',
+          statusMessage: null,
+          telegramChatId: startPayload.chatId,
+          telegramUserId: startPayload.userId,
+          telegramUsername: startPayload.username,
+          telegramFirstName: startPayload.firstName,
+          deliveredAt: new Date(),
+        },
+      })
+    } catch (error) {
+      await this.updateTelegramDeliveryFailure(
+        delivery.id,
+        startPayload,
+        safeTelegramDeliveryErrorMessage(error),
+      )
+    }
+  }
+
+  private async claimTelegramDeliveryAttempt(
+    deliveryId: string,
+    startPayload: TelegramStartPayload,
+  ) {
+    const claim = await this.db.telegramDelivery.updateMany({
+      where: {
+        id: deliveryId,
+        status: {
+          not: 'sent',
+        },
+        lastAttemptAt: null,
+      },
+      data: {
+        telegramChatId: startPayload.chatId,
+        telegramUserId: startPayload.userId,
+        telegramUsername: startPayload.username,
+        telegramFirstName: startPayload.firstName,
+        attemptCount: { increment: 1 },
+        lastAttemptAt: new Date(),
+        statusMessage: 'Telegram delivery attempt started',
+      },
+    })
+
+    return claim.count === 1
+  }
+
+  private telegramDocumentMessage(delivery: TelegramDeliveryWithTargets) {
+    if (delivery.targetType === 'proposal') {
+      const proposal = delivery.calculation?.proposals[0]
+      if (!proposal) return null
+
+      const artifact = proposalToArtifactReference(proposal)
+      return formatTelegramProposalDeliveryMessage(
+        proposal.offerNumber,
+        {
+          proposalUrl: absoluteUrl(this.publicApiBaseUrl(), artifact.urlPath),
+          proposalPdfUrl: artifact.pdfUrlPath
+            ? absoluteUrl(this.publicApiBaseUrl(), artifact.pdfUrlPath)
+            : artifact.pdfUrl ?? undefined,
+        },
+      )
+    }
+
+    const request = delivery.projectExampleRequest
+    if (!request) return null
+
+    const examples = projectExampleSlugsFromJson(request.requestedExampleSlugs).map((slug) => {
+      const link = projectExampleDeliveryLink(projectExampleAssetBySlug(slug), request.publicToken)
+      return {
+        code: link.code,
+        title: link.title,
+        url: absoluteUrl(this.publicApiBaseUrl(), link.urlPath),
+      }
+    })
+
+    return formatTelegramProjectExamplesDeliveryMessage(examples)
+  }
+
+  private async updateTelegramDeliveryDisabled(
+    deliveryId: string,
+    startPayload: TelegramStartPayload,
+  ) {
+    await this.db.telegramDelivery.update({
+      where: { id: deliveryId },
+      data: {
+        status: 'disabled',
+        statusMessage: 'Telegram client delivery is not configured',
+        telegramChatId: startPayload.chatId,
+        telegramUserId: startPayload.userId,
+        telegramUsername: startPayload.username,
+        telegramFirstName: startPayload.firstName,
+      },
+    })
+  }
+
+  private async updateTelegramDeliveryFailure(
+    deliveryId: string,
+    startPayload: TelegramStartPayload,
+    statusMessage: string,
+  ) {
+    await this.db.telegramDelivery.update({
+      where: { id: deliveryId },
+      data: {
+        status: 'failed',
+        statusMessage: normalizeOptionalText(statusMessage, 500),
+        telegramChatId: startPayload.chatId,
+        telegramUserId: startPayload.userId,
+        telegramUsername: startPayload.username,
+        telegramFirstName: startPayload.firstName,
+      },
+    })
+  }
+
+  private initialTelegramDeliveryState(bindToken: string) {
+    const canCreateDeepLink = Boolean(telegramDeepLink(this.options.telegramBotUsername, bindToken))
+    const canSend = this.telegramDocumentSender?.isConfigured() === true
+    const canAuthenticateWebhook = Boolean(this.options.telegramWebhookSecret?.trim())
+
+    if (!canCreateDeepLink || !canSend || !canAuthenticateWebhook) {
+      return {
+        status: 'disabled' as const,
+        statusMessage: 'Telegram client delivery is not configured',
+        expiresAt: null,
+      }
+    }
+
+    return {
+      status: 'pending_start' as const,
+      statusMessage: 'Waiting for the client to open the Telegram bot deep link',
+      expiresAt: new Date(Date.now() + telegramBindTokenTtlMs),
+    }
+  }
+
+  private publicApiBaseUrl() {
+    return this.options.publicApiUrl ?? 'http://localhost:3000'
+  }
+
   private async createUniqueCalculationToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const token = randomToken()
@@ -1096,6 +1399,19 @@ export class EngineeringDataService {
     throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate project example request token')
   }
 
+  private async createUniqueTelegramBindToken() {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = randomToken()
+      const existing = await this.db.telegramDelivery.findUnique({
+        where: { bindToken: token },
+        select: { id: true },
+      })
+      if (!existing) return token
+    }
+
+    throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate Telegram bind token')
+  }
+
   private async findCalculationByIdempotencyKey(idempotencyKey: string) {
     return this.db.calculation.findUnique({
       where: { idempotencyKey },
@@ -1119,6 +1435,7 @@ export class EngineeringDataService {
   private async findProjectExampleRequestByIdempotencyKey(idempotencyKey: string) {
     return this.db.projectExampleRequest.findUnique({
       where: { idempotencyKey },
+      include: projectExampleRequestInclude,
     })
   }
 
@@ -1246,6 +1563,7 @@ function serviceToCalculationInput(service: ServiceRow) {
 function calculationToRecord(
   calculation: CalculationRow & {
     proposals?: ProposalRow[]
+    telegramDeliveries?: TelegramDeliveryRow[]
     questionnaire?: CalculationQuestionnaireRow | null
   },
   proposals: ProposalRow[],
@@ -1289,6 +1607,7 @@ function calculationToRecord(
     consentIpAddress: calculation.consentIpAddress,
     consentUserAgent: calculation.consentUserAgent,
     proposalArtifacts: proposals.map(proposalToArtifactReference),
+    telegramDeliveries: (calculation.telegramDeliveries ?? []).map(telegramDeliveryToRecord),
     questionnaire: calculation.questionnaire
       ? questionnaireToAdminDraft(calculation.questionnaire)
       : null,
@@ -1321,6 +1640,7 @@ function calculationToListItem(
     notes: record.notes,
     source: record.source,
     proposalArtifacts: record.proposalArtifacts,
+    telegramDeliveries: record.telegramDeliveries,
     questionnaire: record.questionnaire
       ? questionnaireToAdminSummary(calculation.questionnaire ?? null)
       : null,
@@ -1330,8 +1650,12 @@ function calculationToListItem(
 }
 
 function calculationToPublicRecord(
-  calculation: CalculationRow & { proposals?: ProposalRow[] },
+  calculation: CalculationRow & {
+    proposals?: ProposalRow[]
+    telegramDeliveries?: TelegramDeliveryRow[]
+  },
   proposals: ProposalRow[],
+  telegramBotUsername?: string,
 ): PublicCalculationRecord {
   const calculationSnapshot = calculationResultSchema.parse(calculation.calculationSnapshot)
   const proposal = proposals[0]
@@ -1353,6 +1677,10 @@ function calculationToPublicRecord(
       'calculation BYN rounded rubles',
     ),
     proposal: proposal ? publicProposalReference(proposal) : null,
+    telegramDelivery: publicTelegramDelivery(
+      calculation.telegramDeliveries,
+      telegramBotUsername,
+    ),
     createdAt: calculation.createdAt.toISOString(),
   }
 }
@@ -1382,7 +1710,8 @@ function projectExampleToPublicRecord(example: ProjectExampleRow): PublicProject
 }
 
 function projectExampleRequestToPublicRecord(
-  request: ProjectExampleRequestRow,
+  request: ProjectExampleRequestWithDeliveries,
+  telegramBotUsername?: string,
 ): PublicProjectExampleRequestRecord {
   const requestedExampleSlugs = projectExampleSlugsFromJson(request.requestedExampleSlugs)
 
@@ -1392,12 +1721,16 @@ function projectExampleRequestToPublicRecord(
     requestedExamples: requestedExampleSlugs.map((slug) =>
       projectExampleDeliveryLink(projectExampleAssetBySlug(slug), request.publicToken),
     ),
+    telegramDelivery: publicTelegramDelivery(
+      request.telegramDeliveries,
+      telegramBotUsername,
+    ),
     createdAt: request.createdAt.toISOString(),
   }
 }
 
 function projectExampleRequestToRecord(
-  request: ProjectExampleRequestRow,
+  request: ProjectExampleRequestWithDeliveries,
 ): ProjectExampleRequestRecord {
   const requestedExampleSlugs = projectExampleSlugsFromJson(request.requestedExampleSlugs)
 
@@ -1420,8 +1753,43 @@ function projectExampleRequestToRecord(
     consentText: request.consentText,
     consentIpAddress: request.consentIpAddress,
     consentUserAgent: request.consentUserAgent,
+    telegramDeliveries: (request.telegramDeliveries ?? []).map(telegramDeliveryToRecord),
     createdAt: request.createdAt.toISOString(),
     updatedAt: request.updatedAt.toISOString(),
+  }
+}
+
+function telegramDeliveryToRecord(delivery: TelegramDeliveryRow): TelegramDeliveryRecord {
+  return {
+    id: delivery.id,
+    targetType: delivery.targetType,
+    status: delivery.status,
+    statusMessage: delivery.statusMessage,
+    telegramChatId: delivery.telegramChatId,
+    telegramUserId: delivery.telegramUserId,
+    telegramUsername: delivery.telegramUsername,
+    telegramFirstName: delivery.telegramFirstName,
+    attemptCount: delivery.attemptCount,
+    lastAttemptAt: delivery.lastAttemptAt?.toISOString() ?? null,
+    deliveredAt: delivery.deliveredAt?.toISOString() ?? null,
+    expiresAt: delivery.expiresAt?.toISOString() ?? null,
+    createdAt: delivery.createdAt.toISOString(),
+    updatedAt: delivery.updatedAt.toISOString(),
+  }
+}
+
+function publicTelegramDelivery(
+  deliveries: readonly TelegramDeliveryRow[] | undefined,
+  telegramBotUsername?: string,
+): PublicTelegramDelivery | null {
+  const delivery = deliveries?.[0]
+  if (!delivery) return null
+
+  return {
+    status: delivery.status,
+    deepLinkUrl: delivery.status === 'pending_start'
+      ? telegramDeepLink(telegramBotUsername, delivery.bindToken)
+      : null,
   }
 }
 
@@ -1761,6 +2129,11 @@ function safeNumberFromBigInt(value: bigint, label: string) {
   return Number(value)
 }
 
+function absoluteUrl(baseUrl: string, path: string) {
+  const base = new URL(baseUrl)
+  return new URL(path, `${base.origin}/`).toString()
+}
+
 function assertServicePriceAllowed(pricingType: ServiceRow['pricingType'], priceUsdCents: number) {
   if ((pricingType === 'fixed' || pricingType === 'per_sqm') && priceUsdCents <= 0) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Fixed and per-square-meter services require a positive USD price', [
@@ -1847,6 +2220,44 @@ function projectExampleAssetBySlug(slug: string): (typeof publicProjectExampleAs
   const asset = publicProjectExampleAssets.find((example) => example.slug === slug)
   if (!asset) throw new AppError(404, 'NOT_FOUND', 'Project example not found')
   return asset
+}
+
+function telegramStartPayloadFromUpdate(update: unknown): TelegramStartPayload | null {
+  const updateRecord = objectRecord(update)
+  const message = objectRecord(updateRecord?.message)
+  const chat = objectRecord(message?.chat)
+  const from = objectRecord(message?.from)
+  const text = typeof message?.text === 'string' ? message.text.trim() : ''
+  const chatId = telegramScalarToString(chat?.id)
+  const chatType = typeof chat?.type === 'string' ? chat.type : null
+  const bindToken = telegramBindTokenFromStartText(text)
+
+  if (!chatId || chatType !== 'private' || !bindToken) return null
+
+  return {
+    bindToken,
+    chatId,
+    chatType,
+    userId: telegramScalarToString(from?.id),
+    username: normalizeOptionalText(typeof from?.username === 'string' ? from.username : undefined, 80),
+    firstName: normalizeOptionalText(typeof from?.first_name === 'string' ? from.first_name : undefined, 120),
+  }
+}
+
+function telegramBindTokenFromStartText(text: string) {
+  const match = /^\/start(?:@[A-Za-z][A-Za-z0-9_]{4,31})?\s+([A-Za-z0-9_-]{32,128})$/.exec(text)
+  return match?.[1] ?? null
+}
+
+function telegramScalarToString(value: unknown) {
+  if (typeof value === 'string') return normalizeOptionalText(value, 80)
+  if (typeof value === 'number' && Number.isFinite(value)) return String(Math.trunc(value))
+  return null
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
 }
 
 function projectExampleSlugsFromJson(value: Prisma.JsonValue): string[] {
@@ -2068,4 +2479,8 @@ function isNotFoundFileError(error: unknown) {
 function safeErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message.slice(0, 500)
   return String(error).slice(0, 500)
+}
+
+function safeTelegramDeliveryErrorMessage(error: unknown) {
+  return safeErrorMessage(error).replace(/bot[A-Za-z0-9:_-]+(?=\/sendMessage)/g, 'bot<redacted>')
 }

@@ -15,8 +15,10 @@ import { EngineeringDataService } from './engineering/service'
 import type { AppHonoEnv } from './http/context'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import {
+  createTelegramDocumentSenderFromEnv,
   createTelegramLeadNotifierFromEnv,
   type LeadNotifier,
+  type TelegramDocumentSender,
 } from './notifications/telegram'
 import { createStorageServiceFromEnv } from './storage/service'
 
@@ -25,9 +27,16 @@ type CreateAppOptions = {
   prisma: DbClient
   proposalGenerator?: ProposalGenerator
   leadNotifier?: LeadNotifier
+  telegramDocumentSender?: TelegramDocumentSender
 }
 
-export function createApp({ env, prisma, proposalGenerator, leadNotifier }: CreateAppOptions) {
+export function createApp({
+  env,
+  prisma,
+  proposalGenerator,
+  leadNotifier,
+  telegramDocumentSender,
+}: CreateAppOptions) {
   const authService = new AuthService(prisma, env)
   const resolvedProposalGenerator =
     proposalGenerator ??
@@ -38,8 +47,12 @@ export function createApp({ env, prisma, proposalGenerator, leadNotifier }: Crea
     prisma,
     resolvedProposalGenerator,
     leadNotifier ?? createTelegramLeadNotifierFromEnv(env),
+    telegramDocumentSender ?? createTelegramDocumentSenderFromEnv(env),
     {
+      publicApiUrl: env.PUBLIC_API_URL ?? `http://localhost:${env.PORT}`,
       publicWebsiteUrl: env.PUBLIC_WEBSITE_URL,
+      telegramBotUsername: env.TELEGRAM_BOT_USERNAME,
+      telegramWebhookSecret: env.TELEGRAM_WEBHOOK_SECRET,
     },
   )
   const storageService = createStorageServiceFromEnv(env)

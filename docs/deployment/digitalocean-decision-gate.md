@@ -137,6 +137,7 @@ Backend runtime:
 - `PUBLIC_WEBSITE_URL=https://<canonical-public-domain>`.
 - `PUBLIC_WEBAPP_URL=https://admin.<domain>`.
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` only after the approved internal chat is confirmed.
+- `TELEGRAM_BOT_USERNAME` and `TELEGRAM_WEBHOOK_SECRET` only when optional client Telegram document delivery is enabled; delivery rows stay disabled unless bot token, bot username, and webhook secret are all present.
 - `PDF_CHROMIUM_EXECUTABLE_PATH` only if production needs a non-default Chromium executable.
 - `SPACES_*` variables only if Spaces is explicitly approved later.
 

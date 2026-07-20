@@ -62,14 +62,16 @@ PUBLIC_WEBAPP_URL=https://admin.example.com
 
 `JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
 
-For Telegram lead notifications, add these backend runtime secrets only after the approved internal chat is known:
+For Telegram lead notifications and optional client document delivery, add these backend runtime values only after the approved bot/internal chat are known:
 
 ```bash
 TELEGRAM_BOT_TOKEN=<bot-token>
 TELEGRAM_CHAT_ID=<approved-internal-chat-id>
+TELEGRAM_BOT_USERNAME=<bot-username-without-token>
+TELEGRAM_WEBHOOK_SECRET=<telegram-webhook-secret-token>
 ```
 
-Leave either Telegram value unset to skip notifications safely. Do not expose the bot token or chat ID in static-site build env, admin settings APIs, logs, or browser responses.
+Leave incomplete Telegram values unset to skip safely. Client Telegram document delivery is enabled only when `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and `TELEGRAM_WEBHOOK_SECRET` are all configured. `TELEGRAM_BOT_USERNAME` is not a secret, but keep it backend-side so public pages receive only per-lead deep links after contact capture. Do not expose the bot token, internal chat ID, or webhook secret in static-site build env, admin settings APIs, logs, or browser responses.
 
 If storage is active, also configure:
 

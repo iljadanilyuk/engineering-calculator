@@ -87,6 +87,8 @@ describe('loadEnv', () => {
       JWT_SECRET: '12345678901234567890123456789012',
       TELEGRAM_BOT_TOKEN: '  test-token  ',
       TELEGRAM_CHAT_ID: ' -100123456 ',
+      TELEGRAM_BOT_USERNAME: ' @PoznyakCalcBot ',
+      TELEGRAM_WEBHOOK_SECRET: ' webhook-secret ',
       PUBLIC_API_URL: 'https://api.example.com',
       PUBLIC_WEBSITE_URL: ' https://website.example.com ',
       PUBLIC_WEBAPP_URL: 'https://admin.example.com',
@@ -94,6 +96,8 @@ describe('loadEnv', () => {
 
     expect(env.TELEGRAM_BOT_TOKEN).toBe('test-token')
     expect(env.TELEGRAM_CHAT_ID).toBe('-100123456')
+    expect(env.TELEGRAM_BOT_USERNAME).toBe('@PoznyakCalcBot')
+    expect(env.TELEGRAM_WEBHOOK_SECRET).toBe('webhook-secret')
     expect(env.PUBLIC_API_URL).toBe('https://api.example.com')
     expect(env.PUBLIC_WEBSITE_URL).toBe('https://website.example.com')
     expect(env.PUBLIC_WEBAPP_URL).toBe('https://admin.example.com')

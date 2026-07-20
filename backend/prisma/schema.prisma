@@ -22,6 +22,22 @@ enum UserRole {
   @@map("user_role")
 }
 
+enum TelegramDeliveryTargetType {
+  proposal
+  project_examples
+
+  @@map("telegram_delivery_target_type")
+}
+
+enum TelegramDeliveryStatus {
+  disabled
+  pending_start
+  sent
+  failed
+
+  @@map("telegram_delivery_status")
+}
+
 model User {
   id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
   email        String        @unique
@@ -91,6 +107,7 @@ model Calculation {
   updatedAt              DateTime   @updatedAt @map("updated_at")
   proposals              Proposal[]
   questionnaire          CalculationQuestionnaire?
+  telegramDeliveries     TelegramDelivery[]
 
   @@index([createdAt], map: "calculations_created_at_idx")
   @@index([status, createdAt], map: "calculations_status_created_at_idx")
@@ -186,10 +203,39 @@ model ProjectExampleRequest {
   consentUserAgent       String?  @map("consent_user_agent")
   createdAt              DateTime @default(now()) @map("created_at")
   updatedAt              DateTime @updatedAt @map("updated_at")
+  telegramDeliveries     TelegramDelivery[]
 
   @@index([createdAt], map: "project_example_requests_created_at_idx")
   @@index([clientPhone, createdAt], map: "project_example_requests_client_phone_created_at_idx")
   @@map("project_example_requests")
+}
+
+model TelegramDelivery {
+  id                      String                     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  targetType              TelegramDeliveryTargetType @map("target_type")
+  status                  TelegramDeliveryStatus     @default(pending_start)
+  statusMessage           String?                    @map("status_message")
+  bindToken               String                     @unique(map: "telegram_deliveries_bind_token_key") @map("bind_token")
+  calculationId           String?                    @db.Uuid @map("calculation_id")
+  projectExampleRequestId String?                    @db.Uuid @map("project_example_request_id")
+  telegramChatId          String?                    @map("telegram_chat_id")
+  telegramUserId          String?                    @map("telegram_user_id")
+  telegramUsername        String?                    @map("telegram_username")
+  telegramFirstName       String?                    @map("telegram_first_name")
+  attemptCount            Int                        @default(0) @map("attempt_count")
+  lastAttemptAt           DateTime?                  @map("last_attempt_at")
+  deliveredAt             DateTime?                  @map("delivered_at")
+  expiresAt               DateTime?                  @map("expires_at")
+  createdAt               DateTime                   @default(now()) @map("created_at")
+  updatedAt               DateTime                   @updatedAt @map("updated_at")
+  calculation             Calculation?               @relation(fields: [calculationId], references: [id], onDelete: Restrict, map: "telegram_deliveries_calculation_id_fkey")
+  projectExampleRequest   ProjectExampleRequest?     @relation(fields: [projectExampleRequestId], references: [id], onDelete: Restrict, map: "telegram_deliveries_project_example_request_id_fkey")
+
+  @@index([calculationId], map: "telegram_deliveries_calculation_id_idx")
+  @@index([projectExampleRequestId], map: "telegram_deliveries_project_example_request_id_idx")
+  @@index([status, createdAt], map: "telegram_deliveries_status_created_at_idx")
+  @@index([expiresAt], map: "telegram_deliveries_expires_at_idx")
+  @@map("telegram_deliveries")
 }
 
 model AuthSession {

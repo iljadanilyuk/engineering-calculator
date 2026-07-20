@@ -74,6 +74,28 @@ const proposalArtifactReferenceSchema = z.object({
   hasHtmlSnapshot: z.boolean(),
   createdAt: z.string().datetime(),
 })
+const telegramDeliveryStatusSchema = z.enum(['disabled', 'pending_start', 'sent', 'failed'])
+const telegramDeliveryTargetTypeSchema = z.enum(['proposal', 'project_examples'])
+const telegramDeliveryRecordSchema = z.object({
+  id: uuidSchema,
+  targetType: telegramDeliveryTargetTypeSchema,
+  status: telegramDeliveryStatusSchema,
+  statusMessage: z.string().nullable(),
+  telegramChatId: z.string().nullable(),
+  telegramUserId: z.string().nullable(),
+  telegramUsername: z.string().nullable(),
+  telegramFirstName: z.string().nullable(),
+  attemptCount: z.number().int().nonnegative(),
+  lastAttemptAt: z.string().datetime().nullable(),
+  deliveredAt: z.string().datetime().nullable(),
+  expiresAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+})
+const publicTelegramDeliverySchema = z.object({
+  status: telegramDeliveryStatusSchema,
+  deepLinkUrl: z.string().url().nullable(),
+})
 
 export const serviceVisibilitySchema = z.object({
   isActive: z.boolean(),
@@ -213,6 +235,7 @@ export const calculationRecordSchema = z.object({
   consentIpAddress: z.string().nullable(),
   consentUserAgent: z.string().nullable(),
   proposalArtifacts: z.array(proposalArtifactReferenceSchema),
+  telegramDeliveries: z.array(telegramDeliveryRecordSchema),
   questionnaire: adminQuestionnaireDraftSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -252,6 +275,7 @@ export const publicCalculationRecordSchema = z.object({
   totalBynCents: bynCentsSchema,
   totalBynRoundedRubles: z.number().int().nonnegative(),
   proposal: publicCalculationProposalSchema.nullable(),
+  telegramDelivery: publicTelegramDeliverySchema.nullable(),
   createdAt: z.string().datetime(),
 })
 
@@ -274,6 +298,7 @@ export const calculationListItemSchema = calculationRecordSchema.pick({
   notes: true,
   source: true,
   proposalArtifacts: true,
+  telegramDeliveries: true,
   questionnaire: true,
   createdAt: true,
   updatedAt: true,
@@ -358,6 +383,7 @@ export const publicProjectExampleRequestRecordSchema = z.object({
   publicToken: publicTokenSchema,
   clientPhone: z.string(),
   requestedExamples: z.array(projectExampleDeliveryLinkSchema),
+  telegramDelivery: publicTelegramDeliverySchema.nullable(),
   createdAt: z.string().datetime(),
 })
 
@@ -382,6 +408,7 @@ export const projectExampleRequestRecordSchema = z.object({
   consentText: z.string().nullable(),
   consentIpAddress: z.string().nullable(),
   consentUserAgent: z.string().nullable(),
+  telegramDeliveries: z.array(telegramDeliveryRecordSchema),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 })
@@ -464,6 +491,10 @@ export type PublicCalculatorConfigResponse = z.infer<typeof publicCalculatorConf
 export type ExchangeRateSettingRequest = z.infer<typeof exchangeRateSettingRequestSchema>
 export type ExchangeRateSettingResponse = z.infer<typeof exchangeRateSettingResponseSchema>
 export type CalculationStatus = z.infer<typeof calculationStatusSchema>
+export type TelegramDeliveryStatus = z.infer<typeof telegramDeliveryStatusSchema>
+export type TelegramDeliveryTargetType = z.infer<typeof telegramDeliveryTargetTypeSchema>
+export type TelegramDeliveryRecord = z.infer<typeof telegramDeliveryRecordSchema>
+export type PublicTelegramDelivery = z.infer<typeof publicTelegramDeliverySchema>
 export type CalculationSaveRequest = z.infer<typeof calculationSaveRequestSchema>
 export type CalculationRecord = z.infer<typeof calculationRecordSchema>
 export type CalculationListItem = z.infer<typeof calculationListItemSchema>

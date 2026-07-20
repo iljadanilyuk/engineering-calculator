@@ -4,6 +4,7 @@ import type {
   CalculationRecord,
   CalculationStatus,
   ProjectExampleRequestRecord,
+  TelegramDeliveryRecord,
 } from '@poznyak-engineering-calculator/contracts'
 import { Link } from '@tanstack/react-router'
 import { type FormEvent, useMemo, useState } from 'react'
@@ -80,6 +81,13 @@ const statusLabels: Record<CalculationStatus, string> = {
   won: 'Договорились',
   lost: 'Отказ',
   spam_test: 'Спам/тест',
+}
+
+const telegramStatusLabels: Record<TelegramDeliveryRecord['status'], string> = {
+  disabled: 'Не настроено',
+  pending_start: 'Ожидает Telegram',
+  sent: 'Отправлено',
+  failed: 'Ошибка',
 }
 
 const defaultFilters: LeadFilterState = {
@@ -213,6 +221,7 @@ export function LeadsManager() {
                       <TableHead>BYN</TableHead>
                       <TableHead>USD</TableHead>
                       <TableHead>КП/PDF</TableHead>
+                      <TableHead>Telegram</TableHead>
                       <TableHead className="text-right">Карточка</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -251,6 +260,9 @@ export function LeadsManager() {
                         </TableCell>
                         <TableCell>
                           <ProposalLink lead={lead} />
+                        </TableCell>
+                        <TableCell>
+                          <TelegramDeliverySummary deliveries={lead.telegramDeliveries} compact />
                         </TableCell>
                         <TableCell className="text-right">
                           <Button asChild type="button" variant="outline" size="sm">
@@ -507,6 +519,18 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
           <Card className="rounded-lg">
             <CardHeader>
+              <CardTitle>Telegram-доставка</CardTitle>
+              <CardDescription>
+                Статус отправки КП клиенту через Telegram после сохранения контакта.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-lg">
+            <CardHeader>
               <CardTitle>Внутренние заметки</CardTitle>
               <CardDescription>Служебный комментарий, который виден только в админке.</CardDescription>
             </CardHeader>
@@ -572,7 +596,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                 <Badge variant="secondary">ТЗ не заполнено</Badge>
               )}
               <Badge variant="secondary">Договор позже</Badge>
-              <Badge variant="secondary">Telegram позже</Badge>
+              <TelegramDeliveryBadge delivery={latestTelegramDelivery(lead.telegramDeliveries)} />
             </CardContent>
           </Card>
         </aside>
@@ -631,6 +655,13 @@ function LeadMobileCard({
         <Typography variant="bodySm">{servicesSummary(lead.serviceSnapshots)}</Typography>
       </div>
 
+      <div className="grid gap-1 border-t pt-3">
+        <Typography variant="caption" tone="muted">
+          Telegram
+        </Typography>
+        <TelegramDeliverySummary deliveries={lead.telegramDeliveries} />
+      </div>
+
       <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <Field>
           <FieldLabel>Статус</FieldLabel>
@@ -658,6 +689,81 @@ function LeadStatusBadge({ status }: { status: CalculationStatus }) {
   return (
     <Badge variant={status === 'spam_test' ? 'secondary' : 'outline'}>
       {statusLabels[status]}
+    </Badge>
+  )
+}
+
+function TelegramDeliverySummary({
+  deliveries,
+  compact = false,
+}: {
+  deliveries: readonly TelegramDeliveryRecord[]
+  compact?: boolean
+}) {
+  const delivery = latestTelegramDelivery(deliveries)
+
+  if (!delivery) {
+    return <Typography variant="bodySm" tone="muted">Нет попыток</Typography>
+  }
+
+  return (
+    <div className="grid gap-1">
+      <TelegramDeliveryBadge delivery={delivery} />
+      {!compact && (
+        <Typography variant="caption" tone="muted">
+          {telegramDeliveryMeta(delivery)}
+        </Typography>
+      )}
+    </div>
+  )
+}
+
+function TelegramDeliveryLog({
+  deliveries,
+}: {
+  deliveries: readonly TelegramDeliveryRecord[]
+}) {
+  if (deliveries.length === 0) {
+    return <Typography tone="muted">Попыток Telegram-доставки пока нет.</Typography>
+  }
+
+  return (
+    <div className="grid gap-3">
+      {deliveries.map((delivery) => (
+        <div key={delivery.id} className="grid gap-2 rounded-lg border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <TelegramDeliveryBadge delivery={delivery} />
+            <Typography variant="caption" tone="muted">
+              {telegramDeliveryTargetLabel(delivery.targetType)}
+            </Typography>
+          </div>
+          <Typography variant="caption" tone="muted">
+            {telegramDeliveryMeta(delivery)}
+          </Typography>
+          {delivery.statusMessage && (
+            <Typography className="break-words" variant="bodySm">
+              {delivery.statusMessage}
+            </Typography>
+          )}
+          <Typography variant="caption" tone="muted">
+            {telegramRecipientLabel(delivery)}
+          </Typography>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TelegramDeliveryBadge({
+  delivery,
+}: {
+  delivery: TelegramDeliveryRecord | null
+}) {
+  if (!delivery) return <Badge variant="secondary">Telegram нет</Badge>
+
+  return (
+    <Badge variant={telegramDeliveryBadgeVariant(delivery.status)}>
+      {telegramStatusLabels[delivery.status]}
     </Badge>
   )
 }
@@ -1028,6 +1134,7 @@ function ProjectExampleRequestsPanel({
                   <Typography variant="bodySm">
                     {request.requestedExamples.map((example) => example.code).join(', ')}
                   </Typography>
+                  <TelegramDeliveryLog deliveries={request.telegramDeliveries} />
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
                   {request.requestedExamples.map((example) => (
@@ -1126,6 +1233,37 @@ function proposalButtonLabel(artifact: CalculationRecord['proposalArtifacts'][nu
 
 function hasPdfArtifact(artifact: CalculationRecord['proposalArtifacts'][number] | undefined) {
   return Boolean(artifact?.pdfUrlPath || artifact?.pdfUrl)
+}
+
+function latestTelegramDelivery(deliveries: readonly TelegramDeliveryRecord[]) {
+  return deliveries.length > 0 ? deliveries[deliveries.length - 1] : null
+}
+
+function telegramDeliveryBadgeVariant(status: TelegramDeliveryRecord['status']) {
+  if (status === 'sent') return 'default'
+  if (status === 'failed') return 'destructive'
+  if (status === 'pending_start') return 'outline'
+  return 'secondary'
+}
+
+function telegramDeliveryTargetLabel(targetType: TelegramDeliveryRecord['targetType']) {
+  if (targetType === 'proposal') return 'КП/PDF'
+  return 'Примеры проектов'
+}
+
+function telegramDeliveryMeta(delivery: TelegramDeliveryRecord) {
+  const attempts = delivery.attemptCount > 0
+    ? `попыток: ${numberFormatter.format(delivery.attemptCount)}`
+    : 'попыток нет'
+  const timestamp = delivery.deliveredAt ?? delivery.lastAttemptAt ?? delivery.updatedAt
+  return `${attempts} · обновлено ${formatDateTime(timestamp)}`
+}
+
+function telegramRecipientLabel(delivery: TelegramDeliveryRecord) {
+  if (delivery.telegramUsername) return `Получатель: @${delivery.telegramUsername}`
+  if (delivery.telegramUserId) return `Telegram user ${delivery.telegramUserId}`
+  if (delivery.telegramChatId) return `Telegram chat ${delivery.telegramChatId}`
+  return 'Telegram chat еще не привязан'
 }
 
 function calculationStatus(value: string): CalculationStatus {

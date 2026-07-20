@@ -5,7 +5,10 @@ import { createApp } from '../app'
 import { hashPassword } from '../auth/passwords'
 import { createPrisma } from '../db'
 import type { AppEnv } from '../env'
-import { createTelegramLeadNotifierFromEnv } from '../notifications/telegram'
+import {
+  createTelegramLeadNotifierFromEnv,
+  type TelegramDocumentSender,
+} from '../notifications/telegram'
 import {
   createCommercialProposalArtifact,
   type CommercialProposalInput,
@@ -38,6 +41,7 @@ maybeDescribe('engineering API integration', () => {
   let idempotencySequence = 0
 
   beforeEach(async () => {
+    await prisma.telegramDelivery.deleteMany()
     await prisma.proposal.deleteMany()
     await prisma.calculationQuestionnaire.deleteMany()
     await prisma.calculation.deleteMany()
@@ -604,6 +608,195 @@ maybeDescribe('engineering API integration', () => {
     expect(JSON.stringify(body)).not.toContain('telegram-secret-token')
   })
 
+  test('creates Telegram delivery deep link for preliminary proposals and sends after bot start', async () => {
+    const accessToken = await loginAdmin('client-telegram-proposal@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Client Telegram proposal service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const deliveries: Array<{ chatId: string; text: string }> = []
+    const telegramEnv: AppEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+      TELEGRAM_BOT_USERNAME: 'PoznyakCalcBot',
+      TELEGRAM_WEBHOOK_SECRET: 'webhook-secret',
+      PUBLIC_API_URL: 'https://api.example.com',
+    }
+    const telegramApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      telegramDocumentSender: recordingTelegramDocumentSender(deliveries, 50),
+    })
+    const payload = {
+      idempotencyKey: nextIdempotencyKey(),
+      clientName: 'Telegram Proposal Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+      source: 'public_offer_preliminary',
+    }
+
+    const response = await saveCalculationWithApp(telegramApp, payload)
+    const body = await response.json()
+    const replay = await saveCalculationWithApp(telegramApp, payload)
+    const duplicate = await saveCalculationWithApp(telegramApp, {
+      ...payload,
+      idempotencyKey: nextIdempotencyKey(),
+    })
+    const deepLinkUrl = body.calculation.telegramDelivery.deepLinkUrl as string
+    const bindToken = new URL(deepLinkUrl).searchParams.get('start')
+    const badWebhook = await telegramApp.request('/api/public/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Bot-Api-Secret-Token': 'wrong-secret',
+      },
+      body: JSON.stringify(telegramStartUpdate(bindToken ?? 'missing-token')),
+    })
+    const groupWebhook = await telegramApp.request('/api/public/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Bot-Api-Secret-Token': 'webhook-secret',
+      },
+      body: JSON.stringify(telegramStartUpdate(bindToken ?? 'missing-token', 'group')),
+    })
+    const [webhook, repeatedWebhook] = await Promise.all([
+      telegramApp.request('/api/public/telegram/webhook', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Bot-Api-Secret-Token': 'webhook-secret',
+        },
+        body: JSON.stringify(telegramStartUpdate(bindToken ?? 'missing-token')),
+      }),
+      telegramApp.request('/api/public/telegram/webhook', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Bot-Api-Secret-Token': 'webhook-secret',
+        },
+        body: JSON.stringify(telegramStartUpdate(bindToken ?? 'missing-token')),
+      }),
+    ])
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: body.calculation.publicToken },
+      include: {
+        proposals: true,
+        telegramDeliveries: true,
+      },
+    })
+    const detail = await telegramApp.request(`/api/admin/calculations/${saved.id}`, {
+      headers: authHeaders(accessToken),
+    })
+    const detailBody = await detail.json()
+
+    expect(response.status).toBe(201)
+    expect(replay.status).toBe(200)
+    expect(duplicate.status).toBe(200)
+    expect(body.calculation.telegramDelivery).toMatchObject({
+      status: 'pending_start',
+      deepLinkUrl: expect.stringMatching(/^https:\/\/t\.me\/PoznyakCalcBot\?start=[A-Za-z0-9_-]{32,128}$/),
+    })
+    expect(bindToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/)
+    expect(JSON.stringify(body)).not.toContain('telegram-secret-token')
+    expect(await prisma.telegramDelivery.count()).toBe(1)
+    expect(badWebhook.status).toBe(401)
+    expect(groupWebhook.status).toBe(200)
+    expect(webhook.status).toBe(200)
+    expect(repeatedWebhook.status).toBe(200)
+    expect(deliveries).toHaveLength(1)
+    expect(deliveries[0].chatId).toBe('123456789')
+    expect(deliveries[0].text).toContain('Предварительное КП')
+    expect(deliveries[0].text).toContain(
+      `https://api.example.com/api/public/proposals/${saved.proposals[0].publicToken}/pdf`,
+    )
+    expect(deliveries[0].text).not.toContain('telegram-secret-token')
+    expect(saved.telegramDeliveries).toHaveLength(1)
+    expect(saved.telegramDeliveries[0]).toMatchObject({
+      targetType: 'proposal',
+      status: 'sent',
+      telegramChatId: '123456789',
+      telegramUserId: '777000',
+      telegramUsername: 'clientuser',
+      attemptCount: 1,
+    })
+    expect(detail.status).toBe(200)
+    expect(detailBody.calculation.telegramDeliveries[0]).toMatchObject({
+      targetType: 'proposal',
+      status: 'sent',
+      telegramChatId: '123456789',
+      telegramUserId: '777000',
+      telegramUsername: 'clientuser',
+      attemptCount: 1,
+    })
+    expect(JSON.stringify(detailBody)).not.toContain(bindToken)
+  })
+
+  test('keeps client Telegram delivery disabled when webhook secret is missing', async () => {
+    const accessToken = await loginAdmin('client-telegram-no-webhook-secret@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'No webhook secret service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const deliveries: Array<{ chatId: string; text: string }> = []
+    const telegramEnv: AppEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+      TELEGRAM_BOT_USERNAME: 'PoznyakCalcBot',
+      PUBLIC_API_URL: 'https://api.example.com',
+    }
+    const telegramApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      telegramDocumentSender: recordingTelegramDocumentSender(deliveries),
+    })
+
+    const response = await saveCalculationWithApp(telegramApp, {
+      clientName: 'Missing Webhook Secret Client',
+      clientPhone: '+375291112233',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+      source: 'public_offer_preliminary',
+    })
+    const body = await response.json()
+    const webhook = await telegramApp.request('/api/public/telegram/webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(telegramStartUpdate('a'.repeat(32))),
+    })
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: body.calculation.publicToken },
+      include: { telegramDeliveries: true },
+    })
+
+    expect(response.status).toBe(201)
+    expect(body.calculation.telegramDelivery).toEqual({
+      status: 'disabled',
+      deepLinkUrl: null,
+    })
+    expect(webhook.status).toBe(401)
+    expect(deliveries).toHaveLength(0)
+    expect(saved.telegramDeliveries[0]).toMatchObject({
+      targetType: 'proposal',
+      status: 'disabled',
+      attemptCount: 0,
+      telegramChatId: null,
+    })
+  })
+
   test('does not expose a PDF link for legacy HTML-only proposal artifacts', async () => {
     const accessToken = await loginAdmin('legacy-html-proposal@example.com')
     await setExchangeRate(accessToken, '3.0000')
@@ -1138,6 +1331,10 @@ maybeDescribe('engineering API integration', () => {
     expect(replayBody.request.publicToken).toBe(body.request.publicToken)
     expect(body.request.clientPhone).toBe('+375291112233')
     expect(body.request.requestedExamples).toHaveLength(1)
+    expect(body.request.telegramDelivery).toEqual({
+      status: 'disabled',
+      deepLinkUrl: null,
+    })
     expect(body.request.requestedExamples[0]).toMatchObject({
       slug: 'ov',
       code: 'ОВ',
@@ -1164,12 +1361,136 @@ maybeDescribe('engineering API integration', () => {
     expect(wrongToken.status).toBe(404)
     expect(adminList.status).toBe(200)
     expect(adminBody.summary.totalCount).toBe(1)
+    expect(adminBody.requests[0].telegramDeliveries[0]).toMatchObject({
+      targetType: 'project_examples',
+      status: 'disabled',
+      telegramChatId: null,
+      attemptCount: 0,
+    })
     expect(adminBody.requests[0]).toMatchObject({
       clientName: 'Example Request Client',
       clientPhone: '+375291112233',
       source: 'example_request',
       requestedExampleSlugs: ['ov'],
     })
+  })
+
+  test('sends project example links through Telegram after bot start and logs client delivery failures', async () => {
+    const deliveries: Array<{ chatId: string; text: string }> = []
+    const telegramEnv: AppEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+      TELEGRAM_BOT_USERNAME: '@PoznyakCalcBot',
+      TELEGRAM_WEBHOOK_SECRET: 'webhook-secret',
+      PUBLIC_API_URL: 'https://api.example.com',
+    }
+    const telegramApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      telegramDocumentSender: recordingTelegramDocumentSender(deliveries),
+    })
+    const exampleIdempotencyKey = nextIdempotencyKey()
+
+    const response = await saveProjectExampleRequestWithApp(telegramApp, {
+      idempotencyKey: exampleIdempotencyKey,
+      clientName: 'Example Telegram Client',
+      clientPhone: '+375291112233',
+      requestedExampleSlugs: ['ov', 'vk'],
+      consentAccepted: true,
+      source: 'example_request',
+    })
+    const body = await response.json()
+    const replay = await saveProjectExampleRequestWithApp(telegramApp, {
+      idempotencyKey: exampleIdempotencyKey,
+      clientName: 'Different Client',
+      clientPhone: '+375291112233',
+      requestedExampleSlugs: ['ov'],
+      consentAccepted: true,
+      source: 'example_request',
+    })
+    const bindToken = new URL(body.request.telegramDelivery.deepLinkUrl).searchParams.get('start')
+    const webhook = await telegramApp.request('/api/public/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Bot-Api-Secret-Token': 'webhook-secret',
+      },
+      body: JSON.stringify(telegramStartUpdate(bindToken ?? 'missing-token')),
+    })
+    const saved = await prisma.projectExampleRequest.findUniqueOrThrow({
+      where: { publicToken: body.request.publicToken },
+      include: { telegramDeliveries: true },
+    })
+
+    const failedDeliveries: Array<{ chatId: string; text: string }> = []
+    const failureApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      telegramDocumentSender: failingTelegramDocumentSender(failedDeliveries),
+    })
+    const failureResponse = await saveProjectExampleRequestWithApp(failureApp, {
+      idempotencyKey: nextIdempotencyKey(),
+      clientName: 'Failure Example Telegram Client',
+      clientPhone: '+375291112234',
+      requestedExampleSlugs: ['ov'],
+      consentAccepted: true,
+      source: 'example_request',
+    })
+    const failureBody = await failureResponse.json()
+    const failureBindToken = new URL(
+      failureBody.request.telegramDelivery.deepLinkUrl,
+    ).searchParams.get('start')
+    const failureWebhook = await failureApp.request('/api/public/telegram/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Bot-Api-Secret-Token': 'webhook-secret',
+      },
+      body: JSON.stringify(telegramStartUpdate(failureBindToken ?? 'missing-token')),
+    })
+    const failedSaved = await prisma.projectExampleRequest.findUniqueOrThrow({
+      where: { publicToken: failureBody.request.publicToken },
+      include: { telegramDeliveries: true },
+    })
+
+    expect(response.status).toBe(201)
+    expect(replay.status).toBe(409)
+    expect(body.request.telegramDelivery).toMatchObject({
+      status: 'pending_start',
+      deepLinkUrl: expect.stringMatching(/^https:\/\/t\.me\/PoznyakCalcBot\?start=[A-Za-z0-9_-]{32,128}$/),
+    })
+    expect(webhook.status).toBe(200)
+    expect(deliveries).toHaveLength(1)
+    expect(deliveries[0].text).toContain('Примеры проектов ИП Позняк готовы')
+    expect(deliveries[0].text).toContain(
+      `https://api.example.com/api/public/project-example-requests/${body.request.publicToken}/examples/ov`,
+    )
+    expect(deliveries[0].text).toContain(
+      `https://api.example.com/api/public/project-example-requests/${body.request.publicToken}/examples/vk`,
+    )
+    expect(deliveries[0].text).not.toContain('telegram-secret-token')
+    expect(saved.telegramDeliveries[0]).toMatchObject({
+      targetType: 'project_examples',
+      status: 'sent',
+      telegramChatId: '123456789',
+      telegramUserId: '777000',
+      attemptCount: 1,
+    })
+    expect(failureResponse.status).toBe(201)
+    expect(failureWebhook.status).toBe(200)
+    expect(failedDeliveries).toHaveLength(1)
+    expect(failedSaved.telegramDeliveries[0]).toMatchObject({
+      targetType: 'project_examples',
+      status: 'failed',
+      telegramChatId: '123456789',
+      attemptCount: 1,
+    })
+    expect(failedSaved.telegramDeliveries[0].statusMessage).toBe(
+      'request to https://api.telegram.org/bot<redacted>/sendMessage failed',
+    )
+    expect(failedSaved.telegramDeliveries[0].statusMessage).not.toContain('telegram-secret-token')
   })
 
   test('snapshots public project example proof cards into generated proposals without direct PDF links', async () => {
@@ -1825,7 +2146,11 @@ maybeDescribe('engineering API integration', () => {
   }
 
   function saveProjectExampleRequest(payload: Record<string, unknown>) {
-    return app.request('/api/public/project-example-requests', {
+    return saveProjectExampleRequestWithApp(app, payload)
+  }
+
+  function saveProjectExampleRequestWithApp(targetApp: typeof app, payload: Record<string, unknown>) {
+    return targetApp.request('/api/public/project-example-requests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1851,6 +2176,54 @@ maybeDescribe('engineering API integration', () => {
     return `test-idempotency-${Date.now().toString(36)}-${idempotencySequence}`
   }
 })
+
+function recordingTelegramDocumentSender(
+  deliveries: Array<{ chatId: string; text: string }>,
+  delayMs = 0,
+): TelegramDocumentSender {
+  return {
+    isConfigured: () => true,
+    sendDocumentDelivery: async (input) => {
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+      deliveries.push(input)
+      return { status: 'sent' }
+    },
+  }
+}
+
+function failingTelegramDocumentSender(
+  deliveries: Array<{ chatId: string; text: string }>,
+): TelegramDocumentSender {
+  return {
+    isConfigured: () => true,
+    sendDocumentDelivery: async (input) => {
+      deliveries.push(input)
+      throw new Error('request to https://api.telegram.org/bottelegram-secret-token/sendMessage failed')
+    },
+  }
+}
+
+function telegramStartUpdate(bindToken: string, chatType: 'private' | 'group' = 'private') {
+  return {
+    update_id: 1000,
+    message: {
+      message_id: 1,
+      text: `/start ${bindToken}`,
+      chat: {
+        id: 123456789,
+        type: chatType,
+      },
+      from: {
+        id: 777000,
+        is_bot: false,
+        first_name: 'Client',
+        username: 'clientuser',
+      },
+    },
+  }
+}
 
 function authHeaders(accessToken: string) {
   return {

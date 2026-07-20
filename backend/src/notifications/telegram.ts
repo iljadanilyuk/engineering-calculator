@@ -14,6 +14,16 @@ export type LeadNotifier = {
   notifyLeadSubmitted(input: LeadNotificationInput): Promise<LeadNotificationResult>
 }
 
+export type TelegramDocumentDeliveryInput = {
+  chatId: string
+  text: string
+}
+
+export type TelegramDocumentSender = {
+  isConfigured(): boolean
+  sendDocumentDelivery(input: TelegramDocumentDeliveryInput): Promise<LeadNotificationResult>
+}
+
 type TelegramFetch = (
   input: Parameters<typeof fetch>[0],
   init?: Parameters<typeof fetch>[1],
@@ -33,9 +43,25 @@ type TelegramNotifierConfig = {
   timeoutMs: number
 }
 
+type TelegramDocumentSenderConfig = {
+  botToken?: string
+  timeoutMs: number
+}
+
 type LeadNotificationLinks = {
   adminUrl: string
   proposalUrl?: string
+}
+
+export type TelegramProposalDeliveryLinks = {
+  proposalUrl: string
+  proposalPdfUrl?: string
+}
+
+export type TelegramProjectExampleDeliveryLink = {
+  code: string
+  title: string
+  url: string
 }
 
 const defaultTelegramTimeoutMs = 5_000
@@ -80,6 +106,45 @@ export function createTelegramLeadNotifierFromEnv(
   }
 }
 
+export function createTelegramDocumentSenderFromEnv(
+  env: AppEnv,
+  options: TelegramNotifierOptions = {},
+): TelegramDocumentSender {
+  const config: TelegramDocumentSenderConfig = {
+    botToken: normalizeOptionalSecret(env.TELEGRAM_BOT_TOKEN),
+    timeoutMs: options.timeoutMs ?? defaultTelegramTimeoutMs,
+  }
+  const fetchTelegram = options.fetch ?? fetch
+  const logger = options.logger ?? console
+  let didLogDisabled = false
+
+  return {
+    isConfigured() {
+      return Boolean(config.botToken)
+    },
+
+    async sendDocumentDelivery({ chatId, text }) {
+      if (!config.botToken) {
+        if (!didLogDisabled) {
+          logger.info('Telegram client document delivery skipped: TELEGRAM_BOT_TOKEN is not configured')
+          didLogDisabled = true
+        }
+        return { status: 'disabled' }
+      }
+
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId,
+        text,
+        fetchTelegram,
+        timeoutMs: config.timeoutMs,
+      })
+
+      return { status: 'sent' }
+    },
+  }
+}
+
 export function formatTelegramLeadMessage(
   calculation: CalculationRecord,
   links: LeadNotificationLinks,
@@ -98,6 +163,45 @@ export function formatTelegramLeadMessage(
   }
 
   return lines.join('\n')
+}
+
+export function formatTelegramProposalDeliveryMessage(
+  offerNumber: string,
+  links: TelegramProposalDeliveryLinks,
+) {
+  const lines = [
+    `Предварительное КП ${compactText(offerNumber, 40)} готово.`,
+    `Открыть КП: ${links.proposalUrl}`,
+  ]
+
+  if (links.proposalPdfUrl) {
+    lines.push(`PDF: ${links.proposalPdfUrl}`)
+  }
+
+  lines.push('Если ссылка не открылась, вернитесь на страницу после отправки формы: там остается обычная web-ссылка.')
+
+  return lines.join('\n')
+}
+
+export function formatTelegramProjectExamplesDeliveryMessage(
+  examples: readonly TelegramProjectExampleDeliveryLink[],
+) {
+  const lines = [
+    'Примеры проектов ИП Позняк готовы:',
+    ...examples.map((example) =>
+      `${compactText(example.code, 12)} - ${compactText(example.title, 80)}: ${example.url}`,
+    ),
+    'Если ссылка не открылась, вернитесь на страницу после отправки формы: там остаются обычные web-ссылки.',
+  ]
+
+  return lines.join('\n')
+}
+
+export function telegramDeepLink(botUsername: string | undefined, bindToken: string) {
+  const username = normalizeTelegramBotUsername(botUsername)
+  if (!username) return null
+
+  return `https://t.me/${username}?start=${encodeURIComponent(bindToken)}`
 }
 
 function buildLeadNotificationLinks(
@@ -161,7 +265,7 @@ async function sendTelegramMessage(input: {
     if (isAbortError(error)) {
       throw new Error(`Telegram sendMessage timed out after ${input.timeoutMs}ms`)
     }
-    throw error
+    throw new Error(safeTelegramTransportErrorMessage(error))
   } finally {
     clearTimeout(timeout)
   }
@@ -189,6 +293,13 @@ function isTelegramConfigured(
 function normalizeOptionalSecret(value: string | undefined) {
   const trimmed = value?.trim()
   return trimmed || undefined
+}
+
+function normalizeTelegramBotUsername(value: string | undefined) {
+  const trimmed = value?.trim().replace(/^@/, '')
+  if (!trimmed) return null
+  if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(trimmed)) return null
+  return trimmed
 }
 
 function servicesSummary(titles: string[]) {
@@ -223,6 +334,15 @@ function compactText(value: string, maxLength: number) {
   const compacted = value.replace(/\s+/g, ' ').trim()
   if (compacted.length <= maxLength) return compacted
   return `${compacted.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
+}
+
+function safeTelegramTransportErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return redactTelegramBotUrl(message.slice(0, 500))
+}
+
+function redactTelegramBotUrl(message: string) {
+  return message.replace(/bot[A-Za-z0-9:_-]+(?=\/sendMessage)/g, 'bot<redacted>')
 }
 
 function isAbortError(error: unknown) {

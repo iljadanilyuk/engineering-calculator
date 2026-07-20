@@ -808,6 +808,10 @@ const structuredData = {
         | { status: 'ready'; offerNumber: string; urlPath: string; pdfUrlPath: string }
         | { status: 'html_only'; offerNumber: string; urlPath: string }
         | null
+      telegramDelivery: {
+        status: 'disabled' | 'pending_start' | 'sent' | 'failed'
+        deepLinkUrl: string | null
+      } | null
     },
     returnedExisting: boolean,
   ) {
@@ -834,6 +838,11 @@ const structuredData = {
                     ? `<a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.pdfUrlPath)}" target="_blank" rel="noopener">Скачать PDF</a>`
                     : ''
                 }
+                ${
+                  calculation.telegramDelivery?.deepLinkUrl
+                    ? `<a class="proposal-link" href="${escapeHtml(calculation.telegramDelivery.deepLinkUrl)}" target="_blank" rel="noopener">Получить в Telegram</a>`
+                    : ''
+                }
               </div>`
             : ''
         }
@@ -843,7 +852,9 @@ const structuredData = {
     setLeadStatus(
       returnedExisting
         ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
-        : calculation.proposal?.status === 'ready'
+        : calculation.telegramDelivery?.deepLinkUrl
+          ? 'Заявка принята. КП готово по ссылке, Telegram доступен как дополнительный канал.'
+          : calculation.proposal?.status === 'ready'
           ? 'Заявка принята. Коммерческое предложение и PDF готовы по ссылке.'
           : 'Заявка принята. Коммерческое предложение сохранено по ссылке.',
       'ready',

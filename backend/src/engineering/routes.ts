@@ -366,6 +366,34 @@ const publicProposalPdfRoute = createRoute({
   },
 })
 
+const telegramWebhookRoute = createRoute({
+  method: 'post',
+  path: '/public/telegram/webhook',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.record(z.string(), z.unknown()),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({ ok: z.literal(true) }),
+        },
+      },
+      description: 'Telegram webhook update accepted',
+    },
+    401: {
+      content: errorResponseContent,
+      description: 'Invalid Telegram webhook secret',
+    },
+  },
+})
+
 const adminServicesRoute = createRoute({
   method: 'get',
   path: '/admin/services',
@@ -866,6 +894,24 @@ export function createEngineeringRoutes() {
     c.header('Content-Type', 'application/pdf')
     c.header('Content-Disposition', `inline; filename="${example.asset.fileName}"`)
     return c.body(example.bytes, 200)
+  })
+
+  routes.openapi(telegramWebhookRoute, async (c) => {
+    const env = c.get('env')
+    const webhookSecret = env.TELEGRAM_WEBHOOK_SECRET?.trim()
+
+    if (!webhookSecret) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Telegram webhook secret is not configured')
+    }
+
+    if (webhookSecret && c.req.header('x-telegram-bot-api-secret-token') !== webhookSecret) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Invalid Telegram webhook secret')
+    }
+
+    const engineering = c.get('engineeringDataService')
+    const update = await c.req.json().catch(() => null)
+    await engineering.handleTelegramWebhookUpdate(update)
+    return c.json({ ok: true as const }, 200)
   })
 
   protectedRoutes.use('/admin/*', requireAdmin)

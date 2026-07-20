@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import type { CalculationRecord } from '@poznyak-engineering-calculator/contracts'
 
 import type { AppEnv } from '../env'
-import { createTelegramLeadNotifierFromEnv } from './telegram'
+import {
+  createTelegramDocumentSenderFromEnv,
+  createTelegramLeadNotifierFromEnv,
+  telegramDeepLink,
+} from './telegram'
 
 describe('createTelegramLeadNotifierFromEnv', () => {
   test('skips safely when Telegram env is missing', async () => {
@@ -83,6 +87,93 @@ describe('createTelegramLeadNotifierFromEnv', () => {
     await expect(notifier.notifyLeadSubmitted({ calculation: calculationRecord() })).rejects.toThrow(
       'Telegram sendMessage failed with HTTP 500',
     )
+  })
+})
+
+describe('createTelegramDocumentSenderFromEnv', () => {
+  test('skips client document delivery safely when bot token is missing', async () => {
+    const calls: string[] = []
+    const logs: string[] = []
+    const sender = createTelegramDocumentSenderFromEnv(baseEnv(), {
+      fetch: async (url) => {
+        calls.push(String(url))
+        return okTelegramResponse()
+      },
+      logger: {
+        info: (message) => logs.push(message),
+      },
+    })
+
+    const result = await sender.sendDocumentDelivery({
+      chatId: '123',
+      text: 'Document link',
+    })
+
+    expect(sender.isConfigured()).toBe(false)
+    expect(result.status).toBe('disabled')
+    expect(calls).toEqual([])
+    expect(logs).toEqual([
+      'Telegram client document delivery skipped: TELEGRAM_BOT_TOKEN is not configured',
+    ])
+  })
+
+  test('sends client document delivery to a dynamic chat without exposing token in text', async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = []
+    const sender = createTelegramDocumentSenderFromEnv(
+      baseEnv({ TELEGRAM_BOT_TOKEN: 'telegram-secret-token' }),
+      {
+        fetch: async (url, init) => {
+          requests.push({
+            url: String(url),
+            body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+          })
+          return okTelegramResponse()
+        },
+      },
+    )
+
+    const result = await sender.sendDocumentDelivery({
+      chatId: '987654',
+      text: 'КП: https://api.example.com/api/public/proposals/token/pdf',
+    })
+
+    expect(sender.isConfigured()).toBe(true)
+    expect(result.status).toBe('sent')
+    expect(requests).toHaveLength(1)
+    expect(requests[0].url).toBe('https://api.telegram.org/bottelegram-secret-token/sendMessage')
+    expect(requests[0].body.chat_id).toBe('987654')
+    expect(requests[0].body.disable_web_page_preview).toBe(true)
+    expect(requests[0].body.text).not.toContain('telegram-secret-token')
+  })
+
+  test('redacts bot token URLs from client document delivery transport errors', async () => {
+    const sender = createTelegramDocumentSenderFromEnv(
+      baseEnv({ TELEGRAM_BOT_TOKEN: 'telegram-secret-token' }),
+      {
+        fetch: async () => {
+          throw new Error(
+            'request to https://api.telegram.org/bottelegram-secret-token/sendMessage failed',
+          )
+        },
+      },
+    )
+
+    await expect(
+      sender.sendDocumentDelivery({
+        chatId: '987654',
+        text: 'КП: https://api.example.com/api/public/proposals/token/pdf',
+      }),
+    ).rejects.toThrow('request to https://api.telegram.org/bot<redacted>/sendMessage failed')
+  })
+})
+
+describe('telegramDeepLink', () => {
+  test('builds Telegram start links only for valid bot usernames', () => {
+    expect(telegramDeepLink('@PoznyakCalcBot', 'a'.repeat(32))).toBe(
+      `https://t.me/PoznyakCalcBot?start=${'a'.repeat(32)}`,
+    )
+    expect(telegramDeepLink('bad username', 'a'.repeat(32))).toBeNull()
+    expect(telegramDeepLink(undefined, 'a'.repeat(32))).toBeNull()
   })
 })
 
@@ -215,6 +306,7 @@ function calculationRecord(): CalculationRecord {
         createdAt: '2026-07-10T00:00:00.000Z',
       },
     ],
+    telegramDeliveries: [],
     questionnaire: null,
     createdAt: '2026-07-10T00:00:00.000Z',
     updatedAt: '2026-07-10T00:00:00.000Z',

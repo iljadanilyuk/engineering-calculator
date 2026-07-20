@@ -67,6 +67,8 @@ const envSchema = z.object({
   PDF_CHROMIUM_EXECUTABLE_PATH: optionalStringSchema,
   TELEGRAM_BOT_TOKEN: optionalStringSchema,
   TELEGRAM_CHAT_ID: optionalStringSchema,
+  TELEGRAM_BOT_USERNAME: optionalStringSchema,
+  TELEGRAM_WEBHOOK_SECRET: optionalStringSchema,
   PUBLIC_API_URL: optionalHttpUrlSchema,
   PUBLIC_WEBSITE_URL: optionalHttpUrlSchema,
   PUBLIC_WEBAPP_URL: optionalHttpUrlSchema,
