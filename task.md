@@ -269,6 +269,32 @@ For v1, Telegram bot token and chat ID should be environment variables, not admi
 
 Telegram messages include personal data, so keep the message concise and send only to the approved internal chat.
 
+### Telegram Project Context And Agreement Intelligence
+
+After PZK-020, Telegram is not only a notification channel. It is a potential project-context and agreement-intelligence layer.
+
+Important product idea:
+
+- Many engineering/design/service businesses lose important decisions inside messenger chats.
+- The valuable product is not "a bot that reads Telegram"; the valuable product is a controlled workflow that turns messy correspondence into structured, versioned, reviewable technical requirements.
+- This can become a separate business product later: `messenger correspondence -> detected agreement -> manager review -> client confirmation -> updated technical assignment -> implementation/evidence check`.
+
+Current reference documents:
+
+- `прототип/Global_TZ_Telegram_soglasovaniya_portal.md` - target architecture and full product scope.
+- `прототип/TZ_Telegram_soglasovaniya_portal_MVP.md` - MVP implementation brief for project Telegram group listener and agreement cards.
+
+Product principles:
+
+- Telegram messages are source material, not final truth.
+- AI may classify, summarize, extract, and propose structured decision cards.
+- AI must not autonomously change the final technical assignment, contract, proposal, price, or project deliverables.
+- Manager review is mandatory before a detected Telegram decision becomes a project requirement.
+- Client confirmation is required where the decision changes scope, layout, equipment, price, deadline, or previous agreement.
+- Every accepted decision must retain evidence links to source messages, author/time metadata, and audit history.
+- The system must be useful even if Telegram is unavailable; website/admin workflows remain the fallback.
+- This direction should be designed as a reusable module, not hardcoded only for one Poznyak workflow, whenever that does not slow down the current MVP.
+
 ## 8. Deployment Target
 
 Target:
@@ -1684,31 +1710,115 @@ Status: Pending
 Goal:
 
 - Extend the PZK-020 Telegram foundation from one-time client document delivery into an optional project-context channel for real projects.
+- Implement the first practical slice of the Telegram/TZ agreement-intelligence workflow: group messages become reviewable agreement/decision cards, not direct automatic edits to ТЗ.
+
+Task briefs:
+
+- `прототип/TZ_Telegram_soglasovaniya_portal_MVP.md`
+- `прототип/Global_TZ_Telegram_soglasovaniya_portal.md`
+- `docs/design/telegram-project-context-bot-architecture-2026-07-20.md`
 
 Required behavior:
 
 - Allow an admin-approved project Telegram group/thread to be linked to a lead/project only after consent and bot permission checks.
 - Store inbound Telegram messages with enough metadata for audit/debugging without exposing bot secrets.
-- Support text first, then files/voice/transcripts only when storage, consent, retention, and privacy behavior are explicit.
-- Produce a daily draft update for the technical assignment:
+- Support text first. Files/voice/transcripts are allowed only when storage, consent, retention, cost, and privacy behavior are explicit.
+- Support a manual fixation command or admin action so a manager/project participant can deliberately turn a message/thread into a candidate decision.
+- Automatically detect potential technical discussions where feasible, but keep confidence thresholds conservative.
+- Group related messages into discussion episodes before AI analysis.
+- Produce structured candidate decision/agreement cards:
+  - source Telegram message/thread links or IDs;
+  - author/time metadata;
+  - project section;
+  - proposed requirement/decision text;
+  - confidence/risk level;
+  - whether client confirmation is required;
+  - possible impact on scope, price, deadline, or previously accepted ТЗ.
+- Show candidate cards in the admin cabinet for manual accept/edit/reject.
+- Accepted cards may update a draft/global ТЗ only through an explicit manager action and must create audit/version history.
+- Rejected/merged/duplicate cards must remain traceable for audit/debugging.
+- Produce a daily draft update for the technical assignment and project context:
   - new facts;
   - open questions;
   - contradictions;
   - decisions requiring confirmation.
-- Show draft updates in the admin cabinet for manual accept/edit/reject.
 - Never automatically change the final ТЗ or proposal without admin confirmation.
 - Telegram must remain optional; website/admin fallback workflows must continue to work without Telegram.
 
 Dependencies / notes:
 
 - Builds on `TelegramDelivery` and `docs/design/telegram-project-context-bot-architecture-2026-07-20.md`.
-- Should be split further if voice/file ingestion or AI summary review becomes too large for one task.
+- The MVP brief in `прототип/TZ_Telegram_soglasovaniya_portal_MVP.md` is the nearest implementation source of truth for PZK-026.
+- The global brief in `прототип/Global_TZ_Telegram_soglasovaniya_portal.md` is the target product architecture and should guide boundaries/future tasks.
+- Should be split further if voice/file ingestion, Telegram Mini App, evidence matrix, AI cost control, or final-document verification becomes too large for one task.
 
 Out of scope:
 
 - Production Telegram webhook configuration or cloud resource changes without explicit approval.
 - Committing Telegram secrets or exposing them through frontend env, browser responses, admin settings, or logs.
 - Fully automated final technical assignment approval.
+- Full Telegram Mini App.
+- Full voice/file/PDF/image analysis.
+- Automatic price/contract changes.
+- Standalone SaaS/product packaging; covered by PZK-027.
+
+### PZK-027 - Telegram Agreement Intelligence Product Discovery
+
+Status: Pending
+
+Goal:
+
+- Treat the Telegram/TZ agreement workflow as a potential standalone product, not only as an internal feature of the Poznyak calculator.
+- Decide whether and how to package this as a reusable business system for other service/design/project companies.
+
+Source documents:
+
+- `прототип/Global_TZ_Telegram_soglasovaniya_portal.md`
+- `прототип/TZ_Telegram_soglasovaniya_portal_MVP.md`
+
+Required behavior:
+
+- Extract the reusable product hypothesis:
+  `messenger correspondence -> detected decision -> manager review -> client confirmation -> updated scope/ТЗ -> implementation check -> audit history`.
+- Identify target customer segments where this is likely valuable:
+  - engineering/project bureaus;
+  - architects/design studios;
+  - construction and renovation contractors;
+  - agencies with long client approval cycles;
+  - B2B services where decisions happen in messenger groups.
+- Map generic entities separately from Poznyak-specific entities:
+  - Project;
+  - Chat/Conversation;
+  - Participant/Role;
+  - Message;
+  - Discussion episode;
+  - Candidate decision;
+  - Confirmed requirement;
+  - Evidence;
+  - Change request;
+  - Audit event.
+- Define MVP packaging options:
+  - internal module inside `engineering-calculator`;
+  - separate product repository;
+  - white-label portal module;
+  - Telegram-first bot + web review cabinet.
+- Identify legal/privacy/security constraints:
+  - consent to process messages;
+  - personal data retention;
+  - client confidentiality;
+  - bot permissions;
+  - audit logs;
+  - AI provider data handling.
+- Produce a product decision record and a roadmap separating:
+  - what belongs in Poznyak MVP;
+  - what should become reusable core;
+  - what should wait until there is market validation.
+
+Out of scope:
+
+- Building a separate SaaS in this task.
+- Creating paid cloud resources, new repositories, billing, or public marketing pages without explicit approval.
+- Replacing the PZK-026 project-specific implementation.
 
 ## 11. Post-Launch Follow-Ups
 
