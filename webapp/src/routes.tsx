@@ -7,6 +7,7 @@ import {
   LeadsPage,
   RootLayout,
   ServicesPage,
+  TasksPage,
 } from './pages'
 
 const rootRoute = createRootRoute({
@@ -37,13 +38,19 @@ const leadsRoute = createRoute({
   component: LeadsPage,
 })
 
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/app/tasks',
+  component: TasksPage,
+})
+
 const leadDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/leads/$leadId',
   component: LeadDetailPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, appRoute, servicesRoute, leadsRoute, leadDetailRoute])
+const routeTree = rootRoute.addChildren([indexRoute, appRoute, servicesRoute, leadsRoute, tasksRoute, leadDetailRoute])
 
 export const router = createRouter({ routeTree })
 

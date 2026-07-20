@@ -31,7 +31,7 @@ test('logs in to the protected admin shell and logs out', async ({ page }) => {
   await page.getByLabel('Пароль').fill(e2ePassword)
   await page.getByRole('button', { name: 'Войти' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Услуги и цены' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Рабочий стол' })).toBeVisible()
   await expect(page.getByText(e2eAdminEmail)).toBeVisible()
   await expect
     .poll(async () =>
@@ -53,7 +53,7 @@ test('logs in to the protected admin shell and logs out', async ({ page }) => {
 
   await expect((await refreshAfterReload).status()).toBe(200)
   await expect((await meAfterReload).status()).toBe(200)
-  await expect(page.getByRole('heading', { name: 'Услуги и цены' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Рабочий стол' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Выйти' }).click()
   await expect(

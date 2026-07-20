@@ -9,17 +9,17 @@ import type {
 import { Link } from '@tanstack/react-router'
 import { type FormEvent, useMemo, useState } from 'react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+  AdminPageHeader,
+  AdminPanel,
+  EmptyState,
+  ErrorBlock,
+  LoadingBlock,
+  MetricTile,
+  StatusPill,
+} from '@/components/AdminPrimitives'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import {
   Field,
   FieldGroup,
@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
   TableBody,
@@ -44,6 +43,28 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { Typography } from '@/components/ui/typography'
+import {
+  activeStageConfigs,
+  deriveTask,
+  documentState,
+  exchangeRateSourceLabel,
+  formatArea,
+  formatByn,
+  formatDateTime,
+  formatUsd,
+  latestTelegramDelivery,
+  leadSourceLabel,
+  numberFormatter,
+  pricingTypeLabel,
+  projectRiskTone,
+  projectStage,
+  servicesSummary,
+  stageConfig,
+  statusLabels,
+  statusOptions,
+  telegramDeliveryTargetLabel,
+  telegramStatusLabels,
+} from '@/lib/admin-derived'
 import { ApiRequestError, buildApiUrl } from '@/lib/api'
 import {
   type LeadListFilters,
@@ -65,30 +86,8 @@ type LeadFilterState = {
   createdTo: string
 }
 
-const statusOptions = [
-  'new',
-  'contacted',
-  'in_progress',
-  'won',
-  'lost',
-  'spam_test',
-] as const satisfies readonly CalculationStatus[]
-
-const statusLabels: Record<CalculationStatus, string> = {
-  new: 'Новая',
-  contacted: 'Связались',
-  in_progress: 'В работе',
-  won: 'Договорились',
-  lost: 'Отказ',
-  spam_test: 'Спам/тест',
-}
-
-const telegramStatusLabels: Record<TelegramDeliveryRecord['status'], string> = {
-  disabled: 'Не настроено',
-  pending_start: 'Ожидает Telegram',
-  sent: 'Отправлено',
-  failed: 'Ошибка',
-}
+type ProjectMode = 'board' | 'table'
+type RecordTab = 'overview' | 'proposal' | 'questionnaire' | 'delivery' | 'communication' | 'documents' | 'history'
 
 const defaultFilters: LeadFilterState = {
   status: 'all',
@@ -99,16 +98,21 @@ const defaultFilters: LeadFilterState = {
   createdTo: '',
 }
 
-const numberFormatter = new Intl.NumberFormat('ru-RU')
-const dateTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
-  dateStyle: 'short',
-  timeStyle: 'short',
-})
+const recordTabs: Array<{ id: RecordTab; label: string }> = [
+  { id: 'overview', label: 'Обзор' },
+  { id: 'proposal', label: 'КП' },
+  { id: 'questionnaire', label: 'ТЗ' },
+  { id: 'delivery', label: 'Проект и сдача' },
+  { id: 'communication', label: 'Коммуникация' },
+  { id: 'documents', label: 'Документы' },
+  { id: 'history', label: 'История' },
+]
 
 export function LeadsManager() {
   const auth = useAuth()
   const [filters, setFilters] = useState(defaultFilters)
   const [offset, setOffset] = useState(0)
+  const [mode, setMode] = useState<ProjectMode>('table')
   const queryFilters = useMemo(() => filterStateToQuery(filters, offset), [filters, offset])
   const leadsQuery = useLeadsQuery({
     api: auth.api,
@@ -157,31 +161,43 @@ export function LeadsManager() {
   }
 
   return (
-    <section className="grid gap-6" aria-labelledby="leads-heading">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <LeadMetric label="Активные заявки" value={summary?.activeCount ?? 0} />
-        <LeadMetric label="Новые" value={summary?.statusCounts.new ?? 0} />
-        <LeadMetric label="Договорились" value={summary?.statusCounts.won ?? 0} />
-        <LeadMetric label="Спам/тест" value={summary?.spamTestCount ?? 0} muted />
+    <section className="admin-view" aria-labelledby="leads-heading">
+      <AdminPageHeader
+        eyebrow="Работа"
+        title="Заявки"
+        description="V2-представление заявок и проектов: канбан для ежедневной работы, таблица для поиска и массовой проверки."
+        actions={
+          <Button type="button" variant="outline" onClick={() => void leadsQuery.refetch()}>
+            Обновить
+          </Button>
+        }
+      />
+
+      <div className="admin-priority-strip">
+        <MetricTile label="Активные" value={summary?.activeCount ?? 0} tone="blue" />
+        <MetricTile label="Новые" value={summary?.statusCounts.new ?? 0} tone="amber" />
+        <MetricTile label="Договорились" value={summary?.statusCounts.won ?? 0} tone="green" />
       </div>
 
-      <Card className="rounded-lg">
-        <CardHeader>
-          <div className="grid gap-2">
-            <CardTitle id="leads-heading">Заявки из калькулятора</CardTitle>
-            <CardDescription>
-              {summary
-                ? `Показано ${numberFormatter.format(pageRange?.start ?? 0)}-${numberFormatter.format(pageRange?.end ?? 0)} из ${numberFormatter.format(summary.filteredCount)} · всего ${numberFormatter.format(summary.totalCount)}`
-                : 'Загружаем заявки'}
-            </CardDescription>
-          </div>
-          <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
-            <Button type="button" variant="outline" onClick={() => void leadsQuery.refetch()}>
-              Обновить
+      <AdminPanel
+        title="Заявки и проекты"
+        description={
+          summary
+            ? `Показано ${numberFormatter.format(pageRange?.start ?? 0)}-${numberFormatter.format(pageRange?.end ?? 0)} из ${numberFormatter.format(summary.filteredCount)} · всего ${numberFormatter.format(summary.totalCount)}`
+            : 'Загружаем заявки'
+        }
+        action={
+          <div className="admin-segmented">
+            <Button type="button" variant={mode === 'board' ? 'default' : 'ghost'} size="sm" onClick={() => setMode('board')}>
+              Канбан
             </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="grid gap-4">
+            <Button type="button" variant={mode === 'table' ? 'default' : 'ghost'} size="sm" onClick={() => setMode('table')}>
+              Таблица
+            </Button>
+          </div>
+        }
+      >
+        <div className="admin-stack">
           <LeadFilters filters={filters} onChange={updateFilters} onClear={clearFilters} />
 
           {actionError && (
@@ -192,111 +208,32 @@ export function LeadsManager() {
           )}
 
           {leadsQuery.isLoading ? (
-            <div className="flex items-center gap-3 py-8">
-              <Spinner />
-              <Typography tone="muted">Загружаем заявки...</Typography>
-            </div>
+            <LoadingBlock label="Загружаем заявки..." />
           ) : leadsQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Не удалось загрузить заявки</AlertTitle>
-              <AlertDescription>{errorMessage(leadsQuery.error)}</AlertDescription>
-            </Alert>
+            <ErrorBlock
+              title="Не удалось загрузить заявки"
+              description={errorMessage(leadsQuery.error)}
+              onRetry={() => void leadsQuery.refetch()}
+            />
           ) : leads.length === 0 ? (
-            <div className="grid gap-3 rounded-lg border border-dashed p-8">
-              <Typography variant="h6">Заявок нет</Typography>
-              <Typography tone="muted">Измените фильтры или дождитесь первой заявки с сайта.</Typography>
-            </div>
+            <EmptyState title="Заявок нет" description="Измените фильтры или дождитесь первой заявки с сайта." />
+          ) : mode === 'board' ? (
+            <ProjectKanban leads={leads} />
           ) : (
-            <>
-              <div className="hidden lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Дата</TableHead>
-                      <TableHead>Клиент</TableHead>
-                      <TableHead>Телефон</TableHead>
-                      <TableHead>Площадь</TableHead>
-                      <TableHead>Услуги</TableHead>
-                      <TableHead>Статус</TableHead>
-                      <TableHead>BYN</TableHead>
-                      <TableHead>USD</TableHead>
-                      <TableHead>КП/PDF</TableHead>
-                      <TableHead>Telegram</TableHead>
-                      <TableHead className="text-right">Карточка</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leads.map((lead) => (
-                      <TableRow
-                        key={lead.id}
-                        className={cn(lead.status === 'spam_test' && 'bg-muted/30 text-muted-foreground')}
-                      >
-                        <TableCell className="whitespace-nowrap">
-                          {formatDateTime(lead.createdAt)}
-                        </TableCell>
-                        <TableCell className="min-w-[160px] whitespace-normal">
-                          <LeadClientSummary lead={lead} />
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">{lead.clientPhone}</TableCell>
-                        <TableCell className="whitespace-nowrap">{formatArea(lead.areaSqm)}</TableCell>
-                        <TableCell className="max-w-[220px] whitespace-normal">
-                          {servicesSummary(lead.serviceSnapshots)}
-                        </TableCell>
-                        <TableCell>
-                          <LeadStatusSelect
-                            value={lead.status}
-                            label={`Статус заявки ${lead.clientName}`}
-                            disabled={updateLead.isPending}
-                            onChange={(status) => void changeStatus(lead, status)}
-                          />
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <Typography className="tabular-nums" variant="bodySmMedium">
-                            {formatByn(lead.totalBynRoundedRubles)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {formatUsd(lead.totalUsdCents)}
-                        </TableCell>
-                        <TableCell>
-                          <ProposalLink lead={lead} />
-                        </TableCell>
-                        <TableCell>
-                          <TelegramDeliverySummary deliveries={lead.telegramDeliveries} compact />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild type="button" variant="outline" size="sm">
-                            <Link to="/app/leads/$leadId" params={{ leadId: lead.id }}>
-                              Открыть
-                            </Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="grid gap-3 lg:hidden">
-                {leads.map((lead) => (
-                  <LeadMobileCard
-                    key={lead.id}
-                    lead={lead}
-                    statusDisabled={updateLead.isPending}
-                    onStatusChange={changeStatus}
-                  />
-                ))}
-              </div>
-            </>
+            <ProjectTable
+              leads={leads}
+              statusDisabled={updateLead.isPending}
+              onStatusChange={changeStatus}
+            />
           )}
 
           {summary && summary.filteredCount > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+            <div className="admin-pagination">
               <Typography variant="bodySm" tone="muted">
                 Показано {numberFormatter.format(pageRange?.start ?? 0)}-{numberFormatter.format(pageRange?.end ?? 0)} из{' '}
                 {numberFormatter.format(summary.filteredCount)}
               </Typography>
-              <div className="flex gap-2">
+              <div className="admin-pagination-actions">
                 <Button
                   type="button"
                   variant="outline"
@@ -318,8 +255,8 @@ export function LeadsManager() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </AdminPanel>
 
       <ProjectExampleRequestsPanel
         requests={projectExampleRequestsQuery.data?.requests ?? []}
@@ -342,6 +279,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
   })
   const updateLead = useUpdateLeadMutation({ api: auth.api })
   const lead = leadQuery.data?.calculation
+  const [tab, setTab] = useState<RecordTab>('overview')
   const [actionError, setActionError] = useState<string | null>(null)
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
 
@@ -361,54 +299,74 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
     }
   }
 
-  async function saveNotes(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!lead) return
-    const formData = new FormData(event.currentTarget)
-    const notes = String(formData.get('notes') ?? '')
+  async function saveNotes(notes: string) {
+    if (!lead) return ''
     setActionError(null)
     setSavedMessage(null)
 
     try {
-      await updateLead.mutateAsync({
+      const response = await updateLead.mutateAsync({
         id: lead.id,
         input: { notes },
       })
       setSavedMessage('Заметки сохранены')
+      return response.calculation.notes ?? ''
     } catch (error) {
       setActionError(errorMessage(error))
+      throw error
     }
   }
 
   if (leadQuery.isLoading) {
-    return (
-      <section className="flex items-center gap-3 py-8" aria-label="Загрузка заявки">
-        <Spinner />
-        <Typography tone="muted">Загружаем карточку заявки...</Typography>
-      </section>
-    )
+    return <LoadingBlock label="Загружаем карточку проекта..." />
   }
 
   if (leadQuery.isError) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Не удалось загрузить заявку</AlertTitle>
-        <AlertDescription>{errorMessage(leadQuery.error)}</AlertDescription>
-      </Alert>
+      <ErrorBlock
+        title="Не удалось загрузить карточку"
+        description={errorMessage(leadQuery.error)}
+        onRetry={() => void leadQuery.refetch()}
+      />
     )
   }
 
   if (!lead) return null
 
+  const stage = stageConfig(projectStage(lead))
+  const task = deriveTask(lead)
+
   return (
-    <section className="grid gap-6" aria-labelledby="lead-detail-heading">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button asChild type="button" variant="outline" size="sm">
-          <Link to="/app/leads">Назад к заявкам</Link>
-        </Button>
-        <Badge variant={lead.status === 'spam_test' ? 'secondary' : 'outline'}>
-          {statusLabels[lead.status]}
-        </Badge>
+    <section className="admin-view admin-record-view" aria-labelledby="lead-detail-heading">
+      <div className="admin-record-top">
+        <div className="admin-record-head">
+          <div className="admin-record-title-block">
+            <Typography variant="caption" tone="muted">Проекты / {lead.id.slice(0, 8)}</Typography>
+            <div className="admin-record-title-line">
+              <Typography id="lead-detail-heading" className="admin-record-title" variant="h1">
+                {lead.clientName}
+              </Typography>
+              <StatusPill tone={stage.tone}>{stage.label}</StatusPill>
+              <StatusPill tone={projectRiskTone(lead)}>{documentState(lead)}</StatusPill>
+            </div>
+            <div className="admin-record-meta">
+              <Typography variant="caption">{lead.objectName ?? 'Объект не указан'}</Typography>
+              <Typography variant="caption">{formatArea(lead.areaSqm)}</Typography>
+              <Typography className="numeric" variant="caption">{formatByn(lead.totalBynRoundedRubles)}</Typography>
+              <Typography variant="caption">{formatDateTime(lead.createdAt)}</Typography>
+            </div>
+          </div>
+          <div className="admin-record-actions">
+            <Button asChild type="button" variant="outline" size="sm">
+              <Link to="/app/leads">Назад к списку</Link>
+            </Button>
+            <ProposalLink
+              lead={lead}
+              preferredLabel={hasPdfArtifact(lead.proposalArtifacts[0]) ? 'Открыть PDF' : 'Открыть КП'}
+            />
+          </div>
+        </div>
+        <Journey currentStage={projectStage(lead)} />
       </div>
 
       {actionError && (
@@ -425,87 +383,57 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         </Alert>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-6">
-          <Card className="rounded-lg">
-            <CardHeader>
-              <div className="grid gap-2">
-                <CardTitle id="lead-detail-heading">{lead.clientName}</CardTitle>
-                <CardDescription>
-                  Создана {formatDateTime(lead.createdAt)} · обновлена {formatDateTime(lead.updatedAt)}
-                </CardDescription>
-              </div>
-              <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
-                <ProposalLink
-                  lead={lead}
-                  preferredLabel={hasPdfArtifact(lead.proposalArtifacts[0]) ? 'Открыть PDF' : 'Открыть КП'}
-                />
-              </CardAction>
-            </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <DetailItem label="Телефон" value={lead.clientPhone} />
-                <DetailItem label="Источник" value={leadSourceLabel(lead.source)} />
-                <DetailItem label="Объект" value={lead.objectName ?? 'Не указан'} />
-                <DetailItem label="Площадь" value={formatArea(lead.areaSqm)} />
-                <DetailItem label="Сумма КП" value={`${formatByn(lead.totalBynRoundedRubles)} · ${formatUsd(lead.totalUsdCents)}`} />
-            </CardContent>
-          </Card>
+      <div className="admin-next-action-bar">
+        <div className="admin-next-action-copy">
+          <Typography className="admin-eyebrow" variant="caption">Следующее действие</Typography>
+          <Typography variant="bodySmMedium">{task.title}</Typography>
+          <Typography variant="caption" tone="muted">{task.detail}</Typography>
+        </div>
+        <StatusPill tone={task.tone === 'overdue' ? 'red' : task.tone === 'today' ? 'amber' : 'blue'}>
+          {task.dueLabel}
+        </StatusPill>
+        <Button type="button" variant="outline" size="sm" disabled>
+          Выполнить
+        </Button>
+      </div>
 
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>Состав расчета</CardTitle>
-              <CardDescription>
-                Курс {lead.exchangeRate.usdToBynRate} BYN/USD · {exchangeRateSourceLabel(lead.exchangeRate.source)}
-                {lead.exchangeRate.asOf ? ` · ${formatDateTime(lead.exchangeRate.asOf)}` : ''}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-5">
-              <div className="grid overflow-hidden rounded-lg border">
-                {lead.calculationSnapshot.lineItems.map((lineItem) => (
-                  <CalculationLine key={lineItem.serviceId} lineItem={lineItem} />
-                ))}
-              </div>
-              <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 sm:grid-cols-3">
-                <DetailItem label="Итого USD" value={formatUsd(lead.totalUsdCents)} />
-                <DetailItem label="BYN до округления" value={`${numberFormatter.format(lead.totalBynCents / 100)} BYN`} />
-                <DetailItem label="Итого BYN" value={formatByn(lead.totalBynRoundedRubles)} />
-              </div>
-            </CardContent>
-          </Card>
+      <div className="admin-record-layout">
+        <div className="admin-stack">
+          <div className="admin-record-tabs" role="tablist" aria-label="Разделы карточки проекта">
+            {recordTabs.map((item) => (
+              <Button
+                key={item.id}
+                type="button"
+                variant={tab === item.id ? 'default' : 'ghost'}
+                size="sm"
+                role="tab"
+                aria-selected={tab === item.id}
+                onClick={() => setTab(item.id)}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
 
-          <QuestionnaireDraftCard questionnaire={lead.questionnaire} />
-
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>Снимок выбранных услуг</CardTitle>
-              <CardDescription>
-                Сохранен при отправке заявки и не зависит от текущих цен в админке.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {lead.serviceSnapshots.map((service) => (
-                <div key={service.id} className="grid gap-1 rounded-lg border p-4">
-                  <Typography variant="bodySmMedium">{service.title}</Typography>
-                  <Typography variant="caption" tone="muted">
-                    {pricingTypeLabel(service.pricingType)} · {formatUsd(service.priceUsdCents)}
-                  </Typography>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          {tab === 'overview' && <ProjectOverview lead={lead} />}
+          {tab === 'proposal' && <ProposalTab lead={lead} />}
+          {tab === 'questionnaire' && <QuestionnaireDraftCard questionnaire={lead.questionnaire} />}
+          {tab === 'delivery' && <DeliveryTab lead={lead} />}
+          {tab === 'communication' && <CommunicationTab lead={lead} />}
+          {tab === 'documents' && <DocumentsTab lead={lead} />}
+          {tab === 'history' && <HistoryTab lead={lead} />}
         </div>
 
-        <aside className="grid h-fit gap-6">
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>Статус заявки</CardTitle>
-              <CardDescription>
-                Последнее изменение {formatDateTime(lead.statusUpdatedAt)}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
+        <aside className="admin-stack">
+          <AdminPanel title="Клиент и статус" description={`Обновлен ${formatDateTime(lead.updatedAt)}`}>
+            <div className="admin-property-grid single">
+              <DetailItem label="Телефон" value={lead.clientPhone} />
+              <DetailItem label="Источник" value={leadSourceLabel(lead.source)} />
+              <DetailItem label="Статус обновлен" value={formatDateTime(lead.statusUpdatedAt)} />
+            </div>
+            <div className="admin-field-block">
               <Field>
-                <FieldLabel>Статус</FieldLabel>
+                <FieldLabel>Статус заявки</FieldLabel>
                 <LeadStatusSelect
                   value={lead.status}
                   label="Статус заявки"
@@ -513,115 +441,226 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                   onChange={(status) => void changeStatus(status)}
                 />
               </Field>
-              <DetailItem label="Статус обновлен" value={formatDateTime(lead.statusUpdatedAt)} />
-            </CardContent>
-          </Card>
+            </div>
+          </AdminPanel>
 
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>Telegram-доставка</CardTitle>
-              <CardDescription>
-                Статус отправки КП клиенту через Telegram после сохранения контакта.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
-            </CardContent>
-          </Card>
+          <AdminPanel title="Внутренние заметки">
+            <LeadNotesForm
+              key={`${lead.id}-${lead.notes ?? ''}`}
+              initialNotes={lead.notes ?? ''}
+              isSaving={updateLead.isPending}
+              onSave={saveNotes}
+            />
+          </AdminPanel>
 
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>Внутренние заметки</CardTitle>
-              <CardDescription>Служебный комментарий, который виден только в админке.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="grid gap-4" onSubmit={(event) => void saveNotes(event)}>
-                <Field>
-                  <FieldLabel htmlFor="lead-notes">Внутренние заметки</FieldLabel>
-                  <Textarea
-                    id="lead-notes"
-                    key={`${lead.id}-${lead.notes ?? ''}`}
-                    name="notes"
-                    defaultValue={lead.notes ?? ''}
-                    rows={8}
-                    maxLength={5_000}
-                  />
-                </Field>
-                <Button type="submit" disabled={updateLead.isPending}>
-                  Сохранить заметки
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>КП/PDF</CardTitle>
-              <CardDescription>Открывается сохраненный артефакт исходного коммерческого предложения.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {lead.proposalArtifacts.length === 0 ? (
-                <Typography tone="muted">КП/PDF для этой заявки не сохранен.</Typography>
-              ) : (
-                lead.proposalArtifacts.map((artifact) => (
-                  <div key={artifact.id} className="grid gap-2 rounded-lg border p-4">
-                    <Typography variant="bodySmMedium">{artifact.offerNumber}</Typography>
-                    <Typography variant="caption" tone="muted">
-                      {artifact.templateVersion} · {formatDateTime(artifact.createdAt)}
-                    </Typography>
-                    <Button asChild type="button" variant="outline" size="sm">
-                      <a href={proposalHref(artifact)} target="_blank" rel="noreferrer">
-                        <Typography as="span" variant="control">
-                          {artifact.pdfUrlPath || artifact.pdfUrl ? 'Открыть PDF' : 'Открыть КП'}
-                        </Typography>
-                      </a>
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>Следующие этапы</CardTitle>
-              <CardDescription>
-                Место в карточке выделено под договор и будущие уточнения по проекту.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {lead.questionnaire ? (
-                <Badge variant="secondary">Черновик ТЗ {lead.questionnaire.progress.completionPercent}%</Badge>
-              ) : (
-                <Badge variant="secondary">ТЗ не заполнено</Badge>
-              )}
-              <Badge variant="secondary">Договор позже</Badge>
-              <TelegramDeliveryBadge delivery={latestTelegramDelivery(lead.telegramDeliveries)} />
-            </CardContent>
-          </Card>
+          <AdminPanel title="Telegram-доставка">
+            <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
+          </AdminPanel>
         </aside>
       </div>
     </section>
   )
 }
 
-function LeadClientSummary({
-  lead,
+function LeadNotesForm({
+  initialNotes,
+  isSaving,
+  onSave,
 }: {
-  lead: Pick<CalculationListItem, 'clientName' | 'objectName' | 'source'>
+  initialNotes: string
+  isSaving: boolean
+  onSave: (notes: string) => Promise<string>
+}) {
+  const [notesValue, setNotesValue] = useState(initialNotes)
+
+  async function submitNotes(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    try {
+      const savedNotes = await onSave(notesValue)
+      setNotesValue(savedNotes)
+    } catch {
+      // The parent renders the API error; keep the user's draft in the textarea.
+    }
+  }
+
+  return (
+    <form className="admin-notes-form" onSubmit={(event) => void submitNotes(event)}>
+      <Field>
+        <FieldLabel htmlFor="lead-notes">Внутренние заметки</FieldLabel>
+        <Textarea
+          id="lead-notes"
+          name="notes"
+          value={notesValue}
+          rows={8}
+          onChange={(event) => setNotesValue(event.currentTarget.value)}
+        />
+      </Field>
+      <Button type="submit" disabled={isSaving}>
+        Сохранить заметки
+      </Button>
+    </form>
+  )
+}
+
+function ProjectKanban({ leads }: { leads: CalculationListItem[] }) {
+  return (
+    <div className="admin-kanban-wrap" aria-label="Канбан проектов">
+      <div className="admin-kanban">
+        {activeStageConfigs.map((stage) => {
+          const stageLeads = leads.filter((lead) => projectStage(lead) === stage.id)
+          const sorted = [...stageLeads].sort((first, second) => {
+            const firstTask = deriveTask(first)
+            const secondTask = deriveTask(second)
+            return new Date(firstTask.dueAt).getTime() - new Date(secondTask.dueAt).getTime()
+          })
+
+          return (
+            <section key={stage.id} className="admin-kanban-col" aria-label={stage.label}>
+              <div className="admin-kanban-head">
+                <div className="admin-kanban-title">
+                  <span className={`admin-stage-dot tone-${stage.tone}`} aria-hidden="true" />
+                  <Typography variant="bodySmMedium">{stage.label}</Typography>
+                </div>
+                <StatusPill tone="gray">{String(stageLeads.length)}</StatusPill>
+              </div>
+              <div className="admin-kanban-body">
+                {sorted.length === 0 ? (
+                  <div className="admin-kanban-empty">
+                    <Typography variant="caption" tone="muted">Нет проектов</Typography>
+                  </div>
+                ) : (
+                  sorted.map((lead) => <ProjectCard key={lead.id} lead={lead} />)
+                )}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ProjectCard({ lead }: { lead: CalculationListItem }) {
+  const task = deriveTask(lead)
+
+  return (
+    <Link className="admin-project-card" to="/app/leads/$leadId" params={{ leadId: lead.id }}>
+      <div className="admin-project-card-head">
+        <div className="admin-project-card-title">
+          <Typography variant="bodySmMedium">{lead.clientName}</Typography>
+          <Typography variant="caption" tone="muted">
+            {lead.objectName ?? 'Объект не указан'} · {formatArea(lead.areaSqm)}
+          </Typography>
+        </div>
+        <Typography className="numeric" variant="bodySmMedium">{formatByn(lead.totalBynRoundedRubles)}</Typography>
+      </div>
+      <div className="admin-project-card-state">
+        <Typography variant="caption" tone="muted">Состояние</Typography>
+        <Typography variant="bodySmMedium">{documentState(lead)}</Typography>
+      </div>
+      <div className="admin-project-card-foot">
+        <span className={cn('admin-action-signal', `tone-${task.tone === 'overdue' ? 'red' : task.tone === 'today' ? 'amber' : 'blue'}`)} aria-hidden="true" />
+        <Typography variant="caption">{task.title} · {task.dueLabel}</Typography>
+      </div>
+    </Link>
+  )
+}
+
+function ProjectTable({
+  leads,
+  statusDisabled,
+  onStatusChange,
+}: {
+  leads: CalculationListItem[]
+  statusDisabled: boolean
+  onStatusChange: (lead: CalculationListItem, status: CalculationStatus) => void | Promise<void>
 }) {
   return (
-    <div className="grid gap-1">
-      <Typography variant="bodySmMedium">{lead.clientName}</Typography>
-      <Typography variant="caption" tone="muted">
-        Источник: {leadSourceLabel(lead.source)}
-      </Typography>
-      {lead.objectName && (
-        <Typography variant="caption" tone="muted">
-          {lead.objectName}
-        </Typography>
-      )}
-    </div>
+    <>
+      <div className="admin-table-wrap desktop-only">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Клиент и ID проекта</TableHead>
+              <TableHead>Объект</TableHead>
+              <TableHead>Макроэтап</TableHead>
+              <TableHead>Текущее состояние</TableHead>
+              <TableHead>Сумма</TableHead>
+              <TableHead>Следующее действие</TableHead>
+              <TableHead>Статус</TableHead>
+              <TableHead>КП/PDF</TableHead>
+              <TableHead>Telegram</TableHead>
+              <TableHead className="text-right">Карточка</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {leads.map((lead) => {
+              const stage = stageConfig(projectStage(lead))
+              const task = deriveTask(lead)
+
+              return (
+                <TableRow key={lead.id} className={cn(lead.status === 'spam_test' && 'bg-muted/30 text-muted-foreground')}>
+                  <TableCell className="min-w-[190px] whitespace-normal">
+                    <LeadClientSummary lead={lead} />
+                  </TableCell>
+                  <TableCell className="min-w-[180px] whitespace-normal">
+                    <Typography variant="bodySmMedium">{lead.objectName ?? 'Объект не указан'}</Typography>
+                    <Typography variant="caption" tone="muted">{formatArea(lead.areaSqm)} · {servicesSummary(lead.serviceSnapshots)}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <StatusPill tone={stage.tone}>{stage.label}</StatusPill>
+                  </TableCell>
+                  <TableCell className="min-w-[170px] whitespace-normal">{documentState(lead)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <Typography className="numeric" variant="bodySmMedium">{formatByn(lead.totalBynRoundedRubles)}</Typography>
+                    <Typography className="numeric" variant="caption" tone="muted">{formatUsd(lead.totalUsdCents)}</Typography>
+                  </TableCell>
+                  <TableCell className="min-w-[180px] whitespace-normal">
+                    <Typography variant="bodySmMedium">{task.title}</Typography>
+                    <Typography className={cn('admin-due', `tone-${task.tone === 'overdue' ? 'red' : task.tone === 'today' ? 'amber' : 'blue'}`)} variant="caption">
+                      {task.dueLabel}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <LeadStatusSelect
+                      value={lead.status}
+                      label={`Статус заявки ${lead.clientName}`}
+                      disabled={statusDisabled}
+                      onChange={(status) => void onStatusChange(lead, status)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <ProposalLink lead={lead} />
+                  </TableCell>
+                  <TableCell>
+                    <TelegramDeliverySummary deliveries={lead.telegramDeliveries} compact />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild type="button" variant="outline" size="sm">
+                      <Link to="/app/leads/$leadId" params={{ leadId: lead.id }}>
+                        Открыть
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="mobile-card-list">
+        {leads.map((lead) => (
+          <LeadMobileCard
+            key={lead.id}
+            lead={lead}
+            statusDisabled={statusDisabled}
+            onStatusChange={onStatusChange}
+          />
+        ))}
+      </div>
+    </>
   )
 }
 
@@ -634,172 +673,188 @@ function LeadMobileCard({
   statusDisabled: boolean
   onStatusChange: (lead: CalculationListItem, status: CalculationStatus) => void | Promise<void>
 }) {
+  const stage = stageConfig(projectStage(lead))
+  const task = deriveTask(lead)
+
   return (
-    <div className={cn('grid gap-4 rounded-lg border p-4', lead.status === 'spam_test' && 'bg-muted/30 text-muted-foreground')}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="admin-mobile-card">
+      <div className="admin-mobile-card-head">
         <LeadClientSummary lead={lead} />
-        <LeadStatusBadge status={lead.status} />
+        <StatusPill tone={stage.tone}>{stage.label}</StatusPill>
       </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <LeadMobileFact label="Телефон" value={lead.clientPhone} />
-        <LeadMobileFact label="Дата" value={formatDateTime(lead.createdAt)} />
-        <LeadMobileFact label="Площадь" value={formatArea(lead.areaSqm)} />
-        <LeadMobileFact label="Сумма" value={formatByn(lead.totalBynRoundedRubles)} />
+      <div className="admin-property-grid">
+        <DetailItem label="Объект" value={lead.objectName ?? 'Не указан'} />
+        <DetailItem label="Площадь" value={formatArea(lead.areaSqm)} />
+        <DetailItem label="Сумма" value={`${formatByn(lead.totalBynRoundedRubles)} · ${formatUsd(lead.totalUsdCents)}`} />
+        <DetailItem label="Действие" value={`${task.title} · ${task.dueLabel}`} />
+        <div className="admin-detail-item">
+          <Typography variant="caption" tone="muted">Telegram</Typography>
+          <TelegramDeliverySummary deliveries={lead.telegramDeliveries} compact />
+        </div>
       </div>
-
-      <div className="grid gap-1 border-t pt-3">
-        <Typography variant="caption" tone="muted">
-          Услуги
-        </Typography>
-        <Typography variant="bodySm">{servicesSummary(lead.serviceSnapshots)}</Typography>
+      <div className="admin-mobile-card-actions">
+        <LeadStatusSelect
+          value={lead.status}
+          label={`Статус заявки ${lead.clientName}`}
+          disabled={statusDisabled}
+          onChange={(status) => void onStatusChange(lead, status)}
+        />
+        <ProposalLink lead={lead} />
+        <Button asChild type="button" variant="outline" size="sm">
+          <Link to="/app/leads/$leadId" params={{ leadId: lead.id }}>
+            Открыть
+          </Link>
+        </Button>
       </div>
+    </article>
+  )
+}
 
-      <div className="grid gap-1 border-t pt-3">
-        <Typography variant="caption" tone="muted">
-          Telegram
-        </Typography>
-        <TelegramDeliverySummary deliveries={lead.telegramDeliveries} />
-      </div>
-
-      <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <Field>
-          <FieldLabel>Статус</FieldLabel>
-          <LeadStatusSelect
-            value={lead.status}
-            label={`Статус заявки ${lead.clientName}`}
-            disabled={statusDisabled}
-            onChange={(status) => void onStatusChange(lead, status)}
+function ProjectOverview({ lead }: { lead: CalculationRecord }) {
+  return (
+    <div className="admin-stack">
+      <AdminPanel title="Процессные блоки" description="V2 record объединяет текущие данные и будущие слоты без backend-расширения.">
+        <div className="admin-process-grid">
+          <ProcessCard
+            title="КП"
+            status={proposalProcessStatus(lead)}
+            meta={proposalMeta(lead)}
+            tone={lead.proposalArtifacts[0] ? 'green' : 'gray'}
           />
-        </Field>
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          <ProposalLink lead={lead} />
-          <Button asChild type="button" variant="outline" size="sm">
-            <Link to="/app/leads/$leadId" params={{ leadId: lead.id }}>
-              Открыть
-            </Link>
-          </Button>
+          <ProcessCard title="ТЗ" status={lead.questionnaire ? `${lead.questionnaire.progress.completionPercent}%` : 'Не начато'} meta={lead.questionnaire ? 'Черновик из PZK-019' : 'Ожидает заполнения'} tone={lead.questionnaire ? 'amber' : 'gray'} />
+          <ProcessCard title="Договор" status="Слот" meta="Генерация договоров вне PZK-021" tone="violet" />
+          <ProcessCard title="Проект и сдача" status="Слот" meta="Проверка, оплата и спецификации пока read-only" tone="orange" />
         </div>
+      </AdminPanel>
+
+      <AdminPanel title="Расчетный snapshot" description={`Курс ${lead.exchangeRate.usdToBynRate} BYN/USD · ${exchangeRateSourceLabel(lead.exchangeRate.source)}`}>
+        <div className="admin-lines">
+          {lead.calculationSnapshot.lineItems.map((lineItem) => (
+            <CalculationLine key={lineItem.serviceId} lineItem={lineItem} />
+          ))}
+        </div>
+        <div className="admin-total-row">
+          <Typography variant="bodySmMedium">Итого</Typography>
+          <Typography className="numeric" variant="bodySmMedium">
+            {formatByn(lead.totalBynRoundedRubles)} · {formatUsd(lead.totalUsdCents)}
+          </Typography>
+        </div>
+      </AdminPanel>
+    </div>
+  )
+}
+
+function ProposalTab({ lead }: { lead: CalculationRecord }) {
+  return (
+    <AdminPanel
+      title="Коммерческое предложение"
+      description="Ссылки ведут на сохраненные immutable КП/PDF artifacts."
+      action={<ProposalLink lead={lead} preferredLabel={hasPdfArtifact(lead.proposalArtifacts[0]) ? 'Открыть PDF' : 'Открыть КП'} />}
+    >
+      <div className="admin-property-grid">
+        <DetailItem label="Offer" value={lead.proposalArtifacts[0]?.offerNumber ?? 'Не создано'} />
+        <DetailItem label="Версия шаблона" value={lead.proposalArtifacts[0]?.templateVersion ?? 'Нет'} />
+        <DetailItem label="Статус artifact" value={lead.proposalArtifacts[0]?.status ?? 'Нет'} />
+        <DetailItem label="Создано" value={lead.proposalArtifacts[0] ? formatDateTime(lead.proposalArtifacts[0].createdAt) : 'Нет'} />
       </div>
-    </div>
-  )
-}
-
-function LeadStatusBadge({ status }: { status: CalculationStatus }) {
-  return (
-    <Badge variant={status === 'spam_test' ? 'secondary' : 'outline'}>
-      {statusLabels[status]}
-    </Badge>
-  )
-}
-
-function TelegramDeliverySummary({
-  deliveries,
-  compact = false,
-}: {
-  deliveries: readonly TelegramDeliveryRecord[]
-  compact?: boolean
-}) {
-  const delivery = latestTelegramDelivery(deliveries)
-
-  if (!delivery) {
-    return <Typography variant="bodySm" tone="muted">Нет попыток</Typography>
-  }
-
-  return (
-    <div className="grid gap-1">
-      <TelegramDeliveryBadge delivery={delivery} />
-      {!compact && (
-        <Typography variant="caption" tone="muted">
-          {telegramDeliveryMeta(delivery)}
-        </Typography>
-      )}
-    </div>
-  )
-}
-
-function TelegramDeliveryLog({
-  deliveries,
-}: {
-  deliveries: readonly TelegramDeliveryRecord[]
-}) {
-  if (deliveries.length === 0) {
-    return <Typography tone="muted">Попыток Telegram-доставки пока нет.</Typography>
-  }
-
-  return (
-    <div className="grid gap-3">
-      {deliveries.map((delivery) => (
-        <div key={delivery.id} className="grid gap-2 rounded-lg border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <TelegramDeliveryBadge delivery={delivery} />
-            <Typography variant="caption" tone="muted">
-              {telegramDeliveryTargetLabel(delivery.targetType)}
-            </Typography>
+      <div className="admin-lines">
+        {lead.serviceSnapshots.map((service) => (
+          <div key={service.id} className="admin-line-row">
+            <div className="admin-line-main">
+              <Typography variant="bodySmMedium">{service.title}</Typography>
+              <Typography variant="caption" tone="muted">{pricingTypeLabel(service.pricingType)} · snapshot услуги</Typography>
+            </div>
+            <Typography className="numeric" variant="bodySmMedium">{formatUsd(service.priceUsdCents)}</Typography>
           </div>
-          <Typography variant="caption" tone="muted">
-            {telegramDeliveryMeta(delivery)}
-          </Typography>
-          {delivery.statusMessage && (
-            <Typography className="break-words" variant="bodySm">
-              {delivery.statusMessage}
-            </Typography>
-          )}
-          <Typography variant="caption" tone="muted">
-            {telegramRecipientLabel(delivery)}
-          </Typography>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function TelegramDeliveryBadge({
-  delivery,
-}: {
-  delivery: TelegramDeliveryRecord | null
-}) {
-  if (!delivery) return <Badge variant="secondary">Telegram нет</Badge>
-
-  return (
-    <Badge variant={telegramDeliveryBadgeVariant(delivery.status)}>
-      {telegramStatusLabels[delivery.status]}
-    </Badge>
-  )
-}
-
-function LeadMobileFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid gap-1">
-      <Typography variant="caption" tone="muted">
-        {label}
-      </Typography>
-      <Typography className="tabular-nums" variant="bodySmMedium">
-        {value}
-      </Typography>
-    </div>
-  )
-}
-
-function CalculationLine({ lineItem }: { lineItem: CalculationLineItem }) {
-  return (
-    <div className="grid gap-3 border-b p-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
-      <div className="grid gap-1">
-        <Typography variant="bodySmMedium">
-          {lineItem.serviceSnapshot.title}
-        </Typography>
-        {lineItem.serviceSnapshot.description && (
-          <Typography variant="caption" tone="muted">
-            {lineItem.serviceSnapshot.description}
-          </Typography>
-        )}
-        <Typography variant="caption" tone="muted">
-          {linePricingLabel(lineItem)}
-        </Typography>
+        ))}
       </div>
-      <DetailItem label="USD" value={formatUsd(lineItem.totalUsdCents)} />
-      <DetailItem label="BYN" value={formatByn(lineItem.totalBynRoundedRubles)} />
+    </AdminPanel>
+  )
+}
+
+function DeliveryTab({ lead }: { lead: CalculationRecord }) {
+  return (
+    <div className="admin-stack">
+      <AdminPanel title="Матрица требований" description="Read-only placeholder: ProjectRequirement/evidence не создаются в PZK-021.">
+        <div className="admin-requirement-grid">
+          <MetricTile label="Требования" value={lead.questionnaire?.progress.answeredCount ?? 0} tone="blue" caption="из draft-ТЗ" />
+          <MetricTile label="Без evidence" value={lead.questionnaire?.progress.answeredCount ?? 0} tone="amber" caption="нет persistent model" />
+          <MetricTile label="Проверено" value={0} tone="gray" caption="будущий этап" />
+        </div>
+      </AdminPanel>
+
+      <AdminPanel title="Чек-лист завершения" description="Пункты отображают будущий контроль выдачи без сохранения состояния.">
+        <div className="admin-checklist">
+          {[
+            ['Комплектность документации', 'Проверка всех разделов по согласованному КП'],
+            ['Соответствие ТЗ и договоренностям', 'Требуется матрица требований и evidence'],
+            ['Выдача проекта без спецификаций', 'Отдельный пакет до финальной оплаты'],
+            ['Финальная оплата и спецификации', 'Разблокировка после подтверждения оплаты'],
+          ].map(([title, description]) => (
+            <div key={title} className="admin-check-row">
+              <div className="admin-task-check" aria-hidden="true" />
+              <div>
+                <Typography variant="bodySmMedium">{title}</Typography>
+                <Typography variant="caption" tone="muted">{description}</Typography>
+              </div>
+              <StatusPill tone="gray">Будущий gate</StatusPill>
+            </div>
+          ))}
+        </div>
+      </AdminPanel>
     </div>
+  )
+}
+
+function CommunicationTab({ lead }: { lead: CalculationRecord }) {
+  return (
+    <AdminPanel title="Коммуникация" description="PZK-021 показывает существующие Telegram delivery logs и менеджерские заметки.">
+      <div className="admin-stack">
+        <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
+        <div className="admin-notice">
+          <Typography variant="bodySmMedium">Заметки менеджера</Typography>
+          <Typography variant="bodySm" tone="muted">{lead.notes || 'Заметок пока нет.'}</Typography>
+        </div>
+      </div>
+    </AdminPanel>
+  )
+}
+
+function DocumentsTab({ lead }: { lead: CalculationRecord }) {
+  return (
+    <AdminPanel title="Документы" description="Сохраненные КП/PDF и будущие слоты документов проекта.">
+      <div className="admin-lines">
+        {lead.proposalArtifacts.map((artifact) => (
+          <div key={artifact.id} className="admin-line-row">
+            <div className="admin-line-main">
+              <Typography variant="bodySmMedium">{artifact.offerNumber}</Typography>
+              <Typography variant="caption" tone="muted">{artifact.templateVersion} · {artifact.status}</Typography>
+            </div>
+            <ProposalLink lead={{ clientName: lead.clientName, proposalArtifacts: [artifact] }} />
+          </div>
+        ))}
+        <div className="admin-line-row muted">
+          <div className="admin-line-main">
+            <Typography variant="bodySmMedium">Договор / проект / спецификации</Typography>
+            <Typography variant="caption" tone="muted">Документная модель запланирована отдельными задачами.</Typography>
+          </div>
+          <StatusPill tone="gray">Слот</StatusPill>
+        </div>
+      </div>
+    </AdminPanel>
+  )
+}
+
+function HistoryTab({ lead }: { lead: CalculationRecord }) {
+  return (
+    <AdminPanel title="История" description="Текущие immutable события из существующей записи расчета.">
+      <div className="admin-timeline">
+        <HistoryItem title="Заявка создана" value={formatDateTime(lead.createdAt)} />
+        <HistoryItem title="Статус обновлен" value={`${statusLabels[lead.status]} · ${formatDateTime(lead.statusUpdatedAt)}`} />
+        <HistoryItem title="КП snapshot создан" value={lead.proposalArtifacts[0] ? formatDateTime(lead.proposalArtifacts[0].createdAt) : 'Нет artifact'} />
+        <HistoryItem title="Последнее обновление карточки" value={formatDateTime(lead.updatedAt)} />
+      </div>
+    </AdminPanel>
   )
 }
 
@@ -810,49 +865,30 @@ function QuestionnaireDraftCard({
 }) {
   if (!questionnaire) {
     return (
-      <Card className="rounded-lg">
-        <CardHeader>
-          <CardTitle>Черновик ТЗ</CardTitle>
-          <CardDescription>
-            Подробный опросник для этой заявки еще не заполнен.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <AdminPanel title="Черновик ТЗ" description="Подробный опросник для этой заявки еще не заполнен.">
+        <EmptyState title="Ответов пока нет" description="PZK-019 draft-ТЗ появится здесь после заполнения публичного опросника." />
+      </AdminPanel>
     )
   }
 
   return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <div className="grid gap-2">
-          <CardTitle>Черновик ТЗ</CardTitle>
-          <CardDescription>
-            {questionnaire.progress.answeredCount} из {questionnaire.progress.totalQuestions} вопросов · обновлено{' '}
-            {formatDateTime(questionnaire.updatedAt)}
-          </CardDescription>
-        </div>
-        <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
-          <Badge variant="outline">{questionnaire.progress.completionPercent}%</Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 sm:grid-cols-4">
-          <DetailItem
-            label="Заполнено"
-            value={`${questionnaire.progress.answeredCount}/${questionnaire.progress.totalQuestions}`}
-          />
-          <DetailItem label="Свои ответы" value={String(questionnaire.progress.customCount)} />
-          <DetailItem label="Пока не знаю" value={String(questionnaire.progress.unknownCount)} />
-          <DetailItem label="Пропущено" value={String(questionnaire.progress.skippedCount)} />
-        </div>
-
-        <div className="grid gap-4">
-          {questionnaire.sections.map((section) => (
-            <QuestionnaireSectionDraft key={section.id} section={section} />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <AdminPanel
+      title="Черновик ТЗ"
+      description={`${questionnaire.progress.answeredCount} из ${questionnaire.progress.totalQuestions} вопросов · обновлено ${formatDateTime(questionnaire.updatedAt)}`}
+      action={<StatusPill tone="amber">{`${questionnaire.progress.completionPercent}%`}</StatusPill>}
+    >
+      <div className="admin-requirement-grid">
+        <MetricTile label="Заполнено" value={`${questionnaire.progress.answeredCount}/${questionnaire.progress.totalQuestions}`} tone="blue" />
+        <MetricTile label="Свои ответы" value={questionnaire.progress.customCount} tone="green" />
+        <MetricTile label="Пока не знаю" value={questionnaire.progress.unknownCount} tone="amber" />
+        <MetricTile label="Пропущено" value={questionnaire.progress.skippedCount} tone="gray" />
+      </div>
+      <div className="admin-stack">
+        {questionnaire.sections.map((section) => (
+          <QuestionnaireSectionDraft key={section.id} section={section} />
+        ))}
+      </div>
+    </AdminPanel>
   )
 }
 
@@ -864,28 +900,21 @@ function QuestionnaireSectionDraft({
   const answeredQuestions = section.questions.filter(hasQuestionnaireAnswer)
 
   return (
-    <section className="grid gap-3 rounded-lg border p-4" aria-label={section.title}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className="admin-subpanel" aria-label={section.title}>
+      <div className="admin-subpanel-head">
         <Typography variant="bodySmMedium">{section.title}</Typography>
-        <Typography variant="caption" tone="muted">
-          {answeredQuestions.length}/{section.questions.length}
-        </Typography>
+        <Typography variant="caption" tone="muted">{answeredQuestions.length}/{section.questions.length}</Typography>
       </div>
-
       {answeredQuestions.length === 0 ? (
-        <Typography variant="bodySm" tone="muted">
-          В этом разделе пока нет ответов.
-        </Typography>
+        <Typography variant="bodySm" tone="muted">В этом разделе пока нет ответов.</Typography>
       ) : (
-        <div className="grid gap-3">
+        <div className="admin-stack compact">
           {answeredQuestions.map((question) => (
-            <div key={question.id} className="grid gap-1 border-t pt-3 first:border-t-0 first:pt-0">
-              <Typography variant="caption" tone="muted">
-                {question.prompt}
-              </Typography>
-              <div className="flex flex-wrap items-start gap-2">
+            <div key={question.id} className="admin-answer-row">
+              <Typography variant="caption" tone="muted">{question.prompt}</Typography>
+              <div className="admin-answer-content">
                 <QuestionnaireAnswerBadge answer={question.answer} />
-                <Typography className="min-w-0 break-words" variant="bodySmMedium">
+                <Typography className="break-words" variant="bodySmMedium">
                   {questionnaireAnswerText(question.answer)}
                 </Typography>
               </div>
@@ -917,10 +946,10 @@ function QuestionnaireAnswerBadge({
     NonNullable<CalculationRecord['questionnaire']>['sections'][number]['questions'][number]['answer']
   >
 }) {
-  if (answer.kind === 'unknown') return <Badge variant="secondary">Пока не знаю</Badge>
-  if (answer.kind === 'skipped') return <Badge variant="secondary">Пропущено</Badge>
-  if (answer.kind === 'custom') return <Badge variant="outline">Свой ответ</Badge>
-  return <Badge variant="outline">Вариант</Badge>
+  if (answer.kind === 'unknown') return <StatusPill tone="amber">Пока не знаю</StatusPill>
+  if (answer.kind === 'skipped') return <StatusPill tone="gray">Пропущено</StatusPill>
+  if (answer.kind === 'custom') return <StatusPill tone="blue">Свой ответ</StatusPill>
+  return <StatusPill tone="green">Вариант</StatusPill>
 }
 
 function questionnaireAnswerText(
@@ -943,81 +972,78 @@ function LeadFilters({
   onClear: () => void
 }) {
   return (
-    <FieldGroup className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
-        <Field>
-          <FieldLabel htmlFor="lead-search">Поиск</FieldLabel>
-          <Input
-            id="lead-search"
-            value={filters.search}
-            onChange={(event) => onChange({ ...filters, search: event.target.value })}
-            placeholder="Имя или телефон"
-          />
-        </Field>
-        <Field>
-          <FieldLabel>Статус</FieldLabel>
-          <Select
-            value={filters.status}
-            onValueChange={(value) =>
-              onChange({
-                ...filters,
-                status: value === 'all' ? 'all' : calculationStatus(value),
-              })
-            }
-          >
-            <SelectTrigger aria-label="Фильтр по статусу" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все статусы</SelectItem>
-              {statusOptions.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {statusLabels[status]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+    <FieldGroup className="admin-filter-grid">
+      <Field>
+        <FieldLabel htmlFor="lead-search">Поиск</FieldLabel>
+        <Input
+          id="lead-search"
+          value={filters.search}
+          onChange={(event) => onChange({ ...filters, search: event.target.value })}
+          placeholder="Имя или телефон"
+        />
+      </Field>
+      <Field>
+        <FieldLabel>Статус</FieldLabel>
+        <Select
+          value={filters.status}
+          onValueChange={(value) =>
+            onChange({
+              ...filters,
+              status: value === 'all' ? 'all' : calculationStatus(value),
+            })
+          }
+        >
+          <SelectTrigger aria-label="Фильтр по статусу" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Все статусы</SelectItem>
+            {statusOptions.map((status) => (
+              <SelectItem key={status} value={status}>
+                {statusLabels[status]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="lead-name">Имя</FieldLabel>
+        <Input
+          id="lead-name"
+          value={filters.name}
+          onChange={(event) => onChange({ ...filters, name: event.target.value })}
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="lead-phone">Телефон</FieldLabel>
+        <Input
+          id="lead-phone"
+          value={filters.phone}
+          onChange={(event) => onChange({ ...filters, phone: event.target.value })}
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="lead-created-from">С даты</FieldLabel>
+        <Input
+          id="lead-created-from"
+          type="date"
+          value={filters.createdFrom}
+          onChange={(event) => onChange({ ...filters, createdFrom: event.target.value })}
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="lead-created-to">По дату</FieldLabel>
+        <Input
+          id="lead-created-to"
+          type="date"
+          value={filters.createdTo}
+          onChange={(event) => onChange({ ...filters, createdTo: event.target.value })}
+        />
+      </Field>
+      <div className="admin-filter-action">
         <Button type="button" variant="outline" onClick={onClear}>
           Сбросить
         </Button>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field>
-          <FieldLabel htmlFor="lead-name">Имя</FieldLabel>
-          <Input
-            id="lead-name"
-            value={filters.name}
-            onChange={(event) => onChange({ ...filters, name: event.target.value })}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="lead-phone">Телефон</FieldLabel>
-          <Input
-            id="lead-phone"
-            value={filters.phone}
-            onChange={(event) => onChange({ ...filters, phone: event.target.value })}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="lead-created-from">С даты</FieldLabel>
-          <Input
-            id="lead-created-from"
-            type="date"
-            value={filters.createdFrom}
-            onChange={(event) => onChange({ ...filters, createdFrom: event.target.value })}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="lead-created-to">По дату</FieldLabel>
-          <Input
-            id="lead-created-to"
-            type="date"
-            value={filters.createdTo}
-            onChange={(event) => onChange({ ...filters, createdTo: event.target.value })}
-          />
-        </Field>
       </div>
     </FieldGroup>
   )
@@ -1050,17 +1076,6 @@ function LeadStatusSelect({
   )
 }
 
-function LeadMetric({ label, value, muted = false }: { label: string; value: number; muted?: boolean }) {
-  return (
-    <Card size="sm" className={cn('rounded-lg', muted && 'bg-muted/30')}>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="tabular-nums">{numberFormatter.format(value)}</CardTitle>
-      </CardHeader>
-    </Card>
-  )
-}
-
 function ProjectExampleRequestsPanel({
   requests,
   totalCount,
@@ -1077,97 +1092,75 @@ function ProjectExampleRequestsPanel({
   onRefresh: () => void
 }) {
   return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <div className="grid gap-2">
-          <CardTitle>Запросы примеров проектов</CardTitle>
-          <CardDescription>
-            {totalCount > 0
-              ? `Последние ${numberFormatter.format(requests.length)} из ${numberFormatter.format(totalCount)}`
-              : 'Отдельный поток лидов, которые запросили PDF-примеры после контакта'}
-          </CardDescription>
-        </div>
-        <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
-          <Button type="button" variant="outline" onClick={onRefresh}>
-            Обновить
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        {isLoading ? (
-          <div className="flex items-center gap-3 py-6">
-            <Spinner />
-            <Typography tone="muted">Загружаем запросы примеров...</Typography>
-          </div>
-        ) : isError ? (
-          <Alert variant="destructive">
-            <AlertTitle>Не удалось загрузить запросы примеров</AlertTitle>
-            <AlertDescription>{errorMessage(error)}</AlertDescription>
-          </Alert>
-        ) : requests.length === 0 ? (
-          <div className="grid gap-2 rounded-lg border border-dashed p-6">
-            <Typography variant="h6">Запросов примеров пока нет</Typography>
-            <Typography tone="muted">
-              Когда посетитель оставит контакт ради PDF-примера, заявка появится здесь.
-            </Typography>
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {requests.map((request) => (
-              <div
-                key={request.id}
-                className="grid gap-3 rounded-lg border p-4 lg:grid-cols-[minmax(160px,220px)_minmax(140px,180px)_minmax(0,1fr)_auto] lg:items-center"
-              >
-                <div className="grid gap-1">
-                  <Typography variant="bodySmMedium">{request.clientName}</Typography>
-                  <Typography variant="caption" tone="muted">
-                    {formatDateTime(request.createdAt)}
-                  </Typography>
-                </div>
-                <Typography className="tabular-nums" variant="bodySm">
-                  {request.clientPhone}
+    <AdminPanel
+      title="Запросы примеров проектов"
+      description={
+        totalCount > 0
+          ? `Последние ${numberFormatter.format(requests.length)} из ${numberFormatter.format(totalCount)}`
+          : 'Отдельный поток лидов, которые запросили PDF-примеры после контакта'
+      }
+      action={
+        <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
+          Обновить
+        </Button>
+      }
+    >
+      {isLoading ? (
+        <LoadingBlock label="Загружаем запросы примеров..." />
+      ) : isError ? (
+        <ErrorBlock title="Не удалось загрузить запросы примеров" description={errorMessage(error)} onRetry={onRefresh} />
+      ) : requests.length === 0 ? (
+        <EmptyState title="Запросов примеров пока нет" description="Когда посетитель оставит контакт ради PDF-примера, заявка появится здесь." />
+      ) : (
+        <div className="admin-compact-list">
+          {requests.map((request) => (
+            <div key={request.id} className="admin-example-request-row">
+              <div className="admin-compact-main">
+                <Typography variant="bodySmMedium">{request.clientName}</Typography>
+                <Typography className="numeric" variant="caption" tone="muted">
+                  {formatDateTime(request.createdAt)} · {request.clientPhone}
                 </Typography>
-                <div className="grid gap-1">
-                  <Typography variant="caption" tone="muted">
-                    Источник: {leadSourceLabel(request.source)}
-                  </Typography>
-                  <Typography variant="bodySm">
-                    {request.requestedExamples.map((example) => example.code).join(', ')}
-                  </Typography>
-                  <TelegramDeliveryLog deliveries={request.telegramDeliveries} />
-                </div>
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                  {request.requestedExamples.map((example) => (
-                    <Button key={example.slug} asChild type="button" variant="outline" size="sm">
-                      <a
-                        href={buildApiUrl(example.urlPath)}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`Открыть ${example.title} для ${request.clientName}`}
-                      >
-                        <Typography as="span" variant="control">
-                          {example.code} PDF
-                        </Typography>
-                      </a>
-                    </Button>
-                  ))}
-                </div>
+                <TelegramDeliveryLog deliveries={request.telegramDeliveries} />
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <div className="admin-example-actions">
+                {request.requestedExamples.map((example) => (
+                  <Button key={example.slug} asChild type="button" variant="outline" size="sm">
+                    <a
+                      href={buildApiUrl(example.urlPath)}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Открыть ${example.title} для ${request.clientName}`}
+                    >
+                      <Typography as="span" variant="control">{example.code} PDF</Typography>
+                    </a>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </AdminPanel>
+  )
+}
+
+function LeadClientSummary({ lead }: { lead: Pick<CalculationListItem, 'id' | 'clientName' | 'clientPhone' | 'createdAt'> }) {
+  return (
+    <div className="admin-client-cell">
+      <Typography variant="bodySmMedium">{lead.clientName}</Typography>
+      <Typography className="numeric" variant="caption" tone="muted">
+        {lead.id.slice(0, 8)} · {lead.clientPhone}
+      </Typography>
+      <Typography variant="caption" tone="muted">{formatDateTime(lead.createdAt)}</Typography>
+    </div>
   )
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1">
-      <Typography variant="caption" tone="muted">
-        {label}
-      </Typography>
-      <Typography variant="bodySmMedium">{value}</Typography>
+    <div className="admin-detail-item">
+      <Typography variant="caption" tone="muted">{label}</Typography>
+      <Typography className="numeric" variant="bodySmMedium">{value}</Typography>
     </div>
   )
 }
@@ -1180,7 +1173,7 @@ function ProposalLink({
   preferredLabel?: string
 }) {
   const artifact = lead.proposalArtifacts[0]
-  if (!artifact) return <Typography tone="muted">Нет КП</Typography>
+  if (!artifact) return <Typography variant="bodySm" tone="muted">Нет КП</Typography>
   const label = preferredLabel ?? proposalButtonLabel(artifact)
   const ariaLabel = hasPdfArtifact(artifact)
     ? `Открыть PDF для ${lead.clientName}`
@@ -1194,11 +1187,125 @@ function ProposalLink({
         rel="noreferrer"
         aria-label={ariaLabel}
       >
-        <Typography as="span" variant="control">
-          {label}
-        </Typography>
+        <Typography as="span" variant="control">{label}</Typography>
       </a>
     </Button>
+  )
+}
+
+function TelegramDeliverySummary({
+  deliveries,
+  compact = false,
+}: {
+  deliveries: readonly TelegramDeliveryRecord[]
+  compact?: boolean
+}) {
+  const latest = latestTelegramDelivery(deliveries)
+  if (!latest) return <Typography variant="bodySm" tone="muted">Нет логов</Typography>
+
+  return (
+    <div className={cn('admin-telegram-summary', compact && 'compact')}>
+      <StatusPill tone={telegramTone(latest.status)}>{telegramStatusLabels[latest.status]}</StatusPill>
+      {!compact && <Typography variant="caption" tone="muted">{telegramDeliveryMeta(latest)}</Typography>}
+    </div>
+  )
+}
+
+function TelegramDeliveryLog({ deliveries }: { deliveries: readonly TelegramDeliveryRecord[] }) {
+  if (deliveries.length === 0) {
+    return <Typography variant="bodySm" tone="muted">Telegram-доставок пока нет.</Typography>
+  }
+
+  return (
+    <div className="admin-telegram-log">
+      {deliveries.map((delivery) => (
+        <div key={delivery.id} className="admin-telegram-row">
+          <div className="admin-telegram-main">
+            <Typography variant="bodySmMedium">{telegramDeliveryTargetLabel(delivery.targetType)}</Typography>
+            <Typography variant="caption" tone="muted">{telegramRecipientLabel(delivery)}</Typography>
+            {delivery.statusMessage && (
+              <Typography variant="caption" tone="muted">{delivery.statusMessage}</Typography>
+            )}
+          </div>
+          <div className="admin-telegram-meta">
+            <StatusPill tone={telegramTone(delivery.status)}>{telegramStatusLabels[delivery.status]}</StatusPill>
+            <Typography variant="caption" tone="muted">{telegramDeliveryMeta(delivery)}</Typography>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CalculationLine({ lineItem }: { lineItem: CalculationLineItem }) {
+  return (
+    <div className="admin-line-row">
+      <div className="admin-line-main">
+        <Typography variant="bodySmMedium">{lineItem.serviceSnapshot.title}</Typography>
+        {lineItem.serviceSnapshot.description && (
+          <Typography variant="caption" tone="muted">{lineItem.serviceSnapshot.description}</Typography>
+        )}
+        <Typography variant="caption" tone="muted">{linePricingLabel(lineItem)}</Typography>
+      </div>
+      <div className="admin-line-amounts">
+        <Typography className="numeric" variant="bodySmMedium">{formatUsd(lineItem.totalUsdCents)}</Typography>
+        <Typography className="numeric" variant="bodySmMedium">{formatByn(lineItem.totalBynRoundedRubles)}</Typography>
+      </div>
+    </div>
+  )
+}
+
+function Journey({ currentStage }: { currentStage: ReturnType<typeof projectStage> }) {
+  const index = activeStageConfigs.findIndex((stage) => stage.id === currentStage)
+
+  return (
+    <div className="admin-journey" aria-label="Путь проекта">
+      {activeStageConfigs.map((stage, stageIndex) => (
+        <div
+          key={stage.id}
+          className={cn('admin-journey-step', stageIndex < index && 'is-done', stageIndex === index && 'is-current')}
+        >
+          <Typography variant="caption" tone="muted">{`Шаг ${stageIndex + 1}`}</Typography>
+          <Typography variant="controlXs">{stage.shortLabel}</Typography>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ProcessCard({
+  title,
+  status,
+  meta,
+  tone,
+}: {
+  title: string
+  status: string
+  meta: string
+  tone: Parameters<typeof StatusPill>[0]['tone']
+}) {
+  return (
+    <article className="admin-process-card">
+      <div className="admin-process-top">
+        <div>
+          <Typography variant="bodySmMedium">{title}</Typography>
+          <Typography variant="caption" tone="muted">{meta}</Typography>
+        </div>
+        <StatusPill tone={tone}>{status}</StatusPill>
+      </div>
+    </article>
+  )
+}
+
+function HistoryItem({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="admin-history-item">
+      <div className="admin-history-dot" aria-hidden="true" />
+      <div>
+        <Typography variant="bodySmMedium">{title}</Typography>
+        <Typography variant="caption" tone="muted">{value}</Typography>
+      </div>
+    </div>
   )
 }
 
@@ -1215,12 +1322,6 @@ function filterStateToQuery(filters: LeadFilterState, offset: number): LeadListF
   }
 }
 
-function servicesSummary(services: CalculationListItem['serviceSnapshots']) {
-  if (services.length === 0) return 'Нет услуг'
-  const visible = services.slice(0, 2).map((service) => service.title).join(', ')
-  return services.length > 2 ? `${visible} +${services.length - 2}` : visible
-}
-
 function proposalHref(artifact: CalculationRecord['proposalArtifacts'][number]) {
   if (artifact.pdfUrlPath) return buildApiUrl(artifact.pdfUrlPath)
   if (artifact.pdfUrl) return artifact.pdfUrl
@@ -1235,20 +1336,24 @@ function hasPdfArtifact(artifact: CalculationRecord['proposalArtifacts'][number]
   return Boolean(artifact?.pdfUrlPath || artifact?.pdfUrl)
 }
 
-function latestTelegramDelivery(deliveries: readonly TelegramDeliveryRecord[]) {
-  return deliveries.length > 0 ? deliveries[deliveries.length - 1] : null
+function proposalMeta(lead: CalculationRecord) {
+  const artifact = lead.proposalArtifacts[0]
+  if (!artifact) return 'КП еще не создано'
+  return `${artifact.offerNumber} · ${formatDateTime(artifact.createdAt)}`
 }
 
-function telegramDeliveryBadgeVariant(status: TelegramDeliveryRecord['status']) {
-  if (status === 'sent') return 'default'
-  if (status === 'failed') return 'destructive'
-  if (status === 'pending_start') return 'outline'
-  return 'secondary'
+function proposalProcessStatus(lead: CalculationRecord) {
+  const artifact = lead.proposalArtifacts[0]
+  if (!artifact) return 'Не создано'
+  if (artifact.status === 'ready') return 'Готово'
+  return hasPdfArtifact(artifact) ? 'PDF' : 'HTML'
 }
 
-function telegramDeliveryTargetLabel(targetType: TelegramDeliveryRecord['targetType']) {
-  if (targetType === 'proposal') return 'КП/PDF'
-  return 'Примеры проектов'
+function telegramTone(status: TelegramDeliveryRecord['status']) {
+  if (status === 'sent') return 'green'
+  if (status === 'failed') return 'red'
+  if (status === 'pending_start') return 'amber'
+  return 'gray'
 }
 
 function telegramDeliveryMeta(delivery: TelegramDeliveryRecord) {
@@ -1273,54 +1378,9 @@ function calculationStatus(value: string): CalculationStatus {
   return 'new'
 }
 
-function formatDateTime(value: string) {
-  return dateTimeFormatter.format(new Date(value))
-}
-
-function formatByn(rubles: number) {
-  return `${numberFormatter.format(rubles)} BYN`
-}
-
-function formatUsd(cents: number) {
-  const value = cents / 100
-  const formatted = value % 1 === 0
-    ? numberFormatter.format(value)
-    : new Intl.NumberFormat('ru-RU', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(value)
-
-  return `~${formatted} USD`
-}
-
 function linePricingLabel(lineItem: CalculationLineItem) {
   if (lineItem.quantity.kind === 'fixed') return 'Фиксированная'
   return `${formatArea(lineItem.quantity.areaSqm)} x ${formatUsd(lineItem.unitPriceUsdCents)}`
-}
-
-function pricingTypeLabel(pricingType: CalculationRecord['serviceSnapshots'][number]['pricingType']) {
-  if (pricingType === 'fixed') return 'Фиксированная'
-  if (pricingType === 'per_sqm') return 'За м²'
-  return 'Формула'
-}
-
-function formatArea(value: string | number) {
-  return `${value} м²`
-}
-
-function exchangeRateSourceLabel(source: string) {
-  if (source === 'manual') return 'вручную'
-  if (source === 'nbrb') return 'НБ РБ'
-  return source
-}
-
-function leadSourceLabel(source: string | null) {
-  if (source === 'example_request') return 'Запрос примера проекта'
-  if (source === 'public_questionnaire') return 'Подробный опросник'
-  if (source === 'public_offer_preliminary') return 'Предварительное КП'
-  if (source === 'public_website') return 'Публичный сайт'
-  if (source === 'public_calculator') return 'Калькулятор'
-  return source ?? 'Не указан'
 }
 
 function errorMessage(error: unknown) {

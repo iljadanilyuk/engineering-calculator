@@ -1469,7 +1469,7 @@ Review log:
 
 ### PZK-021 - Admin Workspace V2 Shell From Prototype
 
-Status: Pending
+Status: Complete
 
 Goal:
 
@@ -1526,6 +1526,40 @@ Out of scope:
 - Project requirement matrix, evidence tracking, payment milestones, deliverable-package locks, and final completion state machine unless split into dedicated follow-up tasks.
 - New paid DigitalOcean resources, DNS, env, secrets, or public website changes.
 - Backend schema expansion unless a blocker is explicitly found and reviewed.
+
+Completion notes:
+
+- Added the V2 admin workspace shell with desktop sidebar, mobile navigation, topbar, dashboard route, projects/leads route, tasks route, services route, and unified lead/project detail route.
+- Preserved the existing auth gate and logout behavior; no auth API or session contract changes were made.
+- Added shared V2 frontend primitives and derived admin view-model helpers for status pills, panels, metrics, macro stages, next actions, document state, risk tones, currency/date formatting, questionnaire summaries, and Telegram delivery state.
+- Added `Рабочий стол` from existing calculation and project-example request data, including blockers, active funnel, new leads, derived actions, and all-leads frontend pagination through the existing `GET /api/admin/calculations` contract.
+- Added `Задачи` as a derived UI shell only; no persistent task model, backend workflow stages, or irreversible project-state transitions were introduced.
+- Reworked `Заявки` into V2 table/kanban presentation while preserving lead filters, pagination, status updates, proposal/PDF/HTML links, and Telegram delivery summaries.
+- Reworked lead detail into a unified project record with process blocks, calculation snapshot, КП artifacts, draft-ТЗ from PZK-019, Telegram logs from PZK-020, internal notes, history, and clearly non-destructive future slots for contracts/project delivery.
+- Fixed internal notes as a controlled form synchronized to the normalized mutation response, with regression coverage for trimmed notes and empty-note normalization.
+- Reworked `Услуги и цены` into the V2 visual system while preserving create/edit, archive/restore, reorder, public toggle, formula-row disabled behavior, and BYN preview from the existing exchange-rate setting.
+- Kept private/commercial price structure as display-only shell placeholders because the current backend contract has a single `priceUsdCents` field.
+- Removed external Google Fonts loading from the private admin shell and kept typography on local font assets/system fallback.
+- Added browser visual smoke coverage for `1440`, `1280`, `1024`, and mobile `390` viewports; the smoke asserts no forced horizontal page scroll and verifies mobile navigation.
+- No backend schema, API contract, public website, cloud/env, secrets, DigitalOcean, or Codex plugin/profile changes were made.
+
+Verification:
+
+- `docker info` passed before e2e.
+- `bun run --cwd webapp lint` passed.
+- `bun run typecheck` passed.
+- `bun run test:webapp` passed: 40/40.
+- `bun run build:webapp` passed with the existing Vite large-chunk warning.
+- `bun run --cwd webapp e2e e2e/specs/leads.spec.ts` passed: 1/1, including notes normalization regression coverage.
+- `bun run e2e:webapp` passed: 6/6, including the V2 visual smoke at `1440`, `1280`, `1024`, and `390` px. The run emitted the existing backend `pg@9` deprecation warning.
+- `git diff --check` passed, with only expected Windows LF/CRLF warnings.
+
+Review log:
+
+- Pre-task reviewer Lagrange, `gpt-5.5 xhigh`: confirmed Stage 1 can proceed as a UI shell only and flagged key risks around display-only V2 stages/tasks, preserving API/auth/contracts, avoiding page-level horizontal scroll, and not splitting private/commercial backend pricing in PZK-021. Recommendations incorporated.
+- Post-task reviewer Nietzsche, `gpt-5.5 xhigh`: 7.6/10; required all-leads pagination for dashboard/tasks, safe notes synchronization, mobile Telegram delivery visibility, correct no-artifact КП labeling, and removing external Google Fonts from the private admin. Fixes incorporated.
+- Focused post-fix reviewer Popper, `gpt-5.5 xhigh`: 9.1/10; confirmed pagination, Telegram mobile visibility, КП labeling, scope, and local font fixes, but required closing the notes normalization edge and adding targeted regression coverage. Fixes incorporated.
+- Final focused reviewer Rawls, `gpt-5.5 xhigh`: 9.6/10; required fixes none, confirmed controlled notes sync, regression coverage, all prior gate fixes, no scope drift, and no external font dependency. Gate cleared.
 
 ### PZK-022 - Public Project Case Pages And Telegram Delivery
 

@@ -3,30 +3,21 @@ import {
   roundBynCentsToRubles,
   type ServiceRecord,
 } from '@poznyak-engineering-calculator/contracts'
-import { HugeiconsIcon } from '@hugeicons/react'
 import { ArrowDown01Icon, ArrowUp01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { type FormEvent, useMemo, useState } from 'react'
 
+import {
+  AdminPageHeader,
+  AdminPanel,
+  EmptyState,
+  ErrorBlock,
+  LoadingBlock,
+  MetricTile,
+  StatusPill,
+} from '@/components/AdminPrimitives'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   Field,
   FieldDescription,
@@ -41,7 +32,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Spinner } from '@/components/ui/spinner'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import {
   Table,
@@ -53,6 +51,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { Typography } from '@/components/ui/typography'
+import { numberFormatter } from '@/lib/admin-derived'
 import { ApiRequestError } from '@/lib/api'
 import {
   useCreateServiceMutation,
@@ -82,7 +81,6 @@ const defaultFormState: ServiceFormState = {
   isPublic: true,
 }
 
-const numberFormatter = new Intl.NumberFormat('ru-RU')
 const emptyServices: ServiceRecord[] = []
 
 export function ServicesManager() {
@@ -100,7 +98,7 @@ export function ServicesManager() {
   const reorderServices = useReorderServicesMutation({ api: auth.api })
   const services = servicesQuery.data?.services ?? emptyServices
   const sortedServices = useMemo(() => sortServices(services), [services])
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null)
   const [formState, setFormState] = useState<ServiceFormState>(defaultFormState)
   const [formError, setFormError] = useState<string | null>(null)
@@ -117,17 +115,17 @@ export function ServicesManager() {
   const isMutating = updateService.isPending || reorderServices.isPending
   const exchangeRate = exchangeRateQuery.data?.exchangeRate ?? null
 
-  function openCreateDialog() {
+  function openCreateDrawer() {
     setEditingService(null)
     setFormState({
       ...defaultFormState,
       sortOrder: String(nextSortOrder),
     })
     setFormError(null)
-    setDialogOpen(true)
+    setDrawerOpen(true)
   }
 
-  function openEditDialog(service: ServiceRecord) {
+  function openEditDrawer(service: ServiceRecord) {
     if (!isSupportedPricingType(service.pricingType)) {
       setActionError('Формульные услуги пока нельзя редактировать в админке. Их можно архивировать или менять порядок.')
       return
@@ -136,7 +134,7 @@ export function ServicesManager() {
     setEditingService(service)
     setFormState(formStateFromService(service))
     setFormError(null)
-    setDialogOpen(true)
+    setDrawerOpen(true)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -177,7 +175,7 @@ export function ServicesManager() {
         })
       }
 
-      setDialogOpen(false)
+      setDrawerOpen(false)
       setEditingService(null)
     } catch (error) {
       setFormError(errorMessage(error))
@@ -243,28 +241,30 @@ export function ServicesManager() {
   }
 
   return (
-    <section className="grid gap-6" aria-labelledby="services-heading">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <ServiceMetric label="Активные" value={activeCount} />
-        <ServiceMetric label="В калькуляторе" value={publicCount} />
-        <ServiceMetric label="Архив" value={archivedCount} />
+    <section className="admin-view" aria-labelledby="services-heading">
+      <AdminPageHeader
+        eyebrow="Настройка продукта"
+        title="Услуги и цены"
+        description="Текущие API хранят одну базовую USD-ставку; V2-таблица показывает будущую private/commercial форму без изменения схемы."
+        actions={
+          <Button type="button" onClick={openCreateDrawer}>
+            Добавить услугу
+          </Button>
+        }
+      />
+
+      <div className="admin-priority-strip">
+        <MetricTile label="Активные" value={activeCount} tone="blue" />
+        <MetricTile label="В калькуляторе" value={publicCount} tone="green" />
+        <MetricTile label="Архив" value={archivedCount} tone="gray" />
       </div>
 
-      <Card className="rounded-lg">
-        <CardHeader>
-          <div className="grid gap-2">
-            <CardTitle id="services-heading">Услуги и цены</CardTitle>
-            <CardDescription>
-              Базовые цены хранятся в USD. Предпросмотр BYN считает текущий курс админки.
-            </CardDescription>
-          </div>
-          <CardAction className="col-start-1 row-start-auto justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
-            <Button type="button" onClick={openCreateDialog}>
-              Добавить услугу
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="grid gap-4">
+      <AdminPanel
+        title="Тарифная сетка"
+        description="Таблица по умолчанию работает в режиме просмотра; редактирование открывается в drawer."
+        action={<ExchangeRateBadge exchangeRate={exchangeRate} updatedAt={exchangeRateQuery.data?.updatedAt ?? null} />}
+      >
+        <div className="admin-stack">
           {exchangeRateQuery.isError && (
             <Alert>
               <AlertTitle>Предпросмотр BYN недоступен</AlertTitle>
@@ -282,47 +282,43 @@ export function ServicesManager() {
           )}
 
           {servicesQuery.isLoading ? (
-            <div className="flex items-center gap-3 py-8">
-              <Spinner />
-              <Typography tone="muted">Загружаем услуги...</Typography>
-            </div>
+            <LoadingBlock label="Загружаем услуги..." />
           ) : servicesQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Не удалось загрузить услуги</AlertTitle>
-              <AlertDescription>{errorMessage(servicesQuery.error)}</AlertDescription>
-            </Alert>
+            <ErrorBlock
+              title="Не удалось загрузить услуги"
+              description={errorMessage(servicesQuery.error)}
+              onRetry={() => void servicesQuery.refetch()}
+            />
           ) : sortedServices.length === 0 ? (
-            <div className="grid gap-3 rounded-lg border border-dashed p-8">
-              <Typography variant="h6">Услуг пока нет</Typography>
-              <Typography tone="muted">
-                Добавьте первую услугу, чтобы показать ее в публичном калькуляторе.
-              </Typography>
-              <Button type="button" className="w-fit" onClick={openCreateDialog}>
-                Добавить услугу
-              </Button>
-            </div>
+            <EmptyState
+              title="Услуг пока нет"
+              description="Добавьте первую услугу, чтобы показать ее в публичном калькуляторе."
+              action={
+                <Button type="button" onClick={openCreateDrawer}>
+                  Добавить услугу
+                </Button>
+              }
+            />
           ) : (
             <>
-              <div className="hidden lg:block">
+              <div className="admin-table-wrap desktop-only">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[120px]">Порядок</TableHead>
-                      <TableHead>Услуга</TableHead>
-                      <TableHead>Расчет</TableHead>
-                      <TableHead>USD</TableHead>
-                      <TableHead>BYN</TableHead>
-                      <TableHead>Показывать</TableHead>
+                      <TableHead>Услуга и описание</TableHead>
+                      <TableHead>Тип расчета</TableHead>
+                      <TableHead>Частный дом, USD</TableHead>
+                      <TableHead>Коммерческий объект, USD</TableHead>
+                      <TableHead>Публичный preview, BYN</TableHead>
+                      <TableHead>Видимость</TableHead>
                       <TableHead>Статус</TableHead>
                       <TableHead className="text-right">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sortedServices.map((service, index) => (
-                      <TableRow
-                        key={service.id}
-                        className={cn(!service.isActive && 'bg-muted/30 text-muted-foreground')}
-                      >
+                      <TableRow key={service.id} className={cn(!service.isActive && 'bg-muted/30 text-muted-foreground')}>
                         <TableCell>
                           <ServiceOrderControls
                             service={service}
@@ -332,12 +328,17 @@ export function ServicesManager() {
                             onMove={moveService}
                           />
                         </TableCell>
-                        <TableCell className="min-w-[220px] whitespace-normal">
+                        <TableCell className="min-w-[240px] whitespace-normal">
                           <ServiceTitle service={service} />
                         </TableCell>
-                        <TableCell>{pricingTypeLabel(service.pricingType)}</TableCell>
-                        <TableCell>{formatUsdPrice(service)}</TableCell>
-                        <TableCell>{formatBynPreview(service, exchangeRate)}</TableCell>
+                        <TableCell>
+                          <StatusPill tone={service.pricingType === 'formula' ? 'gray' : 'blue'}>
+                            {pricingTypeLabel(service.pricingType)}
+                          </StatusPill>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{formatUsdPrice(service)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{commercialPriceLabel(service)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatBynPreview(service, exchangeRate)}</TableCell>
                         <TableCell>
                           <ServicePublicSwitch
                             service={service}
@@ -353,7 +354,7 @@ export function ServicesManager() {
                             service={service}
                             confirmArchiveId={confirmArchiveId}
                             disabled={updateService.isPending}
-                            onEdit={openEditDialog}
+                            onEdit={openEditDrawer}
                             onArchive={toggleArchive}
                           />
                         </TableCell>
@@ -363,7 +364,7 @@ export function ServicesManager() {
                 </Table>
               </div>
 
-              <div className="grid gap-3 lg:hidden">
+              <div className="mobile-card-list">
                 {sortedServices.map((service, index) => (
                   <ServiceMobileCard
                     key={service.id}
@@ -376,141 +377,159 @@ export function ServicesManager() {
                     updateDisabled={updateService.isPending}
                     onMove={moveService}
                     onVisibilityChange={toggleVisibility}
-                    onEdit={openEditDialog}
+                    onEdit={openEditDrawer}
                     onArchive={toggleArchive}
                   />
                 ))}
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </AdminPanel>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <form className="grid gap-6" onSubmit={(event) => void handleSubmit(event)}>
-            <DialogHeader>
-              <DialogTitle>{editingService ? 'Редактировать услугу' : 'Добавить услугу'}</DialogTitle>
-              <DialogDescription>
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent className="admin-drawer" side="right">
+          <form className="admin-drawer-form" onSubmit={(event) => void handleSubmit(event)}>
+            <SheetHeader>
+              <SheetTitle>{editingService ? 'Редактировать услугу' : 'Добавить услугу'}</SheetTitle>
+              <SheetDescription>
                 Для фиксированных услуг и цены за м² нужна положительная базовая цена в USD.
-              </DialogDescription>
-            </DialogHeader>
+              </SheetDescription>
+            </SheetHeader>
 
-            {formError && (
-              <Alert variant="destructive">
-                <AlertTitle>Не удалось сохранить услугу</AlertTitle>
-                <AlertDescription>{formError}</AlertDescription>
-              </Alert>
-            )}
+            <div className="admin-drawer-body">
+              {formError && (
+                <Alert variant="destructive">
+                  <AlertTitle>Не удалось сохранить услугу</AlertTitle>
+                  <AlertDescription>{formError}</AlertDescription>
+                </Alert>
+              )}
 
-            <FieldGroup className="gap-4">
-              <Field>
-                <FieldLabel htmlFor="service-title">Название</FieldLabel>
-                <Input
-                  id="service-title"
-                  value={formState.title}
-                  onChange={(event) => setFormState({ ...formState, title: event.target.value })}
-                  autoComplete="off"
-                  required
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="service-description">Описание</FieldLabel>
-                <Textarea
-                  id="service-description"
-                  value={formState.description}
-                  onChange={(event) =>
-                    setFormState({ ...formState, description: event.target.value })
-                  }
-                  rows={3}
-                />
-              </Field>
-
-              <div className="grid gap-4 sm:grid-cols-3">
+              <FieldGroup className="admin-form-grid">
                 <Field>
-                  <FieldLabel htmlFor="service-pricing-type">Тип расчета</FieldLabel>
-                  <Select
-                    value={formState.pricingType}
-                    onValueChange={(value) =>
-                      setFormState({
-                        ...formState,
-                        pricingType: value === 'fixed' ? 'fixed' : 'per_sqm',
-                      })
-                    }
-                  >
-                    <SelectTrigger id="service-pricing-type" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="per_sqm">За м²</SelectItem>
-                      <SelectItem value="fixed">Фиксированная</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="service-price-usd">Цена в USD</FieldLabel>
+                  <FieldLabel htmlFor="service-title">Название</FieldLabel>
                   <Input
-                    id="service-price-usd"
-                    value={formState.priceUsd}
-                    onChange={(event) =>
-                      setFormState({ ...formState, priceUsd: event.target.value })
-                    }
-                    inputMode="decimal"
-                    autoComplete="off"
-                    placeholder="250"
-                    required
-                  />
-                  <FieldDescription>
-                    {formState.pricingType === 'per_sqm' ? 'USD за м².' : 'Фиксированная сумма в USD.'}
-                  </FieldDescription>
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="service-sort-order">Порядок</FieldLabel>
-                  <Input
-                    id="service-sort-order"
-                    value={formState.sortOrder}
-                    onChange={(event) =>
-                      setFormState({ ...formState, sortOrder: event.target.value })
-                    }
-                    inputMode="numeric"
+                    id="service-title"
+                    value={formState.title}
+                    onChange={(event) => setFormState({ ...formState, title: event.target.value })}
                     autoComplete="off"
                     required
                   />
                 </Field>
-              </div>
 
-              <Field orientation="horizontal">
-                <Switch
-                  id="service-public"
-                  checked={formState.isPublic}
-                  onCheckedChange={(checked) => setFormState({ ...formState, isPublic: checked })}
-                />
-                <div className="grid gap-1">
-                  <FieldLabel htmlFor="service-public">Показывать в калькуляторе</FieldLabel>
-                  <FieldDescription>
-                    Архивные услуги скрываются автоматически, даже если переключатель включен.
-                  </FieldDescription>
+                <Field>
+                  <FieldLabel htmlFor="service-description">Описание</FieldLabel>
+                  <Textarea
+                    id="service-description"
+                    value={formState.description}
+                    onChange={(event) =>
+                      setFormState({ ...formState, description: event.target.value })
+                    }
+                    rows={4}
+                  />
+                </Field>
+
+                <div className="admin-drawer-grid">
+                  <Field>
+                    <FieldLabel htmlFor="service-pricing-type">Тип расчета</FieldLabel>
+                    <Select
+                      value={formState.pricingType}
+                      onValueChange={(value) =>
+                        setFormState({
+                          ...formState,
+                          pricingType: value === 'fixed' ? 'fixed' : 'per_sqm',
+                        })
+                      }
+                    >
+                      <SelectTrigger id="service-pricing-type" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="per_sqm">За м²</SelectItem>
+                        <SelectItem value="fixed">Фиксированная</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="service-price-usd">Цена в USD</FieldLabel>
+                    <Input
+                      id="service-price-usd"
+                      value={formState.priceUsd}
+                      onChange={(event) =>
+                        setFormState({ ...formState, priceUsd: event.target.value })
+                      }
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="250"
+                      required
+                    />
+                    <FieldDescription>
+                      {formState.pricingType === 'per_sqm' ? 'USD за м².' : 'Фиксированная сумма в USD.'}
+                    </FieldDescription>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="service-sort-order">Порядок</FieldLabel>
+                    <Input
+                      id="service-sort-order"
+                      value={formState.sortOrder}
+                      onChange={(event) =>
+                        setFormState({ ...formState, sortOrder: event.target.value })
+                      }
+                      inputMode="numeric"
+                      autoComplete="off"
+                      required
+                    />
+                  </Field>
                 </div>
-              </Field>
-            </FieldGroup>
 
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">
-                  Отмена
-                </Button>
-              </DialogClose>
+                <Field orientation="horizontal">
+                  <Switch
+                    id="service-public"
+                    checked={formState.isPublic}
+                    onCheckedChange={(checked) => setFormState({ ...formState, isPublic: checked })}
+                  />
+                  <div className="admin-field-copy">
+                    <FieldLabel htmlFor="service-public">Показывать в калькуляторе</FieldLabel>
+                    <FieldDescription>
+                      Архивные услуги скрываются автоматически, даже если переключатель включен.
+                    </FieldDescription>
+                  </div>
+                </Field>
+              </FieldGroup>
+            </div>
+
+            <SheetFooter>
+              <Button type="button" variant="outline" onClick={() => setDrawerOpen(false)}>
+                Отмена
+              </Button>
               <Button type="submit" disabled={isSaving}>
                 {isSaving ? 'Сохраняем...' : 'Сохранить услугу'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </section>
+  )
+}
+
+function ExchangeRateBadge({
+  exchangeRate,
+  updatedAt,
+}: {
+  exchangeRate: { usdToBynRate: string } | null
+  updatedAt: string | null
+}) {
+  if (!exchangeRate) return <StatusPill tone="amber">Курс не задан</StatusPill>
+
+  return (
+    <div className="admin-rate-strip">
+      <StatusPill tone="blue">{`${exchangeRate.usdToBynRate} BYN/USD`}</StatusPill>
+      <StatusPill tone="gray">Округление до BYN</StatusPill>
+      {updatedAt && <StatusPill tone="gray">{new Date(updatedAt).toLocaleDateString('ru-RU')}</StatusPill>}
+    </div>
   )
 }
 
@@ -528,7 +547,7 @@ function ServiceOrderControls({
   onMove: (service: ServiceRecord, direction: -1 | 1) => void | Promise<void>
 }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="admin-order-control">
       <Button
         type="button"
         variant="ghost"
@@ -549,21 +568,17 @@ function ServiceOrderControls({
       >
         <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} />
       </Button>
-      <Typography as="span" variant="controlXs" tone="muted">
-        {service.sortOrder}
-      </Typography>
+      <Typography className="numeric" variant="controlXs" tone="muted">{String(service.sortOrder)}</Typography>
     </div>
   )
 }
 
 function ServiceTitle({ service }: { service: ServiceRecord }) {
   return (
-    <div className="grid gap-1">
+    <div className="admin-service-title">
       <Typography variant="bodySmMedium">{service.title}</Typography>
       {service.description && (
-        <Typography variant="caption" tone="muted">
-          {service.description}
-        </Typography>
+        <Typography variant="caption" tone="muted">{service.description}</Typography>
       )}
     </div>
   )
@@ -594,9 +609,9 @@ function ServicePublicSwitch({
 
 function ServiceStatusBadge({ service }: { service: ServiceRecord }) {
   return (
-    <Badge variant={service.isActive ? 'outline' : 'secondary'}>
+    <StatusPill tone={service.isActive ? 'green' : 'gray'}>
       {service.isActive ? 'Активна' : 'В архиве'}
-    </Badge>
+    </StatusPill>
   )
 }
 
@@ -614,7 +629,7 @@ function ServiceActions({
   onArchive: (service: ServiceRecord) => void | Promise<void>
 }) {
   return (
-    <div className="flex justify-end gap-2">
+    <div className="admin-row-actions">
       <Button
         type="button"
         variant="outline"
@@ -670,29 +685,28 @@ function ServiceMobileCard({
   onArchive: (service: ServiceRecord) => void | Promise<void>
 }) {
   return (
-    <div className={cn('grid gap-4 rounded-lg border p-4', !service.isActive && 'bg-muted/30 text-muted-foreground')}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className={cn('admin-mobile-card', !service.isActive && 'is-muted')}>
+      <div className="admin-mobile-card-head">
         <ServiceTitle service={service} />
         <ServiceStatusBadge service={service} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="admin-property-grid">
         <ServiceMobileFact label="Расчет" value={pricingTypeLabel(service.pricingType)} />
-        <ServiceMobileFact label="USD" value={formatUsdPrice(service)} />
-        <ServiceMobileFact label="BYN" value={formatBynPreview(service, exchangeRate)} />
-        <ServiceMobileFact label="Порядок" value={String(service.sortOrder)} />
+        <ServiceMobileFact label="Частный дом" value={formatUsdPrice(service)} />
+        <ServiceMobileFact label="Коммерческий" value={commercialPriceLabel(service)} />
+        <ServiceMobileFact label="Preview BYN" value={formatBynPreview(service, exchangeRate)} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-        <Typography variant="bodySmMedium">Показывать в калькуляторе</Typography>
-        <ServicePublicSwitch
-          service={service}
-          disabled={updateDisabled}
-          onChange={onVisibilityChange}
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+      <div className="admin-mobile-card-actions split">
+        <div className="admin-switch-line">
+          <Typography variant="bodySmMedium">Показывать в калькуляторе</Typography>
+          <ServicePublicSwitch
+            service={service}
+            disabled={updateDisabled}
+            onChange={onVisibilityChange}
+          />
+        </div>
         <ServiceOrderControls
           service={service}
           index={index}
@@ -708,31 +722,16 @@ function ServiceMobileCard({
           onArchive={onArchive}
         />
       </div>
-    </div>
+    </article>
   )
 }
 
 function ServiceMobileFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1">
-      <Typography variant="caption" tone="muted">
-        {label}
-      </Typography>
-      <Typography className="tabular-nums" variant="bodySmMedium">
-        {value}
-      </Typography>
+    <div className="admin-detail-item">
+      <Typography variant="caption" tone="muted">{label}</Typography>
+      <Typography className="numeric" variant="bodySmMedium">{value}</Typography>
     </div>
-  )
-}
-
-function ServiceMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <Card size="sm" className="rounded-lg">
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="tabular-nums">{numberFormatter.format(value)}</CardTitle>
-      </CardHeader>
-    </Card>
   )
 }
 
@@ -772,6 +771,11 @@ function pricingTypeLabel(pricingType: ServiceRecord['pricingType']) {
 function formatUsdPrice(service: ServiceRecord) {
   const suffix = service.pricingType === 'per_sqm' ? '/м²' : ''
   return `${formatUsdInput(service.priceUsdCents)} USD${suffix}`
+}
+
+function commercialPriceLabel(service: ServiceRecord) {
+  if (!isSupportedPricingType(service.pricingType)) return 'Формула позже'
+  return 'Не задано'
 }
 
 function formatBynPreview(

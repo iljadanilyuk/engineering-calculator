@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
+  CalculationListResponse,
   CalculationListQueryInput,
   CalculationUpdateRequest,
 } from '@poznyak-engineering-calculator/contracts'
@@ -11,6 +12,7 @@ export type LeadListFilters = CalculationListQueryInput
 export const leadQueryKeys = {
   all: ['leads'] as const,
   list: (filters: LeadListFilters) => [...leadQueryKeys.all, 'list', filters] as const,
+  completeList: (filters: LeadListFilters) => [...leadQueryKeys.all, 'complete-list', filters] as const,
   detail: (id: string) => [...leadQueryKeys.all, 'detail', id] as const,
   exampleRequests: (limit: number) => [...leadQueryKeys.all, 'project-example-requests', limit] as const,
 }
@@ -29,6 +31,14 @@ type LeadMutationOptions = {
   api: Pick<ApiClient, 'updateCalculation'>
 }
 
+type CompleteLeadListResponse = CalculationListResponse & {
+  isComplete: boolean
+  loadedCount: number
+}
+
+const fullListPageSize = 100
+const maxListOffset = 10_000
+
 export function useLeadsQuery({
   api,
   enabled,
@@ -38,6 +48,45 @@ export function useLeadsQuery({
     queryKey: leadQueryKeys.list(filters),
     enabled,
     queryFn: () => api.listCalculations(filters),
+  })
+}
+
+export function useAllLeadsQuery({
+  api,
+  enabled,
+  filters = {},
+}: LeadQueryOptions & { filters?: Omit<LeadListFilters, 'limit' | 'offset'> }) {
+  return useQuery({
+    queryKey: leadQueryKeys.completeList(filters),
+    enabled,
+    queryFn: async (): Promise<CompleteLeadListResponse> => {
+      const firstPage = await api.listCalculations({
+        ...filters,
+        limit: fullListPageSize,
+        offset: 0,
+      })
+      const calculations = [...firstPage.calculations]
+
+      for (
+        let offset = fullListPageSize;
+        offset < firstPage.summary.filteredCount && offset <= maxListOffset;
+        offset += fullListPageSize
+      ) {
+        const page = await api.listCalculations({
+          ...filters,
+          limit: fullListPageSize,
+          offset,
+        })
+        calculations.push(...page.calculations)
+      }
+
+      return {
+        ...firstPage,
+        calculations,
+        isComplete: calculations.length >= firstPage.summary.filteredCount,
+        loadedCount: calculations.length,
+      }
+    },
   })
 }
 

@@ -31,9 +31,9 @@ test('manages submitted calculation leads in admin mini-crm', async ({ page }) =
   await page.getByLabel('Эл. почта').fill(e2eAdminEmail)
   await page.getByLabel('Пароль').fill(e2ePassword)
   await page.getByRole('button', { name: 'Войти' }).click()
-  await expect(page.getByRole('heading', { name: 'Заявки' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Заявки', exact: true })).toBeVisible()
 
-  await page.getByLabel('Поиск').fill(leadName)
+  await page.getByLabel('Поиск', { exact: true }).fill(leadName)
   const leadRow = page.locator('tbody tr').filter({ hasText: leadName })
   await expect(leadRow).toBeVisible()
   await expect(leadRow).toContainText('Новая')
@@ -56,9 +56,26 @@ test('manages submitted calculation leads in admin mini-crm', async ({ page }) =
   await page.getByRole('option', { name: 'Связались' }).click()
   await expect(page.getByText('Статус сохранен')).toBeVisible()
 
-  await page.getByLabel('Внутренние заметки').fill(`Browser note ${suffix}`)
-  await page.getByRole('button', { name: 'Сохранить заметки' }).click()
+  const notesTextbox = page.getByRole('textbox', { name: 'Внутренние заметки' })
+  const normalizedNote = `Browser note ${suffix}`
+  await notesTextbox.fill(`   ${normalizedNote}   `)
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().includes('/api/admin/calculations/') && response.request().method() === 'PATCH',
+    ),
+    page.getByRole('button', { name: 'Сохранить заметки' }).click(),
+  ])
   await expect(page.getByText('Заметки сохранены')).toBeVisible()
+  await expect(notesTextbox).toHaveValue(normalizedNote)
+
+  await notesTextbox.fill('   ')
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().includes('/api/admin/calculations/') && response.request().method() === 'PATCH',
+    ),
+    page.getByRole('button', { name: 'Сохранить заметки' }).click(),
+  ])
+  await expect(notesTextbox).toHaveValue('')
 
   const pdfLink = page.getByRole('link', { name: `Открыть PDF для ${leadName}` }).first()
   const href = await pdfLink.getAttribute('href')
@@ -73,7 +90,7 @@ test('manages submitted calculation leads in admin mini-crm', async ({ page }) =
   await expectNoHorizontalOverflow(page)
 
   await page.goto('/app/leads')
-  await page.getByLabel('Поиск').fill(leadName)
+  await page.getByLabel('Поиск', { exact: true }).fill(leadName)
   await expect(page.getByRole('link', { name: `Открыть PDF для ${leadName}` })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })

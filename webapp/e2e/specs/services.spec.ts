@@ -16,7 +16,7 @@ test('manages services and public calculator eligibility', async ({ page }) => {
 
   await createFormulaService(backendUrl, adminAccessToken, formulaTitle)
 
-  await page.goto('/app')
+  await page.goto('/app/services')
   await page.getByLabel('Эл. почта').fill(e2eAdminEmail)
   await page.getByLabel('Пароль').fill(e2ePassword)
   await page.getByRole('button', { name: 'Войти' }).click()
