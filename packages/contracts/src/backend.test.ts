@@ -3,7 +3,11 @@ import { describe, expect, test } from 'bun:test'
 import {
   projectExampleRequestSaveResponseSchema,
   projectExampleCreateRequestSchema,
+  projectExampleRecordSchema,
+  projectExampleReorderRequestSchema,
   projectExampleRequestCreateRequestSchema,
+  publicProjectExampleRecordSchema,
+  publicProjectExampleResponseSchema,
 } from './backend'
 
 describe('backend contracts', () => {
@@ -33,6 +37,96 @@ describe('backend contracts', () => {
       projectExampleCreateRequestSchema.parse({
         title: 'Protocol-relative',
         fileUrl: '//cdn.example.com/examples/ov.pdf',
+      }),
+    ).toThrow()
+  })
+
+  test('validates sanitized project case metadata and public records without file URLs', () => {
+    const createPayload = projectExampleCreateRequestSchema.parse({
+      slug: 'otoplenie-doma-180m',
+      title: 'Отопление частного дома',
+      description: 'Санитизированное описание кейса.',
+      objectType: 'Частный дом',
+      location: 'Минская область',
+      areaSqm: '180',
+      engineeringSections: ['ОВ', 'ВК'],
+      initialTask: 'Подготовить понятные листы для строителей.',
+      solutionSummary: 'Разделили планы, узлы и спецификации.',
+      fragments: [{
+        title: 'План трасс',
+        caption: 'Показывает привязки и очередность монтажа.',
+        imageUrl: '/landing-v4/project-preview-plan-08.jpg',
+        imageAlt: 'Фрагмент плана трасс инженерных систем',
+        sortOrder: 10,
+      }],
+      exampleSlugs: ['ov', 'vk'],
+      fileUrl: '/internal-only/example.pdf',
+      isPublic: true,
+      isArchived: false,
+      sortOrder: 10,
+    })
+    const publicRecord = publicProjectExampleRecordSchema.parse({
+      id: '00000000-0000-7000-8000-000000000401',
+      slug: createPayload.slug,
+      title: createPayload.title,
+      description: createPayload.description,
+      objectType: createPayload.objectType,
+      location: createPayload.location,
+      areaSqm: createPayload.areaSqm,
+      engineeringSections: createPayload.engineeringSections,
+      initialTask: createPayload.initialTask,
+      solutionSummary: createPayload.solutionSummary,
+      fragments: createPayload.fragments,
+      exampleSlugs: createPayload.exampleSlugs,
+      coverImageUrl: null,
+      sortOrder: createPayload.sortOrder,
+    })
+    const adminRecord = projectExampleRecordSchema.parse({
+      ...publicRecord,
+      fileUrl: createPayload.fileUrl,
+      isPublic: true,
+      isArchived: false,
+      createdAt: '2026-07-20T00:00:00.000Z',
+      updatedAt: '2026-07-20T00:00:00.000Z',
+    })
+
+    expect(publicRecord).not.toHaveProperty('fileUrl')
+    expect(publicProjectExampleResponseSchema.parse({ example: publicRecord }).example).not.toHaveProperty('fileUrl')
+    expect(adminRecord.exampleSlugs).toEqual(['ov', 'vk'])
+
+    expect(() =>
+      projectExampleCreateRequestSchema.parse({
+        title: 'Duplicate sections',
+        fileUrl: '/examples/duplicate.pdf',
+        engineeringSections: ['ОВ', ' ов '],
+      }),
+    ).toThrow()
+
+    expect(() =>
+      projectExampleCreateRequestSchema.parse({
+        title: 'Duplicate assets',
+        fileUrl: '/examples/duplicate.pdf',
+        exampleSlugs: ['ov', 'OV'],
+      }),
+    ).toThrow()
+  })
+
+  test('validates project example reorder payloads', () => {
+    expect(
+      projectExampleReorderRequestSchema.parse({
+        examples: [
+          { id: '00000000-0000-7000-8000-000000000401', sortOrder: 10 },
+          { id: '00000000-0000-7000-8000-000000000402', sortOrder: 20 },
+        ],
+      }).examples,
+    ).toHaveLength(2)
+
+    expect(() =>
+      projectExampleReorderRequestSchema.parse({
+        examples: [
+          { id: '00000000-0000-7000-8000-000000000401', sortOrder: 10 },
+          { id: '00000000-0000-7000-8000-000000000401', sortOrder: 20 },
+        ],
       }),
     ).toThrow()
   })

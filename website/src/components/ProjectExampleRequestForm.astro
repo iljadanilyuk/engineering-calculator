@@ -1,0 +1,597 @@
+---
+import { publicProjectExampleAssets } from '@poznyak-engineering-calculator/contracts'
+
+type Props = {
+  id?: string
+  title?: string
+  description?: string
+  source?: string
+  selectedSlugs?: readonly string[]
+  submitLabel?: string
+}
+
+const {
+  id = 'example-request-form',
+  title = 'Получить примеры проектов',
+  description = 'После контакта сайт покажет защищенные ссылки и предложит Telegram-доставку, если бот подключен.',
+  source = 'example_request',
+  selectedSlugs,
+  submitLabel = 'Получить PDF-примеры',
+} = Astro.props
+const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectExampleAssets.map((asset) => asset.slug))
+---
+
+<form
+  class="example-request-form"
+  id={id}
+  data-example-request-form
+  data-example-source={source}
+  data-example-submit-label={submitLabel}
+  novalidate
+>
+  <div class="example-form-copy">
+    <strong>{title}</strong>
+    <span>{description}</span>
+  </div>
+  <fieldset class="example-choice-group" aria-describedby={`${id}-choice-error`}>
+    <legend>Какие примеры нужны</legend>
+    {
+      publicProjectExampleAssets.map((example) => (
+        <label class="example-choice" for={`${id}-choice-${example.slug}`}>
+          <input
+            id={`${id}-choice-${example.slug}`}
+            type="checkbox"
+            value={example.slug}
+            data-example-choice
+            checked={selected.has(example.slug)}
+          />
+          <span>{example.code}</span>
+          <strong>{example.title}</strong>
+        </label>
+      ))
+    }
+  </fieldset>
+  <p class="field-error" id={`${id}-choice-error`} data-example-choice-error hidden>
+    Выберите хотя бы один пример проекта.
+  </p>
+  <div class="example-fields">
+    <div class="example-input-grid">
+      <label for={`${id}-name`}>
+        <span>Имя</span>
+        <input
+          id={`${id}-name`}
+          data-example-name
+          type="text"
+          autocomplete="name"
+          placeholder="Ваше имя"
+          aria-describedby={`${id}-name-error`}
+        />
+      </label>
+      <label for={`${id}-phone`}>
+        <span>Телефон</span>
+        <input
+          id={`${id}-phone`}
+          data-example-phone
+          type="tel"
+          inputmode="tel"
+          autocomplete="tel"
+          placeholder="Телефон"
+          aria-describedby={`${id}-phone-error`}
+        />
+      </label>
+    </div>
+    <p class="field-error" id={`${id}-name-error`} data-example-name-error hidden>
+      Укажите имя: минимум 2 символа.
+    </p>
+    <p class="field-error" id={`${id}-phone-error`} data-example-phone-error hidden>
+      Укажите корректный телефон для связи.
+    </p>
+    <label class="consent-line" for={`${id}-consent`}>
+      <input id={`${id}-consent`} data-example-consent type="checkbox" checked />
+      <span>Согласен на обработку имени и телефона для выдачи примеров проектов и связи по проектированию.</span>
+    </label>
+    <p class="field-error" id={`${id}-consent-error`} data-example-consent-error hidden>
+      Нужно согласие на обработку контакта.
+    </p>
+  </div>
+  <button class="primary-btn" type="submit" data-example-trigger>{submitLabel}</button>
+  <p class="form-status" data-example-status>PDF не публикуется прямой ссылкой: сначала сохраняем контакт.</p>
+  <div class="proposal-success" data-example-success hidden></div>
+</form>
+
+<script>
+  import {
+    projectExampleRequestSaveResponseSchema,
+    type PublicProjectExampleRequestRecord,
+  } from '@poznyak-engineering-calculator/contracts'
+
+  const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
+
+  document.querySelectorAll<HTMLFormElement>('[data-example-request-form]').forEach((form) => {
+    if (form.dataset.exampleInitialized === 'true') return
+    form.dataset.exampleInitialized = 'true'
+    initializeExampleRequestForm(form)
+  })
+
+  function initializeExampleRequestForm(form: HTMLFormElement) {
+    const nameInput = form.querySelector<HTMLInputElement>('[data-example-name]')
+    const phoneInput = form.querySelector<HTMLInputElement>('[data-example-phone]')
+    const consent = form.querySelector<HTMLInputElement>('[data-example-consent]')
+    const choices = [...form.querySelectorAll<HTMLInputElement>('[data-example-choice]')]
+    const choiceError = form.querySelector<HTMLElement>('[data-example-choice-error]')
+    const nameError = form.querySelector<HTMLElement>('[data-example-name-error]')
+    const phoneError = form.querySelector<HTMLElement>('[data-example-phone-error]')
+    const consentError = form.querySelector<HTMLElement>('[data-example-consent-error]')
+    const trigger = form.querySelector<HTMLButtonElement>('[data-example-trigger]')
+    const status = form.querySelector<HTMLElement>('[data-example-status]')
+    const success = form.querySelector<HTMLElement>('[data-example-success]')
+    const submitLabel = form.dataset.exampleSubmitLabel || 'Получить PDF-примеры'
+    const source = form.dataset.exampleSource || 'example_request'
+    let isSubmitting = false
+    let idempotencyKey = createIdempotencyKey()
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+      void submit()
+    })
+
+    ;[nameInput, phoneInput].forEach((input) => {
+      input?.addEventListener('input', () => {
+        validate(false)
+        resetRequest()
+      })
+    })
+
+    consent?.addEventListener('change', () => {
+      validate(false)
+      resetRequest()
+    })
+
+    choices.forEach((choice) => {
+      choice.addEventListener('change', () => {
+        validate(false)
+        resetRequest()
+        updateSubmitState()
+      })
+    })
+
+    document.querySelectorAll<HTMLButtonElement>('[data-example-select]').forEach((button) => {
+      if (button.getAttribute('aria-controls') !== form.id) return
+      button.addEventListener('click', () => {
+        const slug = button.dataset.exampleSlug
+        if (!slug) return
+        choices.forEach((choice) => {
+          choice.checked = choice.value === slug
+        })
+        resetRequest()
+        updateSubmitState()
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        nameInput?.focus({ preventScroll: true })
+        setStatus('Оставьте контакт: выбранный PDF откроется здесь по защищенной ссылке.')
+      })
+    })
+
+    if (!apiBaseUrl) {
+      setStatus('Выдача PDF-примеров требует подключенный backend API.')
+    }
+    updateSubmitState()
+
+    async function submit() {
+      if (isSubmitting) return
+
+      const validation = validate(true)
+      if (!validation.valid) {
+        setStatus('Проверьте поля формы перед отправкой.', 'error')
+        return
+      }
+
+      if (!apiBaseUrl) {
+        setStatus('Выдача PDF недоступна: backend API сейчас не подключен.', 'error')
+        return
+      }
+
+      isSubmitting = true
+      updateSubmitState()
+      setStatus('Сохраняю контакт и готовлю защищенную выдачу...', 'loading')
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/public/project-example-requests`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            idempotencyKey,
+            clientName: validation.clientName,
+            clientPhone: validation.clientPhone,
+            requestedExampleSlugs: validation.requestedExampleSlugs,
+            consentAccepted: true,
+            source,
+            referrer: document.referrer || undefined,
+            utm: readAttributionMetadata(),
+          }),
+        })
+        const payload = await response.json().catch(() => null)
+
+        if (!response.ok) {
+          applyServerValidationErrors(payload)
+          throw new Error(errorMessage(response.status, payload))
+        }
+
+        const parsed = projectExampleRequestSaveResponseSchema.parse(payload)
+        showSuccess(parsed.request, response.status === 200)
+      } catch (error) {
+        setStatus(
+          error instanceof Error ? error.message : 'Не удалось выдать PDF-примеры. Попробуйте еще раз.',
+          'error',
+        )
+      } finally {
+        isSubmitting = false
+        updateSubmitState()
+      }
+    }
+
+    function validate(showErrors: boolean) {
+      const clientName = nameInput?.value.trim() ?? ''
+      const clientPhone = phoneInput?.value.trim() ?? ''
+      const phoneDigits = clientPhone.replace(/\D/g, '')
+      const requestedExampleSlugs = selectedSlugs()
+      const examplesValid = requestedExampleSlugs.length > 0
+      const nameValid = clientName.length >= 2 && clientName.length <= 120
+      const phoneValid =
+        /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
+        phoneDigits.length >= 8 &&
+        phoneDigits.length <= 15 &&
+        !/^(\d)\1+$/.test(phoneDigits)
+      const consentValid = consent?.checked === true
+
+      if (choiceError) choiceError.hidden = examplesValid || !showErrors
+      setFieldValidity(nameInput, nameError, nameValid, showErrors)
+      setFieldValidity(phoneInput, phoneError, phoneValid, showErrors)
+      setFieldValidity(consent, consentError, consentValid, showErrors)
+
+      return {
+        valid: examplesValid && nameValid && phoneValid && consentValid,
+        clientName,
+        clientPhone,
+        requestedExampleSlugs,
+      }
+    }
+
+    function selectedSlugs() {
+      return choices
+        .filter((choice) => choice.checked)
+        .map((choice) => choice.value)
+    }
+
+    function updateSubmitState() {
+      if (!trigger) return
+      const unavailable = isSubmitting || !apiBaseUrl || selectedSlugs().length === 0
+      trigger.disabled = unavailable
+      trigger.textContent = isSubmitting ? 'Готовлю выдачу...' : submitLabel
+    }
+
+    function showSuccess(
+      request: PublicProjectExampleRequestRecord,
+      returnedExisting: boolean,
+    ) {
+      if (success) {
+        success.hidden = false
+        const telegramLink = request.telegramDelivery?.deepLinkUrl
+          ? `<a class="proposal-link" href="${escapeHtml(request.telegramDelivery.deepLinkUrl)}" target="_blank" rel="noopener">Получить в Telegram</a>`
+          : ''
+        const fallbackLinks = request.requestedExamples
+          .map(
+            (example) => `
+              <a
+                class="proposal-link"
+                href="${apiBaseUrl}${escapeHtml(example.urlPath)}"
+                target="_blank"
+                rel="noopener"
+              >
+                ${escapeHtml(example.code)} · защищенная PDF-ссылка
+              </a>
+            `,
+          )
+          .join('')
+
+        success.innerHTML = `
+          <strong>${returnedExisting ? 'Этот запрос уже сохранен' : 'Контакт сохранен'}</strong>
+          <span>Телефон сохранен как ${escapeHtml(request.clientPhone)}.</span>
+          <span>Прямой публичный PDF URL не раскрывается: выдача идет через Telegram или token-ссылку.</span>
+          <div class="proposal-actions">
+            ${telegramLink}
+            ${fallbackLinks}
+          </div>
+        `
+      }
+
+      setStatus(
+        returnedExisting
+          ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
+          : request.telegramDelivery?.deepLinkUrl
+            ? 'Запрос принят. Telegram-доставка готова; защищенные web-ссылки оставлены как fallback.'
+            : 'Запрос принят. PDF-примеры готовы по защищенным token-ссылкам.',
+        'ready',
+      )
+    }
+
+    function hideSuccess() {
+      if (!success) return
+      success.hidden = true
+      success.innerHTML = ''
+    }
+
+    function resetRequest() {
+      idempotencyKey = createIdempotencyKey()
+      hideSuccess()
+    }
+
+    function applyServerValidationErrors(payload: unknown) {
+      if (!payload || typeof payload !== 'object' || !('error' in payload)) return
+      const details = (payload as { error?: { details?: unknown } }).error?.details
+      if (!Array.isArray(details)) return
+
+      const phoneIssue = details.find((issue) =>
+        Array.isArray((issue as { path?: unknown }).path)
+          ? ((issue as { path: unknown[] }).path ?? []).includes('clientPhone')
+          : false,
+      )
+
+      if (phoneIssue) {
+        setFieldValidity(phoneInput, phoneError, false, true)
+      }
+    }
+
+    function errorMessage(statusCode: number, payload: unknown) {
+      const serverMessage =
+        payload && typeof payload === 'object' && 'error' in payload
+          ? (payload as { error?: { message?: string } }).error?.message
+          : undefined
+
+      if (statusCode === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
+      if (statusCode === 409) return 'Выбранный пример временно недоступен. Обновите страницу и попробуйте еще раз.'
+      if (statusCode === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
+      return serverMessage ?? 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
+    }
+
+    function setStatus(message: string, state?: 'ready' | 'error' | 'loading') {
+      if (!status) return
+      status.textContent = message
+      status.classList.toggle('is-ready', state === 'ready')
+      status.classList.toggle('is-error', state === 'error')
+      status.classList.toggle('is-loading', state === 'loading')
+    }
+  }
+
+  function setFieldValidity(
+    input: HTMLInputElement | null,
+    errorElement: HTMLElement | null,
+    isValid: boolean,
+    showError: boolean,
+  ) {
+    if (input) {
+      if (isValid) {
+        input.removeAttribute('aria-invalid')
+      } else {
+        input.setAttribute('aria-invalid', 'true')
+      }
+    }
+
+    if (errorElement) {
+      errorElement.hidden = isValid || !showError
+    }
+  }
+
+  function readAttributionMetadata() {
+    const searchParams = new URLSearchParams(window.location.search)
+    const metadata: Record<string, string> = {}
+
+    searchParams.forEach((value, key) => {
+      if (!/^(utm_[a-z0-9_]+|gclid|yclid|fbclid)$/i.test(key)) return
+      const trimmedValue = value.trim()
+      if (!trimmedValue) return
+      metadata[key.slice(0, 64)] = trimmedValue.slice(0, 500)
+    })
+
+    return Object.keys(metadata).length > 0 ? metadata : undefined
+  }
+
+  function createIdempotencyKey() {
+    if ('randomUUID' in crypto) {
+      return crypto.randomUUID()
+    }
+
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`
+  }
+
+  function escapeHtml(value: string) {
+    return value.replace(/[&<>"']/g, (char) => {
+      if (char === '&') return '&amp;'
+      if (char === '<') return '&lt;'
+      if (char === '>') return '&gt;'
+      if (char === '"') return '&quot;'
+      return '&#39;'
+    })
+  }
+</script>
+
+<style is:global>
+  .example-request-form {
+    display: grid;
+    gap: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 20px;
+  }
+
+  .example-form-copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .example-form-copy strong {
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-size: 18px;
+  }
+
+  .example-form-copy span,
+  .form-status {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .example-choice-group {
+    display: grid;
+    gap: 8px;
+    border: 0;
+    padding: 0;
+  }
+
+  .example-choice-group legend {
+    margin-bottom: 2px;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .example-choice {
+    display: grid;
+    grid-template-columns: 18px 38px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+  }
+
+  .example-choice span {
+    color: var(--blue);
+    font-weight: 800;
+  }
+
+  .example-choice strong {
+    min-width: 0;
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  .example-fields,
+  .proposal-success {
+    display: grid;
+    gap: 10px;
+  }
+
+  .example-input-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .example-input-grid label {
+    display: grid;
+    gap: 6px;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .example-input-grid input {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0 12px;
+  }
+
+  .example-input-grid input[aria-invalid="true"] {
+    border-color: #c54040;
+  }
+
+  .consent-line {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    color: var(--body);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .field-error {
+    margin: 0;
+    color: #c54040;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .form-status {
+    margin: 0;
+  }
+
+  .form-status.is-ready {
+    color: #17875d;
+    font-weight: 800;
+  }
+
+  .form-status.is-error {
+    color: #c54040;
+    font-weight: 800;
+  }
+
+  .form-status.is-loading {
+    color: var(--blue);
+    font-weight: 800;
+  }
+
+  .proposal-success {
+    border: 1px solid #b9decf;
+    border-radius: 8px;
+    background: #f3fbf7;
+    padding: 14px;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .proposal-success strong,
+  .proposal-success span {
+    display: block;
+  }
+
+  .proposal-success strong {
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-size: 15px;
+  }
+
+  .proposal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .proposal-link {
+    display: inline-flex;
+    min-height: 38px;
+    align-items: center;
+    border: 1px solid #b7cee3;
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--blue);
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  @media (max-width: 760px) {
+    .example-input-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

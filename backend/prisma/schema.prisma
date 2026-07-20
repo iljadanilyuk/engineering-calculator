@@ -171,17 +171,27 @@ model AppSetting {
 }
 
 model ProjectExample {
-  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  title         String
-  description   String?
-  fileUrl       String   @map("file_url")
-  coverImageUrl String?  @map("cover_image_url")
-  isPublic      Boolean  @default(true) @map("is_public")
-  sortOrder     Int      @default(0) @map("sort_order")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  slug                String   @unique
+  title               String
+  description         String?
+  objectType          String?  @map("object_type")
+  location            String?
+  areaSqm             String?  @map("area_sqm")
+  engineeringSections Json     @default("[]") @map("engineering_sections")
+  initialTask         String?  @map("initial_task")
+  solutionSummary     String?  @map("solution_summary")
+  fragments           Json     @default("[]")
+  exampleSlugs        Json     @default("[]") @map("example_slugs")
+  fileUrl             String   @map("file_url")
+  coverImageUrl       String?  @map("cover_image_url")
+  isPublic            Boolean  @default(true) @map("is_public")
+  isArchived          Boolean  @default(false) @map("is_archived")
+  sortOrder           Int      @default(0) @map("sort_order")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
-  @@index([isPublic, sortOrder], map: "project_examples_public_sort_idx")
+  @@index([isPublic, isArchived, sortOrder], map: "project_examples_public_sort_idx")
   @@map("project_examples")
 }
 

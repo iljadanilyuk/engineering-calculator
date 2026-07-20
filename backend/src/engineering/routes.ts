@@ -9,6 +9,7 @@ import {
   exchangeRateSettingResponseSchema,
   projectExampleCreateRequestSchema,
   projectExampleListResponseSchema,
+  projectExampleReorderRequestSchema,
   projectExampleRequestCreateRequestSchema,
   projectExampleRequestListQuerySchema,
   projectExampleRequestListResponseSchema,
@@ -22,6 +23,7 @@ import {
   publicCalculatorConfigResponseSchema,
   publicCalculationSaveResponseSchema,
   publicProjectExampleListResponseSchema,
+  publicProjectExampleResponseSchema,
   serviceCreateRequestSchema,
   serviceListResponseSchema,
   serviceReorderRequestSchema,
@@ -58,6 +60,10 @@ const idParamsSchema = z.object({
 
 const publicTokenParamsSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
+})
+
+const publicProjectExampleSlugParamsSchema = z.object({
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
 })
 
 const publicProjectExampleParamsSchema = publicTokenParamsSchema.extend({
@@ -109,6 +115,28 @@ const publicProjectExamplesRoute = createRoute({
         },
       },
       description: 'Public project examples',
+    },
+  },
+})
+
+const publicProjectExampleRoute = createRoute({
+  method: 'get',
+  path: '/public/project-examples/{slug}',
+  request: {
+    params: publicProjectExampleSlugParamsSchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicProjectExampleResponseSchema,
+        },
+      },
+      description: 'Public project example by slug',
+    },
+    404: {
+      content: errorResponseContent,
+      description: 'Project example not found',
     },
   },
 })
@@ -408,6 +436,10 @@ const adminServicesRoute = createRoute({
     },
     401: unauthorizedResponse,
     403: forbiddenResponse,
+    409: {
+      content: errorResponseContent,
+      description: 'Project example slug conflict',
+    },
   },
 })
 
@@ -715,6 +747,44 @@ const createProjectExampleRoute = createRoute({
   },
 })
 
+const reorderProjectExamplesRoute = createRoute({
+  method: 'patch',
+  path: '/admin/project-examples/reorder',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: projectExampleReorderRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: projectExampleListResponseSchema,
+        },
+      },
+      description: 'Reordered project examples',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+    404: {
+      content: errorResponseContent,
+      description: 'Project example not found',
+    },
+    409: {
+      content: errorResponseContent,
+      description: 'Project example slug conflict',
+    },
+  },
+})
+
 const updateProjectExampleRoute = createRoute({
   method: 'patch',
   path: '/admin/project-examples/{id}',
@@ -781,6 +851,12 @@ export function createEngineeringRoutes() {
   routes.openapi(publicProjectExamplesRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
     return c.json({ examples: await engineering.listPublicProjectExampleSummaries() }, 200)
+  })
+
+  routes.openapi(publicProjectExampleRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const params = c.req.valid('param')
+    return c.json({ example: await engineering.getPublicProjectExampleBySlug(params.slug) }, 200)
   })
 
   routes.openapi(saveCalculationRoute, async (c) => {
@@ -983,6 +1059,12 @@ export function createEngineeringRoutes() {
     const engineering = c.get('engineeringDataService')
     const example = await engineering.createProjectExample(c.req.valid('json'))
     return c.json({ example }, 201)
+  })
+
+  protectedRoutes.openapi(reorderProjectExamplesRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const examples = await engineering.reorderProjectExamples(c.req.valid('json'))
+    return c.json({ examples }, 200)
   })
 
   protectedRoutes.openapi(updateProjectExampleRoute, async (c) => {

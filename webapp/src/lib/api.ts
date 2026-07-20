@@ -9,8 +9,13 @@ import {
   loginRequestSchema,
   logoutRequestSchema,
   meResponseSchema,
+  projectExampleCreateRequestSchema,
+  projectExampleListResponseSchema,
+  projectExampleReorderRequestSchema,
   projectExampleRequestListQuerySchema,
   projectExampleRequestListResponseSchema,
+  projectExampleResponseSchema,
+  projectExampleUpdateRequestSchema,
   refreshRequestSchema,
   refreshResponseSchema,
   serviceCreateRequestSchema,
@@ -27,8 +32,13 @@ import {
   type LoginRequest,
   type LogoutRequest,
   type MeResponse,
+  type ProjectExampleCreateRequest,
+  type ProjectExampleListResponse,
+  type ProjectExampleReorderRequest,
   type ProjectExampleRequestListQueryInput,
   type ProjectExampleRequestListResponse,
+  type ProjectExampleResponse,
+  type ProjectExampleUpdateRequest,
   type RefreshRequest,
   type RefreshResponse,
   type ServiceCreateRequest,
@@ -160,6 +170,39 @@ export class ApiClient {
         auth: true,
       },
     )
+  }
+
+  listProjectExamples(): Promise<ProjectExampleListResponse> {
+    return this.request('/api/admin/project-examples', projectExampleListResponseSchema, {
+      auth: true,
+    })
+  }
+
+  createProjectExample(input: ProjectExampleCreateRequest): Promise<ProjectExampleResponse> {
+    const payload = projectExampleCreateRequestSchema.parse(input)
+    return this.request('/api/admin/project-examples', projectExampleResponseSchema, {
+      method: 'POST',
+      body: payload,
+      auth: true,
+    })
+  }
+
+  updateProjectExample(id: string, input: ProjectExampleUpdateRequest): Promise<ProjectExampleResponse> {
+    const payload = projectExampleUpdateRequestSchema.parse(input)
+    return this.request(`/api/admin/project-examples/${id}`, projectExampleResponseSchema, {
+      method: 'PATCH',
+      body: payload,
+      auth: true,
+    })
+  }
+
+  reorderProjectExamples(input: ProjectExampleReorderRequest): Promise<ProjectExampleListResponse> {
+    const payload = projectExampleReorderRequestSchema.parse(input)
+    return this.request('/api/admin/project-examples/reorder', projectExampleListResponseSchema, {
+      method: 'PATCH',
+      body: payload,
+      auth: true,
+    })
   }
 
   getCalculation(id: string): Promise<{ calculation: CalculationRecord }> {

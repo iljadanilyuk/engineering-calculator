@@ -5,6 +5,7 @@ import {
   HomePage,
   LeadDetailPage,
   LeadsPage,
+  ProjectCasesPage,
   RootLayout,
   ServicesPage,
   TasksPage,
@@ -32,6 +33,12 @@ const servicesRoute = createRoute({
   component: ServicesPage,
 })
 
+const projectCasesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/app/project-cases',
+  component: ProjectCasesPage,
+})
+
 const leadsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/leads',
@@ -50,7 +57,15 @@ const leadDetailRoute = createRoute({
   component: LeadDetailPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, appRoute, servicesRoute, leadsRoute, tasksRoute, leadDetailRoute])
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  appRoute,
+  servicesRoute,
+  projectCasesRoute,
+  leadsRoute,
+  tasksRoute,
+  leadDetailRoute,
+])
 
 export const router = createRouter({ routeTree })
 

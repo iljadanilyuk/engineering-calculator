@@ -5,6 +5,7 @@ import { AdminTasks } from '@/components/AdminTasks'
 import { AdminWorkspace, type AdminWorkspaceSection } from '@/components/AdminWorkspace'
 import { AuthForm } from '@/components/AuthForm'
 import { LeadDetailView, LeadsManager } from '@/components/LeadsManager'
+import { ProjectCasesManager } from '@/components/ProjectCasesManager'
 import { ServicesManager } from '@/components/ServicesManager'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -26,6 +27,10 @@ export function AppPage() {
 
 export function ServicesPage() {
   return <AdminEntry section="services" />
+}
+
+export function ProjectCasesPage() {
+  return <AdminEntry section="project_cases" />
 }
 
 export function LeadsPage() {
@@ -69,6 +74,7 @@ function AdminEntry({
       {section === 'projects' && <LeadsManager />}
       {section === 'tasks' && <AdminTasks />}
       {section === 'services' && <ServicesManager />}
+      {section === 'project_cases' && <ProjectCasesManager />}
       {section === 'record' && leadId && <LeadDetailView leadId={leadId} />}
     </AdminWorkspace>
   )

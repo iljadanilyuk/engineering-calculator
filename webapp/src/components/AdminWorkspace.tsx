@@ -26,6 +26,7 @@ export type AdminWorkspaceSection =
   | 'projects'
   | 'tasks'
   | 'services'
+  | 'project_cases'
   | 'record'
 
 type NavItem = {
@@ -77,6 +78,12 @@ const productNav: NavItem[] = [
     href: '/app/services',
     icon: Settings01Icon,
     section: 'services',
+  },
+  {
+    label: 'Кейсы проектов',
+    href: '/app/project-cases',
+    icon: Agreement01Icon,
+    section: 'project_cases',
   },
   {
     label: 'Конструктор опросника',

@@ -1110,6 +1110,11 @@
     max-width: 560px;
   }
 
+  .admin-case-drawer {
+    width: min(760px, 100vw);
+    max-width: 760px;
+  }
+
   .admin-drawer-form {
     display: flex;
     min-height: 100%;
@@ -1131,6 +1136,10 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .admin-drawer-grid.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-order-control {
@@ -1217,6 +1226,36 @@
     align-items: center;
     gap: 12px;
   }
+
+  .admin-case-title,
+  .admin-case-fragments,
+  .admin-case-fragment,
+  .admin-case-pill-list {
+    display: grid;
+    min-width: 0;
+  }
+
+  .admin-case-title {
+    gap: 3px;
+  }
+
+  .admin-case-pill-list {
+    align-content: start;
+    justify-items: start;
+    gap: 5px;
+  }
+
+  .admin-case-fragments {
+    gap: 10px;
+  }
+
+  .admin-case-fragment {
+    gap: 12px;
+    border: 1px solid var(--pzk-line);
+    border-radius: 8px;
+    background: var(--pzk-surface-2);
+    padding: 12px;
+  }
 }
 
 @media (max-width: 1180px) {
@@ -1295,6 +1334,7 @@
   .admin-requirement-grid,
   .admin-process-grid,
   .admin-filter-grid,
+  .admin-drawer-grid.two,
   .admin-drawer-grid {
     grid-template-columns: 1fr;
   }

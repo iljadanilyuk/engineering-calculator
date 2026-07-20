@@ -1248,15 +1248,40 @@ maybeDescribe('engineering API integration', () => {
   test('keeps project examples public listing separate from admin records', async () => {
     const accessToken = await loginAdmin('examples@example.com')
     const publicExample = await createProjectExample(accessToken, {
+      slug: 'ov-case',
       title: 'ОВ example',
+      description: 'Sanitized public case summary',
+      objectType: 'Private house',
+      location: 'Minsk region',
+      areaSqm: '180',
+      engineeringSections: ['ОВ', 'ВК'],
+      initialTask: 'Prepare enough documentation for builder pricing.',
+      solutionSummary: 'Separated plans, nodes and specification fragments.',
+      fragments: [{
+        title: 'Plan fragment',
+        caption: 'Shows routing decisions for installation.',
+        imageUrl: '/landing-v4/project-preview-plan-08.jpg',
+        imageAlt: 'Sanitized project plan fragment',
+        sortOrder: 10,
+      }],
+      exampleSlugs: ['ov'],
       fileUrl: 'https://example.com/ov.pdf',
       sortOrder: 2,
     })
     await createProjectExample(accessToken, {
+      slug: 'private-draft',
       title: 'Private draft',
       fileUrl: 'https://example.com/private.pdf',
       isPublic: false,
       sortOrder: 1,
+    })
+    await createProjectExample(accessToken, {
+      slug: 'archived-public',
+      title: 'Archived public',
+      fileUrl: 'https://example.com/archive.pdf',
+      isPublic: true,
+      isArchived: true,
+      sortOrder: 0,
     })
 
     const publicList = await app.request('/api/public/project-examples')
@@ -1270,15 +1295,134 @@ maybeDescribe('engineering API integration', () => {
     expect(publicBody.examples).toEqual([
       {
         id: publicExample.id,
+        slug: 'ov-case',
         title: 'ОВ example',
-        description: null,
+        description: 'Sanitized public case summary',
+        objectType: 'Private house',
+        location: 'Minsk region',
+        areaSqm: '180',
+        engineeringSections: ['ОВ', 'ВК'],
+        initialTask: 'Prepare enough documentation for builder pricing.',
+        solutionSummary: 'Separated plans, nodes and specification fragments.',
+        fragments: [{
+          title: 'Plan fragment',
+          caption: 'Shows routing decisions for installation.',
+          imageUrl: '/landing-v4/project-preview-plan-08.jpg',
+          imageAlt: 'Sanitized project plan fragment',
+          sortOrder: 10,
+        }],
+        exampleSlugs: ['ov'],
         coverImageUrl: null,
         sortOrder: 2,
       },
     ])
     expect(publicBody.examples[0]).not.toHaveProperty('fileUrl')
+    expect(publicBody.examples[0]).not.toHaveProperty('isArchived')
+    const publicDetail = await app.request('/api/public/project-examples/ov-case')
+    const publicDetailBody = await publicDetail.json()
+    expect(publicDetail.status).toBe(200)
+    expect(publicDetailBody.example).toEqual(publicBody.examples[0])
+    expect(publicDetailBody.example).not.toHaveProperty('fileUrl')
+    expect((await app.request('/api/public/project-examples/private-draft')).status).toBe(404)
+    expect((await app.request('/api/public/project-examples/archived-public')).status).toBe(404)
     expect(adminList.status).toBe(200)
-    expect(adminBody.examples).toHaveLength(2)
+    expect(adminBody.examples).toHaveLength(3)
+    expect(adminBody.examples.find((example: { slug: string }) => example.slug === 'archived-public')).toMatchObject({
+      isPublic: false,
+      isArchived: true,
+    })
+  })
+
+  test('manages project case archive, publish, slug conflicts, and reorder', async () => {
+    const accessToken = await loginAdmin('case-management@example.com')
+    const first = await createProjectExample(accessToken, {
+      slug: 'first-case',
+      title: 'First case',
+      fileUrl: 'https://example.com/first.pdf',
+      isPublic: true,
+      sortOrder: 10,
+      exampleSlugs: ['ov'],
+    })
+    const second = await createProjectExample(accessToken, {
+      slug: 'second-case',
+      title: 'Second case',
+      fileUrl: 'https://example.com/second.pdf',
+      isPublic: false,
+      sortOrder: 20,
+      exampleSlugs: ['vk'],
+    })
+    const duplicateSlug = await app.request(`/api/admin/project-examples/${second.id}`, {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ slug: 'first-case' }),
+    })
+    const archive = await patchProjectExample(accessToken, first.id, {
+      isArchived: true,
+      isPublic: true,
+    })
+    const unarchiveAndPublish = await patchProjectExample(accessToken, first.id, {
+      isArchived: false,
+      isPublic: true,
+    })
+    const reorder = await app.request('/api/admin/project-examples/reorder', {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        examples: [
+          { id: second.id, sortOrder: 10 },
+          { id: first.id, sortOrder: 20 },
+        ],
+      }),
+    })
+    const reorderBody = await reorder.json()
+    const duplicateReorder = await app.request('/api/admin/project-examples/reorder', {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        examples: [
+          { id: first.id, sortOrder: 10 },
+          { id: first.id, sortOrder: 20 },
+        ],
+      }),
+    })
+    const missingReorder = await app.request('/api/admin/project-examples/reorder', {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        examples: [
+          { id: '00000000-0000-7000-8000-000000099999', sortOrder: 10 },
+        ],
+      }),
+    })
+
+    expect(duplicateSlug.status).toBe(409)
+    expect(archive).toMatchObject({
+      isArchived: true,
+      isPublic: false,
+    })
+    expect(unarchiveAndPublish).toMatchObject({
+      isArchived: false,
+      isPublic: true,
+    })
+    expect(reorder.status).toBe(200)
+    expect(reorderBody.examples.map((example: { slug: string }) => example.slug)).toEqual([
+      'second-case',
+      'first-case',
+    ])
+    expect(duplicateReorder.status).toBe(400)
+    expect(missingReorder.status).toBe(404)
   })
 
   test('saves lead-gated project example requests and serves PDFs only by request token', async () => {

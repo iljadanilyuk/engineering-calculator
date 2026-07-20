@@ -1563,7 +1563,7 @@ Review log:
 
 ### PZK-022 - Public Project Case Pages And Telegram Delivery
 
-Status: Pending
+Status: Complete
 
 Goal:
 
@@ -1597,6 +1597,40 @@ Out of scope:
 - Telegram group listener and daily ТЗ extraction.
 - Publishing unsanitized client documents or personal data.
 - Rebuilding proposal/PDF generation unless a blocker is explicitly found.
+
+Completion notes:
+
+- Added public `Реализованные проекты` listing and individual case pages with sanitized task, object type, location/area, engineering sections, documentation fragments, per-fragment client/builder captions, and CTA blocks.
+- Added reusable public project-example request form for case pages that saves contact data through the existing PZK-020 project-example request flow and then shows Telegram deep link when available or tokenized fallback links; no anonymous direct PDF URL is rendered.
+- Added build-time managed-case bridge for the static Astro website: listing, detail `getStaticPaths()`, and sitemap load published sanitized project cases from `/api/public/project-examples` when `PUBLIC_API_URL` is available, with curated sanitized fallback cases for static builds.
+- Added public backend detail route `/api/public/project-examples/{slug}` with `isPublic && !isArchived` filtering and sanitized response schema that omits internal `fileUrl`, archive/public flags, and timestamps.
+- Extended project-example contracts, Prisma model, and migration with case slug, object/location/area, engineering sections, initial task, solution summary, fragments, linked gated example slugs, and archive state.
+- Added V2 admin `Кейсы проектов` management using the PZK-021 shell: create/edit/archive/restore, publish toggle, reorder controls, slug/content fields, cover/fragment image URL management, captions, and linked gated PDF asset slugs.
+- Added admin-side publication guards so a public case page requires description, object type, area, task, engineering sections, at least one documentation fragment, and at least one linked gated example asset.
+- Updated public landing navigation and document section to point to the new cases while preserving calculator, КП, questionnaire, admin, and existing Telegram delivery behavior.
+- Replaced static `public/sitemap.xml` with generated `src/pages/sitemap.xml.ts`, so case URLs and canonicals stay aligned with the same source used by generated pages.
+- No PZK-023 blog, PZK-024 lightbox, PZK-026 Telegram group listener, DigitalOcean/cloud/env/secrets, or Codex plugin/profile changes were made.
+- Current admin screenshot management is URL/path and caption/order management only; binary upload/presigned storage is intentionally deferred because this task did not authorize new storage/cloud work.
+
+Verification:
+
+- `bun run test:contracts` passed: 26/26.
+- `bun run typecheck:website` passed: 0 Astro errors/warnings/hints.
+- `bun run --cwd backend test:integration` passed: 39/39, including public case sanitization/detail route and Telegram project-example delivery coverage; emitted the existing `pg@9` deprecation warning.
+- `bun run build:website` passed: 6 pages plus generated `/sitemap.xml`; emitted inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` warning only.
+- Browser smoke desktop/mobile via local backend + website + Node Playwright passed for public case listing, first case detail page, gated contact capture, token fallback delivery, and no `fileUrl`/secret/backend asset leakage in page HTML.
+- `bun run typecheck` passed across workspaces.
+- `bun run --cwd backend test:unit` passed: 40/40.
+- `bun run test:webapp` passed: 41/41.
+- `bun run typecheck:webapp` passed after the final publication-guard UI fix.
+- `bun run build:webapp` passed with the existing Vite large-chunk warning.
+- `git diff --check` passed, with only expected Windows LF/CRLF warnings.
+- Leak scan over `website/dist/projects` and generated sitemap found no `backend/assets`, `fileUrl`, Telegram secrets, or direct project-example PDF URLs.
+
+Review log:
+
+- Pre-task reviewer Kepler, `gpt-5.5 xhigh`: flagged the SSG/admin-managed content tension, recommended sanitized build-time/public API bridging, warned not to expose `fileUrl` or direct PDF paths, and confirmed reuse of PZK-020 delivery and PZK-021 admin shell. Recommendations incorporated.
+- Post-task reviewer Kierkegaard, `gpt-5.5 xhigh`: 9.6/10; required fixes none, confirmed the build-time API bridge and generated sitemap are sufficient for the current SSG model, public/admin responses do not leak direct PDF URLs, gated Telegram/token fallback delivery is preserved, and PZK-022 clears the `>=9.5` review gate.
 
 ### PZK-023 - Blog And Admin Publishing
 
@@ -2038,3 +2072,7 @@ Use this section, or a dedicated review log file if it grows too large, to recor
   - Reviewer Godel: 9.1/10; required disabled delivery without webhook secret and transport-error redaction coverage. Changes incorporated.
 - 2026-07-20 PZK-020 focused post-fix review round 2:
   - Reviewer Anscombe: 9.6/10; confirmed webhook-secret gating, private-chat-only `/start`, atomic delivery claim, sanitized failures, admin logs, frontend secret safety, and optional web fallback. No required changes remained; PZK-020 gate cleared.
+- 2026-07-20 PZK-022 pre-task review:
+  - Reviewer Kepler: `gpt-5.5 xhigh`; flagged SSG/admin-managed content tension, sanitized build-time API bridging, no `fileUrl` or direct PDF exposure, and reuse of PZK-020 Telegram delivery plus PZK-021 V2 admin shell. Recommendations incorporated.
+- 2026-07-20 PZK-022 post-task review:
+  - Reviewer Kierkegaard: 9.6/10; required fixes none, confirmed the build-time API bridge and generated sitemap, no public/proposal direct PDF leakage, gated Telegram/token fallback delivery, and PZK-022 scope separation. Gate cleared.

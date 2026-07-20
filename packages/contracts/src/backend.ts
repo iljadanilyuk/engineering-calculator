@@ -51,9 +51,26 @@ const optionalProjectExampleUrlSchema = z.preprocess((value) => {
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
 }, projectExampleUrlSchema.nullable().optional())
+const sortOrderSchema = z.number().int().min(-1_000_000).max(1_000_000)
+const projectExampleSectionListSchema = z.array(
+  z.string().trim().min(1).max(80),
+).max(12).superRefine((sections, context) => {
+  addDuplicateIssues(sections.map((section) => section.toLowerCase()), context)
+})
+const projectExampleAssetSlugsSchema = z.array(projectExampleSlugSchema).max(10).superRefine(
+  (slugs, context) => {
+    addDuplicateIssues(slugs, context)
+  },
+)
+const projectExampleFragmentSchema = z.object({
+  title: z.string().trim().min(1).max(140),
+  caption: z.string().trim().min(1).max(800),
+  imageUrl: projectExampleUrlSchema,
+  imageAlt: z.string().trim().min(1).max(220),
+  sortOrder: sortOrderSchema.default(0),
+})
 
 const pricingRuleSchema = z.record(z.string(), z.unknown()).nullable().optional()
-const sortOrderSchema = z.number().int().min(-1_000_000).max(1_000_000)
 const workingServicePricingTypeSchema = z.enum(['fixed', 'per_sqm'])
 const dateOnlySchema = z
   .string()
@@ -428,30 +445,82 @@ export const projectExampleRequestListResponseSchema = z.object({
 })
 
 export const projectExampleCreateRequestSchema = z.object({
+  slug: projectExampleSlugSchema.optional(),
   title: z.string().trim().min(1).max(160),
   description: optionalTextSchema(2_000),
+  objectType: optionalTextSchema(160),
+  location: optionalTextSchema(160),
+  areaSqm: optionalTextSchema(80),
+  engineeringSections: projectExampleSectionListSchema.default([]),
+  initialTask: optionalTextSchema(2_000),
+  solutionSummary: optionalTextSchema(2_000),
+  fragments: z.array(projectExampleFragmentSchema).max(12).default([]),
+  exampleSlugs: projectExampleAssetSlugsSchema.default([]),
   fileUrl: projectExampleUrlSchema,
   coverImageUrl: optionalProjectExampleUrlSchema,
   isPublic: z.boolean().default(true),
+  isArchived: z.boolean().default(false),
   sortOrder: sortOrderSchema.default(0),
 })
 
 export const projectExampleUpdateRequestSchema = z.object({
+  slug: projectExampleSlugSchema.optional(),
   title: z.string().trim().min(1).max(160).optional(),
   description: optionalTextSchema(2_000),
+  objectType: optionalTextSchema(160),
+  location: optionalTextSchema(160),
+  areaSqm: optionalTextSchema(80),
+  engineeringSections: projectExampleSectionListSchema.optional(),
+  initialTask: optionalTextSchema(2_000),
+  solutionSummary: optionalTextSchema(2_000),
+  fragments: z.array(projectExampleFragmentSchema).max(12).optional(),
+  exampleSlugs: projectExampleAssetSlugsSchema.optional(),
   fileUrl: projectExampleUrlSchema.optional(),
   coverImageUrl: optionalProjectExampleUrlSchema,
   isPublic: z.boolean().optional(),
+  isArchived: z.boolean().optional(),
   sortOrder: sortOrderSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, 'At least one field is required')
 
+export const projectExampleReorderRequestSchema = z.object({
+  examples: z.array(z.object({
+    id: uuidSchema,
+    sortOrder: sortOrderSchema,
+  })).min(1).max(500),
+}).superRefine((value, context) => {
+  const seen = new Set<string>()
+
+  for (const [index, example] of value.examples.entries()) {
+    if (!seen.has(example.id)) {
+      seen.add(example.id)
+      continue
+    }
+
+    context.addIssue({
+      code: 'custom',
+      path: ['examples', index, 'id'],
+      message: 'Project example ids must be unique in one reorder request',
+    })
+  }
+})
+
 export const projectExampleRecordSchema = z.object({
   id: uuidSchema,
+  slug: projectExampleSlugSchema,
   title: z.string(),
   description: z.string().nullable(),
+  objectType: z.string().nullable(),
+  location: z.string().nullable(),
+  areaSqm: z.string().nullable(),
+  engineeringSections: projectExampleSectionListSchema,
+  initialTask: z.string().nullable(),
+  solutionSummary: z.string().nullable(),
+  fragments: z.array(projectExampleFragmentSchema),
+  exampleSlugs: projectExampleAssetSlugsSchema,
   fileUrl: projectExampleUrlSchema,
   coverImageUrl: projectExampleUrlSchema.nullable(),
   isPublic: z.boolean(),
+  isArchived: z.boolean(),
   sortOrder: z.number().int(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -460,6 +529,7 @@ export const projectExampleRecordSchema = z.object({
 export const publicProjectExampleRecordSchema = projectExampleRecordSchema.omit({
   fileUrl: true,
   isPublic: true,
+  isArchived: true,
   createdAt: true,
   updatedAt: true,
 })
@@ -474,6 +544,10 @@ export const publicProjectExampleListResponseSchema = z.object({
 
 export const projectExampleResponseSchema = z.object({
   example: projectExampleRecordSchema,
+})
+
+export const publicProjectExampleResponseSchema = z.object({
+  example: publicProjectExampleRecordSchema,
 })
 
 export const publicQuestionnaireStartRequestSchema = questionnaireStartRequestSchema
@@ -512,8 +586,12 @@ export type ProjectExampleRequestListQuery = z.infer<typeof projectExampleReques
 export type ProjectExampleRequestListResponse = z.infer<typeof projectExampleRequestListResponseSchema>
 export type ProjectExampleCreateRequest = z.infer<typeof projectExampleCreateRequestSchema>
 export type ProjectExampleUpdateRequest = z.infer<typeof projectExampleUpdateRequestSchema>
+export type ProjectExampleReorderRequest = z.infer<typeof projectExampleReorderRequestSchema>
 export type ProjectExampleRecord = z.infer<typeof projectExampleRecordSchema>
+export type ProjectExampleListResponse = z.infer<typeof projectExampleListResponseSchema>
 export type PublicProjectExampleRecord = z.infer<typeof publicProjectExampleRecordSchema>
+export type ProjectExampleResponse = z.infer<typeof projectExampleResponseSchema>
+export type PublicProjectExampleResponse = z.infer<typeof publicProjectExampleResponseSchema>
 export type PublicQuestionnaireStartRequest = z.infer<typeof publicQuestionnaireStartRequestSchema>
 export type PublicQuestionnairePatchRequest = z.infer<typeof publicQuestionnairePatchRequestSchema>
 export type PublicQuestionnaireStartResponse = z.infer<typeof publicQuestionnaireStartResponseSchema>
@@ -551,5 +629,22 @@ function isRootRelativePublicPath(value: string) {
     return true
   } catch {
     return false
+  }
+}
+
+function addDuplicateIssues(values: readonly string[], context: z.RefinementCtx) {
+  const seen = new Set<string>()
+
+  for (const [index, value] of values.entries()) {
+    if (!seen.has(value)) {
+      seen.add(value)
+      continue
+    }
+
+    context.addIssue({
+      code: 'custom',
+      path: [index],
+      message: 'Values must be unique',
+    })
   }
 }

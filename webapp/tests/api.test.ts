@@ -304,6 +304,91 @@ test('ApiClient sends authenticated service management requests', async () => {
   })
 })
 
+test('ApiClient sends authenticated project case management requests', async () => {
+  const calls: Array<{
+    path: string
+    method: string | undefined
+    authorization: string | null
+    body: unknown
+  }> = []
+  const projectCase = projectExampleRecord({
+    id: '00000000-0000-7000-8000-000000000401',
+    slug: 'ov-case',
+    title: 'ОВ case',
+    sortOrder: 10,
+  })
+
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname
+    const headers = new Headers(init?.headers)
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {}
+    calls.push({
+      path,
+      method: init?.method,
+      authorization: headers.get('Authorization'),
+      body: init?.body ? body : null,
+    })
+
+    if (path === '/api/admin/project-examples' && init?.method === 'GET') {
+      return json({ examples: [projectCase] }, 200)
+    }
+
+    if (path === '/api/admin/project-examples' && init.method === 'POST') {
+      return json({ example: projectExampleRecord({ ...body, id: projectCase.id }) }, 201)
+    }
+
+    if (path === `/api/admin/project-examples/${projectCase.id}` && init.method === 'PATCH') {
+      return json({ example: projectExampleRecord({ ...projectCase, ...body }) }, 200)
+    }
+
+    if (path === '/api/admin/project-examples/reorder' && init.method === 'PATCH') {
+      const reorderBody = body as { examples: Array<{ sortOrder: number }> }
+      return json({
+        examples: [projectExampleRecord({
+          ...projectCase,
+          sortOrder: reorderBody.examples[0].sortOrder,
+        })],
+      }, 200)
+    }
+
+    return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
+  }
+
+  const client = new ApiClient({
+    getAccessToken: () => 'admin-access-token',
+    setAccessToken: () => undefined,
+  })
+
+  await client.listProjectExamples()
+  await client.createProjectExample({
+    slug: 'ov-case',
+    title: 'ОВ case',
+    fileUrl: '/project-examples/private-case.pdf',
+    exampleSlugs: ['ov'],
+    isPublic: false,
+    sortOrder: 10,
+  })
+  await client.updateProjectExample(projectCase.id, {
+    title: 'ОВ case updated',
+    isPublic: true,
+  })
+  await client.reorderProjectExamples({
+    examples: [{ id: projectCase.id, sortOrder: 20 }],
+  })
+
+  expect(calls.map((call) => [call.path, call.method ?? 'GET'])).toEqual([
+    ['/api/admin/project-examples', 'GET'],
+    ['/api/admin/project-examples', 'POST'],
+    [`/api/admin/project-examples/${projectCase.id}`, 'PATCH'],
+    ['/api/admin/project-examples/reorder', 'PATCH'],
+  ])
+  expect(calls.every((call) => call.authorization === 'Bearer admin-access-token')).toBe(true)
+  expect(calls[2]?.body).toMatchObject({
+    title: 'ОВ case updated',
+    isPublic: true,
+  })
+})
+
 test('ApiClient sends authenticated lead CRM requests', async () => {
   const calls: Array<{
     path: string
@@ -552,6 +637,31 @@ function serviceRecord(overrides: Record<string, unknown>) {
     sortOrder: 0,
     createdAt: '2026-07-09T00:00:00.000Z',
     updatedAt: '2026-07-09T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function projectExampleRecord(overrides: Record<string, unknown>) {
+  return {
+    id: '00000000-0000-7000-8000-000000000401',
+    slug: 'case',
+    title: 'Project case',
+    description: null,
+    objectType: null,
+    location: null,
+    areaSqm: null,
+    engineeringSections: [],
+    initialTask: null,
+    solutionSummary: null,
+    fragments: [],
+    exampleSlugs: [],
+    fileUrl: '/project-examples/private-case.pdf',
+    coverImageUrl: null,
+    isPublic: false,
+    isArchived: false,
+    sortOrder: 0,
+    createdAt: '2026-07-20T00:00:00.000Z',
+    updatedAt: '2026-07-20T00:00:00.000Z',
     ...overrides,
   }
 }

@@ -1,0 +1,503 @@
+---
+import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
+import { loadProjectCases } from '../../lib/project-cases'
+import { createPageMeta, siteName } from '../../lib/seo'
+
+const projectCases = await loadProjectCases()
+const pageMeta = createPageMeta({
+  siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
+  path: '/projects/',
+  title: 'Реализованные проекты инженерных систем | ИП Позняк',
+  description:
+    'Санитизированные кейсы проектов отопления, вентиляции, водоснабжения и канализации с фрагментами документации и защищенной выдачей PDF-примеров.',
+})
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  '@id': `${pageMeta.canonicalUrl}#webpage`,
+  url: pageMeta.canonicalUrl,
+  name: pageMeta.title,
+  description: pageMeta.description,
+  isPartOf: {
+    '@type': 'WebSite',
+    name: siteName,
+    url: pageMeta.siteUrl,
+  },
+  mainEntity: {
+    '@type': 'ItemList',
+    itemListElement: projectCases.map((projectCase, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      url: `${pageMeta.siteUrl}/projects/${projectCase.slug}/`,
+      name: projectCase.title,
+    })),
+  },
+}
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{pageMeta.title}</title>
+    <meta name="description" content={pageMeta.description} />
+    <meta name="robots" content={pageMeta.robots} />
+    <link rel="canonical" href={pageMeta.canonicalUrl} />
+    <meta property="og:locale" content="ru_BY" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={pageMeta.title} />
+    <meta property="og:description" content={pageMeta.description} />
+    <meta property="og:url" content={pageMeta.canonicalUrl} />
+    <meta property="og:image" content={pageMeta.imageUrl} />
+    <meta property="og:image:secure_url" content={pageMeta.imageUrl} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={pageMeta.imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageMeta.title} />
+    <meta name="twitter:description" content={pageMeta.description} />
+    <meta name="twitter:image" content={pageMeta.imageUrl} />
+    <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+  </head>
+  <body>
+    <header class="header">
+      <a class="brand" href="/" aria-label="На главную ИП Позняк">
+        <span>ПЗ</span>
+        <strong>ИП Позняк</strong>
+      </a>
+      <nav aria-label="Публичная навигация">
+        <a href="/#calculator">Калькулятор</a>
+        <a href="/projects/" aria-current="page">Проекты</a>
+        <a href="/#contacts">Контакты</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="case-hero">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Реализованные проекты</p>
+            <h1>Кейсы с фрагментами рабочей документации</h1>
+            <p>
+              Показываем обезличенные задачи, состав инженерии и отдельные листы. Полный PDF-пример
+              выдается только после контакта через Telegram или защищенную token-ссылку.
+            </p>
+          </div>
+          <div class="hero-proof" aria-label="Что есть в кейсах">
+            <span>без персональных данных</span>
+            <strong>{projectCases.length} кейса</strong>
+            <span>CTA gated delivery</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="project-list-title">
+        <div class="shell">
+          <div class="section-head">
+            <p class="eyebrow">Каталог</p>
+            <h2 id="project-list-title">Санитизированные примеры проектов</h2>
+          </div>
+          <div class="case-list">
+            {
+              projectCases.map((projectCase) => (
+                <article class="case-card">
+                  <a class="case-cover-link" href={`/projects/${projectCase.slug}/`} aria-label={`Открыть кейс: ${projectCase.title}`}>
+                    <img src={projectCase.coverImageUrl} alt={projectCase.coverImageAlt} loading="lazy" />
+                  </a>
+                  <div class="case-card-body">
+                    <div class="case-meta">
+                      <span>{projectCase.objectType}</span>
+                      <span>{projectCase.areaSqm}</span>
+                      <span>{projectCase.location}</span>
+                    </div>
+                    <h3>
+                      <a href={`/projects/${projectCase.slug}/`}>{projectCase.title}</a>
+                    </h3>
+                    <p>{projectCase.description}</p>
+                    <div class="pill-row" aria-label="Разделы инженерии">
+                      {projectCase.engineeringSections.map((section) => <span>{section}</span>)}
+                    </div>
+                    <div class="case-actions">
+                      <a class="secondary-btn" href={`/projects/${projectCase.slug}/`}>Смотреть кейс</a>
+                      <button
+                        class="text-button"
+                        type="button"
+                        data-example-select
+                        data-example-slug={projectCase.exampleSlugs[0] ?? 'ov'}
+                        aria-controls="project-cases-request-form"
+                      >
+                        Получить PDF-пример
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))
+            }
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft" aria-labelledby="project-delivery-title">
+        <div class="shell narrow">
+          <div class="section-head">
+            <p class="eyebrow">Выдача документов</p>
+            <h2 id="project-delivery-title">Получить полный пример после контакта</h2>
+            <p>Форма использует существующий backend delivery flow: заявка сохраняется, Telegram deep link появляется при готовой настройке бота, web-ссылки остаются token fallback.</p>
+          </div>
+          <ProjectExampleRequestForm
+            id="project-cases-request-form"
+            source="project_cases_listing"
+            submitLabel="Получить PDF-примеры"
+          />
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
+<style>
+  :root {
+    --font-heading: "Nunito", "Inter", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, sans-serif;
+    --ink: #102033;
+    --body: #536273;
+    --muted: #7f8f9f;
+    --line: #dce4ec;
+    --paper: #ffffff;
+    --soft: #f4f7fa;
+    --blue: #0b5fb5;
+    --green: #17875d;
+    --amber: #a76009;
+    --shadow: 0 18px 50px rgba(16, 32, 51, 0.08);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+  }
+
+  a {
+    color: inherit;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    border-bottom: 1px solid rgba(220, 228, 236, 0.88);
+    background: rgba(255, 255, 255, 0.95);
+    padding: 14px clamp(16px, 4vw, 44px);
+    backdrop-filter: blur(14px);
+  }
+
+  .brand,
+  nav,
+  .case-meta,
+  .pill-row,
+  .case-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .brand span {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--ink);
+    color: #ffffff;
+    font-family: var(--font-heading);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  nav {
+    gap: 18px;
+    color: var(--body);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  nav a {
+    text-decoration: none;
+  }
+
+  nav a[aria-current="page"] {
+    color: var(--blue);
+  }
+
+  .shell {
+    width: min(1160px, calc(100% - 32px));
+    margin: 0 auto;
+  }
+
+  .shell.narrow {
+    width: min(780px, calc(100% - 32px));
+  }
+
+  .case-hero {
+    border-bottom: 1px solid var(--line);
+    background:
+      linear-gradient(90deg, rgba(244, 247, 250, 0.96), rgba(255, 255, 255, 0.72)),
+      url("/landing-v4/project-preview-3d-04.jpg") center right / min(720px, 58vw) auto no-repeat;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 40px;
+    align-items: end;
+    min-height: min(560px, calc(100dvh - 64px));
+    padding: 86px 0 58px;
+  }
+
+  .hero-copy {
+    max-width: 720px;
+  }
+
+  .eyebrow {
+    margin: 0 0 10px;
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  h1,
+  h2,
+  h3 {
+    margin: 0;
+    font-family: var(--font-heading);
+    line-height: 1.08;
+  }
+
+  h1 {
+    max-width: 760px;
+    font-size: clamp(38px, 6vw, 72px);
+  }
+
+  h2 {
+    font-size: clamp(28px, 4vw, 44px);
+  }
+
+  h3 {
+    font-size: 24px;
+  }
+
+  .hero-copy p:last-child,
+  .section-head p,
+  .case-card p {
+    color: var(--body);
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  .hero-proof {
+    display: grid;
+    gap: 6px;
+    border-left: 4px solid var(--green);
+    background: rgba(255, 255, 255, 0.86);
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .hero-proof span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .hero-proof strong {
+    font-family: var(--font-heading);
+    font-size: 28px;
+  }
+
+  .section {
+    padding: 78px 0;
+  }
+
+  .section.soft {
+    background: var(--soft);
+  }
+
+  .section-head {
+    max-width: 760px;
+    margin-bottom: 28px;
+  }
+
+  .case-list {
+    display: grid;
+    gap: 22px;
+  }
+
+  .case-card {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.68fr) minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+    box-shadow: 0 8px 28px rgba(16, 32, 51, 0.045);
+  }
+
+  .case-cover-link img {
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+    object-fit: cover;
+  }
+
+  .case-card-body {
+    display: grid;
+    align-content: center;
+    gap: 16px;
+    padding: clamp(22px, 4vw, 42px);
+  }
+
+  .case-meta,
+  .pill-row {
+    gap: 8px;
+  }
+
+  .case-meta span,
+  .pill-row span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #f8fafc;
+    padding: 6px 10px;
+    color: var(--body);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .pill-row span {
+    border-color: #cfe0ee;
+    background: #eff6fc;
+    color: var(--blue);
+  }
+
+  .case-actions {
+    gap: 10px;
+  }
+
+  .primary-btn,
+  .secondary-btn,
+  .text-button {
+    min-height: 44px;
+    border-radius: 8px;
+    font: inherit;
+    font-weight: 800;
+  }
+
+  .primary-btn,
+  .secondary-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    text-decoration: none;
+  }
+
+  .primary-btn {
+    border: 1px solid var(--blue);
+    background: var(--blue);
+    color: #ffffff;
+  }
+
+  .primary-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .secondary-btn {
+    border: 1px solid #b7cee3;
+    background: #ffffff;
+    color: var(--blue);
+  }
+
+  .text-button {
+    border: 0;
+    background: transparent;
+    color: var(--blue);
+    padding: 0 4px;
+    cursor: pointer;
+  }
+
+  .primary-btn:active,
+  .secondary-btn:active,
+  .text-button:active {
+    transform: translateY(1px);
+  }
+
+  @media (max-width: 860px) {
+    .header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .hero-grid,
+    .case-card {
+      grid-template-columns: 1fr;
+    }
+
+    .case-hero {
+      background:
+        linear-gradient(180deg, rgba(244, 247, 250, 0.98), rgba(255, 255, 255, 0.9)),
+        url("/landing-v4/project-preview-3d-04.jpg") top right / 520px auto no-repeat;
+    }
+
+    .hero-grid {
+      min-height: auto;
+      padding: 58px 0 42px;
+    }
+
+    .hero-proof {
+      width: min(100%, 360px);
+    }
+
+    .section {
+      padding: 52px 0;
+    }
+
+    .case-cover-link img {
+      min-height: 220px;
+    }
+  }
+</style>

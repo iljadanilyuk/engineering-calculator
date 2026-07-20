@@ -24,6 +24,7 @@ import {
   type ProjectExampleRequestCreateRequest,
   type ProjectExampleRequestListQuery,
   type ProjectExampleRequestRecord,
+  type ProjectExampleReorderRequest,
   type ProjectExampleUpdateRequest,
   type PublicTelegramDelivery,
   type PublicCalculationRecord,
@@ -74,6 +75,43 @@ const projectExampleRequestConsentText =
 const questionnaireConsentVersion = 'pzk-questionnaire-consent-v1'
 const questionnaireConsentText =
   'Согласен на обработку имени, телефона, параметров расчета и ответов опросника для подготовки черновика технического задания и обратной связи.'
+const cyrillicSlugMap: Record<string, string> = {
+  а: 'a',
+  б: 'b',
+  в: 'v',
+  г: 'g',
+  д: 'd',
+  е: 'e',
+  ё: 'e',
+  ж: 'zh',
+  з: 'z',
+  и: 'i',
+  й: 'y',
+  к: 'k',
+  л: 'l',
+  м: 'm',
+  н: 'n',
+  о: 'o',
+  п: 'p',
+  р: 'r',
+  с: 's',
+  т: 't',
+  у: 'u',
+  ф: 'f',
+  х: 'h',
+  ц: 'ts',
+  ч: 'ch',
+  ш: 'sh',
+  щ: 'sch',
+  ъ: '',
+  ы: 'y',
+  ь: '',
+  э: 'e',
+  ю: 'yu',
+  я: 'ya',
+  і: 'i',
+  ў: 'u',
+}
 const calculationStatuses = [
   'new',
   'contacted',
@@ -1111,7 +1149,7 @@ export class EngineeringDataService {
 
   async listPublicProjectExamples() {
     const examples = await this.db.projectExample.findMany({
-      where: { isPublic: true },
+      where: { isPublic: true, isArchived: false },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     })
 
@@ -1120,11 +1158,30 @@ export class EngineeringDataService {
 
   async listPublicProjectExampleSummaries() {
     const examples = await this.db.projectExample.findMany({
-      where: { isPublic: true },
+      where: { isPublic: true, isArchived: false },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     })
 
     return examples.map(projectExampleToPublicRecord)
+  }
+
+  async getPublicProjectExampleBySlug(slug: string) {
+    const example = await this.db.projectExample
+      .findFirstOrThrow({
+        where: {
+          slug: normalizeProjectExampleSlug(slug),
+          isPublic: true,
+          isArchived: false,
+        },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Project example not found')
+        }
+        throw error
+      })
+
+    return projectExampleToPublicRecord(example)
   }
 
   async listAdminProjectExamples() {
@@ -1136,25 +1193,42 @@ export class EngineeringDataService {
   }
 
   async createProjectExample(input: ProjectExampleCreateRequest) {
+    const slug = await this.createUniqueProjectExampleSlug(input.slug ?? slugBaseFromTitle(input.title))
+    const exampleSlugs = normalizeProjectExampleSlugs(input.exampleSlugs ?? [])
+
     const example = await this.db.projectExample.create({
       data: {
+        slug,
         title: input.title,
         description: input.description ?? null,
+        objectType: input.objectType ?? null,
+        location: input.location ?? null,
+        areaSqm: input.areaSqm ?? null,
+        engineeringSections: toJson(input.engineeringSections ?? []),
+        initialTask: input.initialTask ?? null,
+        solutionSummary: input.solutionSummary ?? null,
+        fragments: toJson(input.fragments ?? []),
+        exampleSlugs: toJson(exampleSlugs),
         fileUrl: input.fileUrl,
         coverImageUrl: input.coverImageUrl ?? null,
-        isPublic: input.isPublic,
-        sortOrder: input.sortOrder,
+        isPublic: input.isArchived ? false : input.isPublic ?? true,
+        isArchived: input.isArchived ?? false,
+        sortOrder: input.sortOrder ?? 0,
       },
+    }).catch((error: unknown) => {
+      if (isPrismaUniqueConstraint(error)) {
+        throw new AppError(409, 'CONFLICT', 'Project example slug is already used')
+      }
+      throw error
     })
 
     return projectExampleToRecord(example)
   }
 
   async updateProjectExample(id: string, input: ProjectExampleUpdateRequest) {
-    const example = await this.db.projectExample
-      .update({
+    const existing = await this.db.projectExample
+      .findUniqueOrThrow({
         where: { id },
-        data: projectExampleUpdateData(input),
       })
       .catch((error: unknown) => {
         if (isPrismaNotFound(error)) {
@@ -1163,7 +1237,53 @@ export class EngineeringDataService {
         throw error
       })
 
+    const example = await this.db.projectExample
+      .update({
+        where: { id },
+        data: projectExampleUpdateData(input, existing),
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Project example not found')
+        }
+        if (isPrismaUniqueConstraint(error)) {
+          throw new AppError(409, 'CONFLICT', 'Project example slug is already used')
+        }
+        throw error
+      })
+
     return projectExampleToRecord(example)
+  }
+
+  async reorderProjectExamples(input: ProjectExampleReorderRequest) {
+    const exampleIds = input.examples.map((example) => example.id)
+    const existing = await this.db.projectExample.findMany({
+      where: {
+        id: {
+          in: exampleIds,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+    const existingIds = new Set(existing.map((example) => example.id))
+    const missingIds = exampleIds.filter((id) => !existingIds.has(id))
+
+    if (missingIds.length > 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Project example not found', { missingIds })
+    }
+
+    await this.db.$transaction(
+      input.examples.map((example) =>
+        this.db.projectExample.update({
+          where: { id: example.id },
+          data: { sortOrder: example.sortOrder },
+        }),
+      ),
+    )
+
+    return this.listAdminProjectExamples()
   }
 
   async handleTelegramWebhookUpdate(update: unknown) {
@@ -1399,6 +1519,22 @@ export class EngineeringDataService {
     throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate project example request token')
   }
 
+  private async createUniqueProjectExampleSlug(rawBase: string) {
+    const base = normalizeProjectExampleSlugInput(rawBase)
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const suffix = attempt === 0 ? '' : `-${attempt + 1}`
+      const slug = `${base.slice(0, 64 - suffix.length)}${suffix}`
+      const existing = await this.db.projectExample.findUnique({
+        where: { slug },
+        select: { id: true },
+      })
+      if (!existing) return slug
+    }
+
+    throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate project example slug')
+  }
+
   private async createUniqueTelegramBindToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const token = randomToken()
@@ -1516,13 +1652,31 @@ function serviceUpdateData(input: ServiceUpdateRequest, existing: ServiceRow) {
   }
 }
 
-function projectExampleUpdateData(input: ProjectExampleUpdateRequest) {
+function projectExampleUpdateData(input: ProjectExampleUpdateRequest, existing: ProjectExampleRow) {
+  const nextIsArchived = input.isArchived ?? existing.isArchived
+
   return {
+    slug: input.slug,
     title: input.title,
     description: input.description,
+    objectType: input.objectType,
+    location: input.location,
+    areaSqm: input.areaSqm,
+    engineeringSections: input.engineeringSections === undefined
+      ? undefined
+      : toJson(input.engineeringSections),
+    initialTask: input.initialTask,
+    solutionSummary: input.solutionSummary,
+    fragments: input.fragments === undefined
+      ? undefined
+      : toJson(input.fragments),
+    exampleSlugs: input.exampleSlugs === undefined
+      ? undefined
+      : toJson(normalizeProjectExampleSlugs(input.exampleSlugs)),
     fileUrl: input.fileUrl,
     coverImageUrl: input.coverImageUrl,
-    isPublic: input.isPublic,
+    isPublic: nextIsArchived ? false : input.isPublic,
+    isArchived: input.isArchived,
     sortOrder: input.sortOrder,
   }
 }
@@ -1688,11 +1842,21 @@ function calculationToPublicRecord(
 function projectExampleToRecord(example: ProjectExampleRow): ProjectExampleRecord {
   return {
     id: example.id,
+    slug: example.slug,
     title: example.title,
     description: example.description,
+    objectType: example.objectType,
+    location: example.location,
+    areaSqm: example.areaSqm,
+    engineeringSections: projectExampleSectionsFromJson(example.engineeringSections),
+    initialTask: example.initialTask,
+    solutionSummary: example.solutionSummary,
+    fragments: projectExampleFragmentsFromJson(example.fragments),
+    exampleSlugs: projectExampleSlugsFromJson(example.exampleSlugs),
     fileUrl: example.fileUrl,
     coverImageUrl: example.coverImageUrl,
     isPublic: example.isPublic,
+    isArchived: example.isArchived,
     sortOrder: example.sortOrder,
     createdAt: example.createdAt.toISOString(),
     updatedAt: example.updatedAt.toISOString(),
@@ -1702,8 +1866,17 @@ function projectExampleToRecord(example: ProjectExampleRow): ProjectExampleRecor
 function projectExampleToPublicRecord(example: ProjectExampleRow): PublicProjectExampleRecord {
   return {
     id: example.id,
+    slug: example.slug,
     title: example.title,
     description: example.description,
+    objectType: example.objectType,
+    location: example.location,
+    areaSqm: example.areaSqm,
+    engineeringSections: projectExampleSectionsFromJson(example.engineeringSections),
+    initialTask: example.initialTask,
+    solutionSummary: example.solutionSummary,
+    fragments: projectExampleFragmentsFromJson(example.fragments),
+    exampleSlugs: projectExampleSlugsFromJson(example.exampleSlugs),
     coverImageUrl: example.coverImageUrl,
     sortOrder: example.sortOrder,
   }
@@ -2034,6 +2207,28 @@ function randomToken() {
   return randomBytes(24).toString('base64url')
 }
 
+function slugBaseFromTitle(title: string) {
+  const transliterated = [...title.trim().toLowerCase()]
+    .map((char) => cyrillicSlugMap[char] ?? char)
+    .join('')
+  const slug = transliterated
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+
+  return slug || 'case'
+}
+
+function normalizeProjectExampleSlugInput(rawSlug: string) {
+  const slug = slugBaseFromTitle(rawSlug).slice(0, 64)
+
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Invalid project example slug')
+  }
+
+  return slug
+}
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
@@ -2263,6 +2458,36 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
 function projectExampleSlugsFromJson(value: Prisma.JsonValue): string[] {
   if (!Array.isArray(value)) return []
   return normalizeProjectExampleSlugs(value.filter((slug): slug is string => typeof slug === 'string'))
+}
+
+function projectExampleSectionsFromJson(value: Prisma.JsonValue): string[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .filter((section): section is string => typeof section === 'string')
+    .map((section) => section.trim())
+    .filter(Boolean)
+}
+
+function projectExampleFragmentsFromJson(value: Prisma.JsonValue): ProjectExampleRecord['fragments'] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((fragment) => objectRecord(fragment))
+    .filter((fragment): fragment is Record<string, unknown> => Boolean(fragment))
+    .map((fragment) => ({
+      title: typeof fragment.title === 'string' ? fragment.title : '',
+      caption: typeof fragment.caption === 'string' ? fragment.caption : '',
+      imageUrl: typeof fragment.imageUrl === 'string' ? fragment.imageUrl : '',
+      imageAlt: typeof fragment.imageAlt === 'string' ? fragment.imageAlt : '',
+      sortOrder: typeof fragment.sortOrder === 'number' && Number.isInteger(fragment.sortOrder)
+        ? fragment.sortOrder
+        : 0,
+    }))
+    .filter((fragment) =>
+      Boolean(fragment.title && fragment.caption && fragment.imageUrl && fragment.imageAlt),
+    )
+    .sort((first, second) => first.sortOrder - second.sortOrder)
 }
 
 function throwInvalidPhone(): never {

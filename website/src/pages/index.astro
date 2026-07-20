@@ -426,7 +426,7 @@ function serviceRublesMap(calculation: CalculationResult) {
         <nav class="nav" aria-label="Навигация">
           <a href="#calculator">Калькулятор</a>
           <a href="#benefits">Что дает проект</a>
-          <a href="#documents">Документация</a>
+          <a href="/projects/">Реализованные проекты</a>
           <a href="#process">Как работаем</a>
           <a href="#faq">Вопросы и ответы</a>
         </nav>
@@ -710,8 +710,9 @@ function serviceRublesMap(calculation: CalculationResult) {
         <div class="shell">
           <div class="section-head">
             <div class="section-kicker">Результат работы</div>
-            <h2 id="documents-title">Примеры проектной документации</h2>
-            <p>Каждый проект содержит всё необходимое для реализации.</p>
+            <h2 id="documents-title">Реализованные проекты и фрагменты документации</h2>
+            <p>Краткие фрагменты можно посмотреть сразу, а полный PDF-пример выдается только после контакта.</p>
+            <a class="section-more-link" href="/projects/">Открыть каталог кейсов</a>
           </div>
           <div class="docs-grid">
             {
@@ -2577,6 +2578,22 @@ function serviceRublesMap(calculation: CalculationResult) {
     padding: 0;
     font-weight: 800;
     text-align: left;
+  }
+
+  .section-more-link {
+    display: inline-flex;
+    width: fit-content;
+    min-height: 38px;
+    align-items: center;
+    margin-top: 12px;
+    border: 1px solid #b7cee3;
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--blue);
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
   }
 
   .example-request-form {
