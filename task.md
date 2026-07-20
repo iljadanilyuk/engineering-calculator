@@ -1441,39 +1441,63 @@ Review log:
   - Godel: 9.1/10; required disabled delivery when webhook secret is missing and regression coverage for redacted transport errors. Fixes incorporated.
 - Focused post-fix reviewer Anscombe, `gpt-5.5 xhigh`: 9.6/10; no required code changes, confirmed webhook-secret gating, private-chat-only `/start`, atomic delivery claim, sanitized failures, admin logs, frontend secret safety, and Telegram optional fallback. Gate cleared.
 
-### PZK-021 - Admin Workspace V1 From Prototype
+### PZK-021 - Admin Workspace V2 Shell From Prototype
 
 Status: Pending
 
 Goal:
 
-- Move the admin panel from a functional set of pages toward a unified working cabinet for leads, proposals, project context, future technical assignments, and future contracts.
-- Use the new admin prototype as design direction, while deliberately reducing noise and avoiding premature implementation of every future entity.
+- Move the admin panel from a functional set of pages toward a unified working cabinet for the full engineering project cycle:
+  `Заявка -> КП -> ТЗ -> Договор -> Проектирование -> Проверка и выдача -> Завершено`.
+- Use the admin V2 prototype as the current source of truth, while deliberately implementing the workflow in phases.
+- PZK-021 should cover the V2 UI/workspace shell over existing business data, not the entire future ERP scope.
 
 Task brief:
 
-- `docs/design/admin-workspace-v1-redesign-task-2026-07-17.md`
+- `прототип/poznyak-admin-v2-package/poznyak-admin-prototype-v2-codex-task.md`
+- `прототип/poznyak-admin-v2-package/poznyak-admin-v2-README.txt`
 
 Prototype sources:
 
-- `прототип/poznyak-admin-prototype-v1-package/poznyak-admin-prototype-v1-codex-task.md`
-- `прототип/poznyak-admin-prototype-v1-package/poznyak-admin-prototype-v1.html`
-- `прототип/poznyak-admin-prototype-v1-package/*.png`
+- Current source of truth:
+  - `прототип/poznyak-admin-v2-package/poznyak-admin-prototype-v2-codex-task.md`
+  - `прототип/poznyak-admin-v2-package/poznyak-admin-prototype-v2.html`
+  - `прототип/poznyak-admin-v2-package/*.png`
+- Previous V1 package is archive context only and must not override V2:
+  - `прототип/poznyak-admin-prototype-v1-package/*`
+
+Implementation focus for PZK-021:
+
+- Follow V2 task section `22. Порядок реализации`, but implement only `Этап 1 - UI shell без изменения бизнес-логики`.
+- Preserve current API contracts unless an explicit blocker is found and reviewed.
+- Add or refactor frontend tokens/components needed for the new visual system:
+  - Inter typography where appropriate;
+  - tabular figures for numeric columns;
+  - persistent desktop sidebar;
+  - responsive mobile navigation;
+  - calmer topbar/actions;
+  - reusable status pills/cards/tables/drawers.
+- Add a `Рабочий стол` view based on existing data, focused on actions/blockers rather than decorative KPIs.
+- Rework `Заявки и проекты` toward V2 kanban/table presentation using existing calculation/lead/questionnaire/proposal/Telegram data.
+- Add a `Задачи` screen as a UI shell over existing/derived next-action data if no persistent task model exists yet; do not invent irreversible backend workflow state in this task.
+- Rework lead detail into a unified project record that connects client, object, calculation, КП/PDF/HTML links, questionnaire draft-ТЗ, Telegram delivery logs, notes, and future contract/project slots.
+- Bring `Услуги и цены` into the same V2 visual system without losing existing service CRUD/reorder/archive/public-toggle behavior.
 
 Required behavior:
 
 - Keep existing admin auth, services CRUD, leads list/detail, status update, notes, proposal/PDF links, and project-example request visibility working.
-- Introduce a calmer admin shell with persistent desktop sidebar and responsive mobile navigation.
-- Add a dashboard/workspace view based on existing data.
-- Rework `Заявки и проекты` toward a pipeline/list experience without inventing unsupported persistent backend stages.
-- Rework the lead detail as a project record that connects client, object, calculation, КП/PDF, notes, and future ТЗ/contract slots.
-- Bring `Услуги и цены` into the same visual system without losing current service management behavior.
+- Keep PZK-019 questionnaire draft-ТЗ visibility working.
+- Keep PZK-020 Telegram delivery logs visible in the relevant records.
+- The interface should be readable at `1440`, `1280`, and `1024` px without forced horizontal page scrolling.
+- Desktop is the primary workflow, but mobile/tablet must not break core navigation or record viewing.
+- Any placeholder future block must be visibly non-destructive and must not imply that contracts/payments/project delivery are fully automated yet.
 
 Out of scope:
 
 - Contract generation from Word templates.
-- Full questionnaire builder/client flow.
-- Telegram group listener or AI extraction.
+- Full versioned questionnaire builder beyond current PZK-019 data visibility.
+- Telegram group listener, voice/file ingestion, daily AI extraction, or admin approval of Telegram-derived facts; covered by PZK-026.
+- Project requirement matrix, evidence tracking, payment milestones, deliverable-package locks, and final completion state machine unless split into dedicated follow-up tasks.
 - New paid DigitalOcean resources, DNS, env, secrets, or public website changes.
 - Backend schema expansion unless a blocker is explicitly found and reviewed.
 
