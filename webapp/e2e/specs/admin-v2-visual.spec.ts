@@ -58,6 +58,7 @@ test('admin V2 shell visual smoke has stable viewport overflow behavior', async 
     await smokePage(page, '/app/tasks', 'Задачи', `${viewport.name}-tasks`)
     await smokePage(page, `/app/leads/${lead.id}`, lead.clientName, `${viewport.name}-record`)
     await smokePage(page, '/app/services', 'Услуги и цены', `${viewport.name}-services`)
+    await smokePage(page, '/app/blog', 'Блог и публикации', `${viewport.name}-blog`)
 
     if (viewport.width < 900) {
       await page.goto('/app')

@@ -11,7 +11,7 @@ import {
   exchangeRate,
   fallbackServices,
 } from '../lib/public-calculator'
-import { createPageMeta, siteName } from '../lib/seo'
+import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
 
 const selectedServiceIds = defaultSelectedServiceIds
 const initialCalculation = calculateEngineeringOffer({
@@ -399,7 +399,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     <meta name="twitter:description" content={pageMeta.description} />
     <meta name="twitter:image" content={pageMeta.imageUrl} />
     <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
-    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
   </head>
   <body>
     <script
@@ -427,6 +427,7 @@ function serviceRublesMap(calculation: CalculationResult) {
           <a href="#calculator">Калькулятор</a>
           <a href="#benefits">Что дает проект</a>
           <a href="/projects/">Реализованные проекты</a>
+          <a href="/blog/">Блог</a>
           <a href="#process">Как работаем</a>
           <a href="#faq">Вопросы и ответы</a>
         </nav>

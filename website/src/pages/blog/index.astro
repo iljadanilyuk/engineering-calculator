@@ -1,0 +1,455 @@
+---
+import {
+  blogCoverImageUrl,
+  formatBlogDate,
+  loadBlogPosts,
+} from '../../lib/blog-posts'
+import { createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
+
+const posts = await loadBlogPosts()
+const pageMeta = createPageMeta({
+  siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
+  path: '/blog/',
+  title: 'Блог об инженерных проектах | ИП Позняк',
+  description:
+    'Новости, экспертные материалы и практические статьи по проектированию отопления, вентиляции, водоснабжения и инженерных систем частных домов.',
+})
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  '@id': `${pageMeta.canonicalUrl}#webpage`,
+  url: pageMeta.canonicalUrl,
+  name: pageMeta.title,
+  description: pageMeta.description,
+  isPartOf: {
+    '@type': 'WebSite',
+    name: siteName,
+    url: pageMeta.siteUrl,
+  },
+  mainEntity: {
+    '@type': 'ItemList',
+    itemListElement: posts.map((post, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      url: `${pageMeta.siteUrl}/blog/${post.slug}/`,
+      name: post.title,
+    })),
+  },
+}
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{pageMeta.title}</title>
+    <meta name="description" content={pageMeta.description} />
+    <meta name="robots" content={pageMeta.robots} />
+    <link rel="canonical" href={pageMeta.canonicalUrl} />
+    <meta property="og:locale" content="ru_BY" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={pageMeta.title} />
+    <meta property="og:description" content={pageMeta.description} />
+    <meta property="og:url" content={pageMeta.canonicalUrl} />
+    <meta property="og:image" content={pageMeta.imageUrl} />
+    <meta property="og:image:secure_url" content={pageMeta.imageUrl} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={pageMeta.imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageMeta.title} />
+    <meta name="twitter:description" content={pageMeta.description} />
+    <meta name="twitter:image" content={pageMeta.imageUrl} />
+    <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
+    <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
+  </head>
+  <body>
+    <header class="header">
+      <a class="brand" href="/" aria-label="На главную ИП Позняк">
+        <span>ПЗ</span>
+        <strong>ИП Позняк</strong>
+      </a>
+      <nav aria-label="Публичная навигация">
+        <a href="/#calculator">Калькулятор</a>
+        <a href="/projects/">Проекты</a>
+        <a href="/blog/" aria-current="page">Блог</a>
+        <a href="/#contacts">Контакты</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="blog-hero">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Блог и новости</p>
+            <h1>Практика инженерного проектирования простым языком</h1>
+            <p>
+              Короткие материалы о подготовке исходных данных, чтении проектной документации,
+              сметах и решениях, которые лучше согласовать до монтажа.
+            </p>
+          </div>
+          <div class="hero-proof" aria-label="Раздел блога">
+            <span>экспертные статьи</span>
+            <strong>{posts.length}</strong>
+            <span>опубликованных материалов</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="blog-list-title">
+        <div class="shell">
+          <div class="section-head">
+            <p class="eyebrow">Материалы</p>
+            <h2 id="blog-list-title">Статьи и обновления</h2>
+          </div>
+
+          {
+            posts.length === 0 ? (
+              <div class="empty-state">
+                <h3>Публикаций пока нет</h3>
+                <p>Когда в админке появятся опубликованные статьи, они будут доступны в этом разделе после следующей сборки сайта.</p>
+              </div>
+            ) : (
+              <div class="post-list">
+                {posts.map((post) => (
+                  <article class="post-card">
+                    <a class="post-cover-link" href={`/blog/${post.slug}/`} aria-label={`Открыть статью: ${post.title}`}>
+                      <img src={blogCoverImageUrl(post)} alt={post.coverImageAlt} loading="lazy" />
+                    </a>
+                    <div class="post-card-body">
+                      <div class="post-meta">
+                        <span>{formatBlogDate(post.publishedAt)}</span>
+                        {post.category && <span>{post.category}</span>}
+                      </div>
+                      <h3>
+                        <a href={`/blog/${post.slug}/`}>{post.title}</a>
+                      </h3>
+                      <p>{post.excerpt}</p>
+                      <div class="pill-row" aria-label="Темы статьи">
+                        {post.tags.map((tag) => <span>{tag}</span>)}
+                      </div>
+                      <a class="secondary-btn" href={`/blog/${post.slug}/`}>Читать статью</a>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )
+          }
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
+<style>
+  :root {
+    --font-heading: "Nunito", "Inter", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, sans-serif;
+    --ink: #102033;
+    --body: #536273;
+    --muted: #7f8f9f;
+    --line: #dce4ec;
+    --paper: #ffffff;
+    --soft: #f4f7fa;
+    --blue: #0b5fb5;
+    --green: #17875d;
+    --shadow: 0 18px 50px rgba(16, 32, 51, 0.08);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+  }
+
+  a {
+    color: inherit;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    border-bottom: 1px solid rgba(220, 228, 236, 0.88);
+    background: rgba(255, 255, 255, 0.95);
+    padding: 14px clamp(16px, 4vw, 44px);
+    backdrop-filter: blur(14px);
+  }
+
+  .brand,
+  .header nav,
+  .post-meta,
+  .pill-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .brand {
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .brand span {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--blue);
+    color: white;
+    font-weight: 800;
+  }
+
+  .brand strong,
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+  }
+
+  .header nav {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 16px;
+    color: var(--body);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .header nav a {
+    text-decoration: none;
+  }
+
+  .header nav a[aria-current="page"],
+  .header nav a:hover {
+    color: var(--blue);
+  }
+
+  .shell {
+    width: min(1120px, calc(100% - 32px));
+    margin: 0 auto;
+  }
+
+  .blog-hero {
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #f7fafc 0%, #ffffff 100%);
+    padding: clamp(42px, 7vw, 82px) 0 46px;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: clamp(24px, 5vw, 64px);
+    align-items: end;
+  }
+
+  .hero-copy {
+    max-width: 760px;
+  }
+
+  .eyebrow {
+    margin: 0 0 10px;
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin: 0;
+  }
+
+  h1 {
+    max-width: 760px;
+    font-size: clamp(36px, 7vw, 68px);
+    line-height: 0.96;
+  }
+
+  .hero-copy > p:last-child,
+  .section-head p,
+  .post-card p,
+  .empty-state p {
+    color: var(--body);
+    line-height: 1.7;
+  }
+
+  .hero-copy > p:last-child {
+    max-width: 680px;
+    margin-top: 18px;
+    font-size: 18px;
+  }
+
+  .hero-proof {
+    display: grid;
+    gap: 5px;
+    border-left: 4px solid var(--green);
+    background: var(--paper);
+    box-shadow: var(--shadow);
+    padding: 22px;
+  }
+
+  .hero-proof span,
+  .post-meta,
+  .pill-row span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .hero-proof strong {
+    font-size: 46px;
+    line-height: 1;
+  }
+
+  .section {
+    padding: clamp(42px, 7vw, 72px) 0;
+  }
+
+  .section-head {
+    display: grid;
+    max-width: 760px;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  h2 {
+    font-size: clamp(28px, 4vw, 42px);
+    line-height: 1.05;
+  }
+
+  .post-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .post-card {
+    display: grid;
+    grid-template-columns: minmax(180px, 42%) minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+  }
+
+  .post-cover-link img {
+    width: 100%;
+    height: 100%;
+    min-height: 280px;
+    object-fit: cover;
+  }
+
+  .post-card-body {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    padding: 22px;
+  }
+
+  .post-meta,
+  .pill-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .post-meta span,
+  .pill-row span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 8px;
+  }
+
+  h3 {
+    font-size: 24px;
+    line-height: 1.12;
+  }
+
+  h3 a {
+    text-decoration: none;
+  }
+
+  h3 a:hover {
+    color: var(--blue);
+  }
+
+  .secondary-btn {
+    width: fit-content;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .secondary-btn:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  .empty-state {
+    display: grid;
+    gap: 8px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    background: var(--soft);
+    padding: 28px;
+  }
+
+  @media (max-width: 860px) {
+    .header,
+    .hero-grid,
+    .post-card {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .header {
+      display: grid;
+    }
+
+    .header nav {
+      justify-content: flex-start;
+    }
+
+    .post-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .post-cover-link img {
+      min-height: 220px;
+      max-height: 320px;
+    }
+  }
+</style>

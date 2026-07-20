@@ -1,6 +1,10 @@
 import {
   EXCHANGE_RATE_SCALE,
   QUESTIONNAIRE_VERSION,
+  type BlogPostCreateRequest,
+  type BlogPostRecord,
+  type BlogPostStatus,
+  type BlogPostUpdateRequest,
   calculateEngineeringOffer,
   calculationResultSchema,
   exchangeRateInputSchema,
@@ -27,6 +31,8 @@ import {
   type ProjectExampleReorderRequest,
   type ProjectExampleUpdateRequest,
   type PublicTelegramDelivery,
+  type PublicBlogPostRecord,
+  type PublicBlogPostSummary,
   type PublicCalculationRecord,
   type PublicProjectExampleRecord,
   type PublicProjectExampleRequestRecord,
@@ -152,6 +158,7 @@ type CalculationRow = Awaited<ReturnType<DbClient['calculation']['findFirstOrThr
 type CalculationQuestionnaireRow = Awaited<ReturnType<DbClient['calculationQuestionnaire']['findFirstOrThrow']>>
 type ProjectExampleRow = Awaited<ReturnType<DbClient['projectExample']['findFirstOrThrow']>>
 type ProjectExampleRequestRow = Awaited<ReturnType<DbClient['projectExampleRequest']['findFirstOrThrow']>>
+type BlogPostRow = Awaited<ReturnType<DbClient['blogPost']['findFirstOrThrow']>>
 type TelegramDeliveryRow = Awaited<ReturnType<DbClient['telegramDelivery']['findFirstOrThrow']>>
 type ProposalRow = {
   id: string
@@ -1286,6 +1293,95 @@ export class EngineeringDataService {
     return this.listAdminProjectExamples()
   }
 
+  async listPublicBlogPosts(now = new Date()): Promise<PublicBlogPostSummary[]> {
+    const posts = await this.db.blogPost.findMany({
+      where: {
+        status: 'published',
+        publishedAt: {
+          lte: now,
+        },
+      },
+      orderBy: [{ publishedAt: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
+    })
+
+    return posts.map(blogPostToPublicSummary)
+  }
+
+  async getPublicBlogPostBySlug(slug: string, now = new Date()): Promise<PublicBlogPostRecord> {
+    const post = await this.db.blogPost
+      .findFirstOrThrow({
+        where: {
+          slug: normalizeBlogPostSlug(slug),
+          status: 'published',
+          publishedAt: {
+            lte: now,
+          },
+        },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Blog post not found')
+        }
+        throw error
+      })
+
+    return blogPostToPublicRecord(post)
+  }
+
+  async listAdminBlogPosts(): Promise<BlogPostRecord[]> {
+    const posts = await this.db.blogPost.findMany({
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+    })
+
+    return posts.map(blogPostToRecord)
+  }
+
+  async createBlogPost(input: BlogPostCreateRequest): Promise<BlogPostRecord> {
+    const slug = await this.createUniqueBlogPostSlug(input.slug ?? slugBaseFromTitle(input.title, 'post'))
+    const post = await this.db.blogPost
+      .create({
+        data: blogPostCreateData(input, slug),
+      })
+      .catch((error: unknown) => {
+        if (isPrismaUniqueConstraint(error)) {
+          throw new AppError(409, 'CONFLICT', 'Blog post slug is already used')
+        }
+        throw error
+      })
+
+    return blogPostToRecord(post)
+  }
+
+  async updateBlogPost(id: string, input: BlogPostUpdateRequest): Promise<BlogPostRecord> {
+    const existing = await this.db.blogPost
+      .findUniqueOrThrow({
+        where: { id },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Blog post not found')
+        }
+        throw error
+      })
+
+    const post = await this.db.blogPost
+      .update({
+        where: { id },
+        data: blogPostUpdateData(input, existing),
+      })
+      .catch((error: unknown) => {
+        if (isPrismaNotFound(error)) {
+          throw new AppError(404, 'NOT_FOUND', 'Blog post not found')
+        }
+        if (isPrismaUniqueConstraint(error)) {
+          throw new AppError(409, 'CONFLICT', 'Blog post slug is already used')
+        }
+        throw error
+      })
+
+    return blogPostToRecord(post)
+  }
+
   async handleTelegramWebhookUpdate(update: unknown) {
     const startPayload = telegramStartPayloadFromUpdate(update)
     if (!startPayload) return { status: 'ignored' as const }
@@ -1535,6 +1631,22 @@ export class EngineeringDataService {
     throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate project example slug')
   }
 
+  private async createUniqueBlogPostSlug(rawBase: string) {
+    const base = normalizeBlogPostSlugInput(rawBase)
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const suffix = attempt === 0 ? '' : `-${attempt + 1}`
+      const slug = `${base.slice(0, 80 - suffix.length)}${suffix}`
+      const existing = await this.db.blogPost.findUnique({
+        where: { slug },
+        select: { id: true },
+      })
+      if (!existing) return slug
+    }
+
+    throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate blog post slug')
+  }
+
   private async createUniqueTelegramBindToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const token = randomToken()
@@ -1677,6 +1789,57 @@ function projectExampleUpdateData(input: ProjectExampleUpdateRequest, existing: 
     coverImageUrl: input.coverImageUrl,
     isPublic: nextIsArchived ? false : input.isPublic,
     isArchived: input.isArchived,
+    sortOrder: input.sortOrder,
+  }
+}
+
+function blogPostCreateData(input: BlogPostCreateRequest, slug: string) {
+  const status = input.status ?? 'draft'
+  const publishedAt = resolveBlogPostPublishedAt(status, input.publishedAt, null)
+
+  if (status === 'published') {
+    assertBlogPostCanBePublished(input)
+  }
+
+  return {
+    slug,
+    title: input.title,
+    excerpt: input.excerpt,
+    content: input.content,
+    coverImageUrl: input.coverImageUrl ?? null,
+    category: input.category ?? null,
+    tags: toJson(input.tags ?? []),
+    seoTitle: input.seoTitle ?? null,
+    seoDescription: input.seoDescription ?? null,
+    status,
+    publishedAt,
+    sortOrder: input.sortOrder ?? 0,
+  }
+}
+
+function blogPostUpdateData(input: BlogPostUpdateRequest, existing: BlogPostRow) {
+  const status = input.status ?? existing.status
+  const title = input.title ?? existing.title
+  const excerpt = input.excerpt ?? existing.excerpt
+  const content = input.content ?? existing.content
+  const publishedAt = resolveBlogPostPublishedAt(status, input.publishedAt, existing.publishedAt)
+
+  if (status === 'published') {
+    assertBlogPostCanBePublished({ title, excerpt, content })
+  }
+
+  return {
+    slug: input.slug,
+    title: input.title,
+    excerpt: input.excerpt,
+    content: input.content,
+    coverImageUrl: input.coverImageUrl,
+    category: input.category,
+    tags: input.tags === undefined ? undefined : toJson(input.tags),
+    seoTitle: input.seoTitle,
+    seoDescription: input.seoDescription,
+    status: input.status,
+    publishedAt,
     sortOrder: input.sortOrder,
   }
 }
@@ -1879,6 +2042,50 @@ function projectExampleToPublicRecord(example: ProjectExampleRow): PublicProject
     exampleSlugs: projectExampleSlugsFromJson(example.exampleSlugs),
     coverImageUrl: example.coverImageUrl,
     sortOrder: example.sortOrder,
+  }
+}
+
+function blogPostToRecord(post: BlogPostRow): BlogPostRecord {
+  return {
+    id: post.id,
+    slug: post.slug,
+    title: post.title,
+    excerpt: post.excerpt,
+    content: post.content,
+    coverImageUrl: post.coverImageUrl,
+    category: post.category,
+    tags: blogPostTagsFromJson(post.tags),
+    seoTitle: post.seoTitle,
+    seoDescription: post.seoDescription,
+    status: post.status,
+    publishedAt: post.publishedAt?.toISOString() ?? null,
+    sortOrder: post.sortOrder,
+    createdAt: post.createdAt.toISOString(),
+    updatedAt: post.updatedAt.toISOString(),
+  }
+}
+
+function blogPostToPublicSummary(post: BlogPostRow): PublicBlogPostSummary {
+  return {
+    id: post.id,
+    slug: post.slug,
+    title: post.title,
+    excerpt: post.excerpt,
+    coverImageUrl: post.coverImageUrl,
+    category: post.category,
+    tags: blogPostTagsFromJson(post.tags),
+    seoTitle: post.seoTitle,
+    seoDescription: post.seoDescription,
+    publishedAt: post.publishedAt?.toISOString() ?? null,
+    sortOrder: post.sortOrder,
+    updatedAt: post.updatedAt.toISOString(),
+  }
+}
+
+function blogPostToPublicRecord(post: BlogPostRow): PublicBlogPostRecord {
+  return {
+    ...blogPostToPublicSummary(post),
+    content: post.content,
   }
 }
 
@@ -2207,7 +2414,7 @@ function randomToken() {
   return randomBytes(24).toString('base64url')
 }
 
-function slugBaseFromTitle(title: string) {
+function slugBaseFromTitle(title: string, fallback = 'case') {
   const transliterated = [...title.trim().toLowerCase()]
     .map((char) => cyrillicSlugMap[char] ?? char)
     .join('')
@@ -2216,7 +2423,7 @@ function slugBaseFromTitle(title: string) {
     .replace(/^-+|-+$/g, '')
     .replace(/-{2,}/g, '-')
 
-  return slug || 'case'
+  return slug || fallback
 }
 
 function normalizeProjectExampleSlugInput(rawSlug: string) {
@@ -2224,6 +2431,16 @@ function normalizeProjectExampleSlugInput(rawSlug: string) {
 
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Invalid project example slug')
+  }
+
+  return slug
+}
+
+function normalizeBlogPostSlugInput(rawSlug: string) {
+  const slug = slugBaseFromTitle(rawSlug, 'post').slice(0, 80)
+
+  if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Invalid blog post slug')
   }
 
   return slug
@@ -2411,6 +2628,16 @@ function normalizeProjectExampleSlug(rawSlug: string) {
   return slug
 }
 
+function normalizeBlogPostSlug(rawSlug: string) {
+  const slug = rawSlug.trim().toLowerCase()
+
+  if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug)) {
+    throw new AppError(404, 'NOT_FOUND', 'Blog post not found')
+  }
+
+  return slug
+}
+
 function projectExampleAssetBySlug(slug: string): (typeof publicProjectExampleAssets)[number] {
   const asset = publicProjectExampleAssets.find((example) => example.slug === slug)
   if (!asset) throw new AppError(404, 'NOT_FOUND', 'Project example not found')
@@ -2488,6 +2715,64 @@ function projectExampleFragmentsFromJson(value: Prisma.JsonValue): ProjectExampl
       Boolean(fragment.title && fragment.caption && fragment.imageUrl && fragment.imageAlt),
     )
     .sort((first, second) => first.sortOrder - second.sortOrder)
+}
+
+function blogPostTagsFromJson(value: Prisma.JsonValue): string[] {
+  if (!Array.isArray(value)) return []
+
+  const tags = value
+    .filter((tag): tag is string => typeof tag === 'string')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+
+  return [...new Set(tags)]
+}
+
+function resolveBlogPostPublishedAt(
+  status: BlogPostStatus,
+  inputPublishedAt: string | null | undefined,
+  existingPublishedAt: Date | null,
+) {
+  const publishedAt = inputPublishedAt === undefined
+    ? existingPublishedAt
+    : inputPublishedAt === null ? null : new Date(inputPublishedAt)
+
+  if (status !== 'published') {
+    return publishedAt
+  }
+
+  const resolvedPublishedAt = publishedAt ?? new Date()
+  assertBlogPostPublishedAtNotFuture(resolvedPublishedAt)
+
+  return resolvedPublishedAt
+}
+
+function assertBlogPostCanBePublished(input: {
+  title: string
+  excerpt: string
+  content: string
+}) {
+  const missing = [
+    [input.title, 'title'],
+    [input.excerpt, 'excerpt'],
+    [input.content, 'content'],
+  ].filter(([value]) => !String(value).trim())
+
+  if (missing.length === 0) return
+
+  throw new AppError(400, 'VALIDATION_ERROR', 'Published blog posts require title, excerpt, and content', {
+    fields: missing.map(([, field]) => field),
+  })
+}
+
+function assertBlogPostPublishedAtNotFuture(publishedAt: Date) {
+  if (Number.isNaN(publishedAt.getTime())) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'publishedAt must be a valid date')
+  }
+
+  if (publishedAt.getTime() <= Date.now()) return
+
+  throw new AppError(400, 'VALIDATION_ERROR', 'publishedAt cannot be in the future for a published blog post')
 }
 
 function throwInvalidPhone(): never {

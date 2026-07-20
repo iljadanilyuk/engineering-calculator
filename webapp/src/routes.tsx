@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter } from '@tanstack/react-rout
 
 import {
   AppPage,
+  BlogPostsPage,
   HomePage,
   LeadDetailPage,
   LeadsPage,
@@ -39,6 +40,12 @@ const projectCasesRoute = createRoute({
   component: ProjectCasesPage,
 })
 
+const blogPostsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/app/blog',
+  component: BlogPostsPage,
+})
+
 const leadsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/leads',
@@ -62,6 +69,7 @@ const routeTree = rootRoute.addChildren([
   appRoute,
   servicesRoute,
   projectCasesRoute,
+  blogPostsRoute,
   leadsRoute,
   tasksRoute,
   leadDetailRoute,

@@ -1,6 +1,10 @@
 import {
   apiErrorSchema,
   authResponseSchema,
+  blogPostCreateRequestSchema,
+  blogPostListResponseSchema,
+  blogPostResponseSchema,
+  blogPostUpdateRequestSchema,
   calculationListQuerySchema,
   calculationListResponseSchema,
   calculationSaveResponseSchema,
@@ -24,6 +28,10 @@ import {
   serviceResponseSchema,
   serviceUpdateRequestSchema,
   type AuthResponse,
+  type BlogPostCreateRequest,
+  type BlogPostListResponse,
+  type BlogPostResponse,
+  type BlogPostUpdateRequest,
   type CalculationListQueryInput,
   type CalculationListResponse,
   type CalculationUpdateRequest,
@@ -174,6 +182,30 @@ export class ApiClient {
 
   listProjectExamples(): Promise<ProjectExampleListResponse> {
     return this.request('/api/admin/project-examples', projectExampleListResponseSchema, {
+      auth: true,
+    })
+  }
+
+  listBlogPosts(): Promise<BlogPostListResponse> {
+    return this.request('/api/admin/blog-posts', blogPostListResponseSchema, {
+      auth: true,
+    })
+  }
+
+  createBlogPost(input: BlogPostCreateRequest): Promise<BlogPostResponse> {
+    const payload = blogPostCreateRequestSchema.parse(input)
+    return this.request('/api/admin/blog-posts', blogPostResponseSchema, {
+      method: 'POST',
+      body: payload,
+      auth: true,
+    })
+  }
+
+  updateBlogPost(id: string, input: BlogPostUpdateRequest): Promise<BlogPostResponse> {
+    const payload = blogPostUpdateRequestSchema.parse(input)
+    return this.request(`/api/admin/blog-posts/${id}`, blogPostResponseSchema, {
+      method: 'PATCH',
+      body: payload,
       auth: true,
     })
   }

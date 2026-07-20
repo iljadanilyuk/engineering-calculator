@@ -1,7 +1,7 @@
 ---
 import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import { loadProjectCases } from '../../lib/project-cases'
-import { createPageMeta, siteName } from '../../lib/seo'
+import { createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
 
 const projectCases = await loadProjectCases()
 const pageMeta = createPageMeta({
@@ -70,7 +70,7 @@ const structuredData = {
     <meta name="twitter:description" content={pageMeta.description} />
     <meta name="twitter:image" content={pageMeta.imageUrl} />
     <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
-    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
   </head>
   <body>
     <header class="header">
@@ -81,6 +81,7 @@ const structuredData = {
       <nav aria-label="Публичная навигация">
         <a href="/#calculator">Калькулятор</a>
         <a href="/projects/" aria-current="page">Проекты</a>
+        <a href="/blog/">Блог</a>
         <a href="/#contacts">Контакты</a>
       </nav>
     </header>

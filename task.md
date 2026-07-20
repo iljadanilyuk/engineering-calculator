@@ -1634,7 +1634,7 @@ Review log:
 
 ### PZK-023 - Blog And Admin Publishing
 
-Status: Pending
+Status: Complete
 
 Goal:
 
@@ -1665,6 +1665,51 @@ Out of scope:
 - Newsletter/subscription automation.
 - AI article generation.
 - External CMS migration unless separately approved.
+
+Implementation notes:
+
+- Added `BlogPost` Prisma model and `BlogPostStatus` enum with draft/published/archived lifecycle, unique slugs, optional cover/category/tags/SEO fields, `publishedAt`, and ordering.
+- Added shared blog contracts in `packages/contracts/src/blog.ts` and exported them from the contracts package.
+- Added public API:
+  - `GET /api/public/blog-posts`;
+  - `GET /api/public/blog-posts/{slug}`.
+- Added admin API:
+  - `GET /api/admin/blog-posts`;
+  - `POST /api/admin/blog-posts`;
+  - `PATCH /api/admin/blog-posts/{id}`.
+- Public API and website loaders include only `status = published` posts with `publishedAt <= now`; draft and archived posts remain private.
+- Publishing a post requires title, excerpt, and content. If published without `publishedAt`, backend assigns the current time; explicitly future `publishedAt` values are rejected.
+- Added public `/blog/` and `/blog/[slug]/` pages with canonical, Open Graph/Twitter metadata, JSON-LD, generated sitemap entries, and safe text/markdown-like rendering without executing admin content as HTML.
+- Curated fallback blog content is used only when `PUBLIC_API_URL` is not configured. If `PUBLIC_API_URL` is configured and managed blog API/detail fetches fail, website build fails instead of silently publishing stale fallback detail pages.
+- Added admin V2 blog management inside the existing shell: list, create, edit, preview, publish, unpublish, and two-step archive/restore. No hard-delete endpoint was added.
+- Added a local `datetime-local` helper for admin `publishedAt` so opening and saving an existing article preserves the original ISO instant and does not shift UTC/local time.
+- Editing a post can clear optional cover, category, SEO title, and SEO description fields by sending `null` through PATCH instead of silently keeping stale values.
+- Existing public cases, calculator, КП/proposal flow, questionnaire, Telegram delivery, and admin V2 surfaces were preserved. No PZK-024 lightbox, PZK-026 Telegram listener, DigitalOcean/cloud/env/secrets, or Codex plugin/profile changes were made.
+
+Verification:
+
+- `bun run test:contracts` passed: 27/27.
+- `bun run --cwd backend test:integration` passed after PZK-023 migration: 40/40, including public draft/archive hiding, publish/unpublish/archive flow, duplicate slug conflict, strict near-future publish rejection, optional metadata clearing, and no public `status` leak; emitted the existing `pg@9` deprecation warning.
+- `bun run test:backend` passed: 40 unit tests + 40 integration tests.
+- `bun run test:webapp` passed: 45/45, including admin API client coverage for optional metadata clearing and `publishedAt` round-trip helper coverage.
+- `bun test website/tests/blog-posts.test.ts` passed: 2/2, covering curated fallback only without API config and build-fail behavior when configured API detail fetch fails.
+- `bun run typecheck` passed across workspaces.
+- `bun run typecheck:webapp` passed.
+- `bun run build:website` passed: generated `/blog/`, two curated fallback article pages, existing public pages, and sitemap; emitted inherited `NODE_TLS_REJECT_UNAUTHORIZED=0` warning only.
+- `bun run build:webapp` passed with the existing Vite large-chunk warning.
+- `git diff --check` passed, with only expected Windows LF/CRLF warnings.
+- Browser smoke desktop/mobile passed via headless Chrome CDP after Playwright's launcher hung in this Windows shell:
+  - `/blog/` loads, renders the blog heading/list, and has no horizontal overflow;
+  - `/blog/kak-podgotovitsya-k-proektu-otopleniya/` loads, renders article content, and has no horizontal overflow;
+  - `/app/blog` admin login loads, has no horizontal overflow, creates a draft article, renders admin preview without executing `<script>` content, keeps draft hidden from public API, publishes it, verifies public detail returns 200 without `status`, unpublishes it, archives it, and verifies public detail returns 404 after each non-public state.
+
+Review log:
+
+- Pre-task reviewer Euclid, `gpt-5.5 xhigh`: flagged SSG freshness, admin-authored JSON-LD/XSS risk, enum status, public sitemap filtering, and admin preview scope. Recommendations incorporated.
+- Initial post-task reviewer Dalton, `gpt-5.5 xhigh`: 8/10; required fixes for admin `publishedAt` UTC/local drift, strict future publish rejection, and configured API detail fallback behavior. Required fixes applied with added webapp/backend/website coverage.
+- Initial post-task reviewer Linnaeus, `gpt-5.5 xhigh`: 9.1/10; required fixes for admin `publishedAt` round-trip and `task.md` completion notes. Required fixes applied.
+- Post-fix reviewer Linnaeus, `gpt-5.5 xhigh`: 9.4/10; required fix for clearing optional cover/category/SEO fields on edit. Required fix applied with webapp API and backend integration coverage.
+- Final post-fix reviewers Dalton and Linnaeus, `gpt-5.5 xhigh`: both 9.7/10; required fixes none; `>=9.5` review gate cleared.
 
 ### PZK-024 - Public Documentation Screenshot Lightbox
 

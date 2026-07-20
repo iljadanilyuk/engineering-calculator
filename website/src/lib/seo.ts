@@ -40,6 +40,13 @@ export function absoluteUrl(siteUrl: string, path: string) {
   return `${normalizeSiteUrl(siteUrl)}${normalizedPath}`
 }
 
+export function serializeJsonLd(value: unknown) {
+  return JSON.stringify(value)
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('&', '\\u0026')
+}
+
 function normalizeSiteUrl(siteUrl?: string) {
   const normalized = (siteUrl?.trim() || defaultSiteUrl).replace(/\/+$/, '')
   return normalized || defaultSiteUrl

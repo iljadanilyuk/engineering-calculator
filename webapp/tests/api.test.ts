@@ -389,6 +389,88 @@ test('ApiClient sends authenticated project case management requests', async () 
   })
 })
 
+test('ApiClient sends authenticated blog post management requests', async () => {
+  const calls: Array<{
+    path: string
+    method: string | undefined
+    authorization: string | null
+    body: unknown
+  }> = []
+  const post = blogPostRecord({
+    id: '00000000-0000-7000-8000-000000000501',
+    slug: 'blog-post',
+    title: 'Blog post',
+  })
+
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname
+    const headers = new Headers(init?.headers)
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {}
+    calls.push({
+      path,
+      method: init?.method,
+      authorization: headers.get('Authorization'),
+      body: init?.body ? body : null,
+    })
+
+    if (path === '/api/admin/blog-posts' && init?.method === 'GET') {
+      return json({ posts: [post] }, 200)
+    }
+
+    if (path === '/api/admin/blog-posts' && init.method === 'POST') {
+      return json({ post: blogPostRecord({ ...body, id: post.id }) }, 201)
+    }
+
+    if (path === `/api/admin/blog-posts/${post.id}` && init.method === 'PATCH') {
+      return json({ post: blogPostRecord({ ...post, ...body }) }, 200)
+    }
+
+    return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
+  }
+
+  const client = new ApiClient({
+    getAccessToken: () => 'admin-access-token',
+    setAccessToken: () => undefined,
+  })
+
+  await client.listBlogPosts()
+  await client.createBlogPost({
+    slug: 'blog-post',
+    title: 'Blog post',
+    excerpt: 'Excerpt',
+    content: 'Body',
+    tags: ['ОВ'],
+    status: 'draft',
+    sortOrder: 10,
+  })
+  await client.updateBlogPost(post.id, {
+    status: 'published',
+  })
+  await client.updateBlogPost(post.id, {
+    coverImageUrl: null,
+    category: null,
+    seoTitle: null,
+    seoDescription: null,
+  })
+
+  expect(calls.map((call) => [call.path, call.method ?? 'GET'])).toEqual([
+    ['/api/admin/blog-posts', 'GET'],
+    ['/api/admin/blog-posts', 'POST'],
+    [`/api/admin/blog-posts/${post.id}`, 'PATCH'],
+    [`/api/admin/blog-posts/${post.id}`, 'PATCH'],
+  ])
+  expect(calls.every((call) => call.authorization === 'Bearer admin-access-token')).toBe(true)
+  expect(calls[2]?.body).toMatchObject({
+    status: 'published',
+  })
+  expect(calls[3]?.body).toEqual({
+    coverImageUrl: null,
+    category: null,
+    seoTitle: null,
+    seoDescription: null,
+  })
+})
+
 test('ApiClient sends authenticated lead CRM requests', async () => {
   const calls: Array<{
     path: string
@@ -659,6 +741,27 @@ function projectExampleRecord(overrides: Record<string, unknown>) {
     coverImageUrl: null,
     isPublic: false,
     isArchived: false,
+    sortOrder: 0,
+    createdAt: '2026-07-20T00:00:00.000Z',
+    updatedAt: '2026-07-20T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function blogPostRecord(overrides: Record<string, unknown>) {
+  return {
+    id: '00000000-0000-7000-8000-000000000501',
+    slug: 'blog-post',
+    title: 'Blog post',
+    excerpt: 'Excerpt',
+    content: 'Body',
+    coverImageUrl: null,
+    category: null,
+    tags: [],
+    seoTitle: null,
+    seoDescription: null,
+    status: 'draft',
+    publishedAt: null,
     sortOrder: 0,
     createdAt: '2026-07-20T00:00:00.000Z',
     updatedAt: '2026-07-20T00:00:00.000Z',

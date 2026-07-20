@@ -47,6 +47,7 @@ maybeDescribe('engineering API integration', () => {
     await prisma.calculation.deleteMany()
     await prisma.projectExampleRequest.deleteMany()
     await prisma.projectExample.deleteMany()
+    await prisma.blogPost.deleteMany()
     await prisma.service.deleteMany()
     await prisma.appSetting.deleteMany()
     await prisma.authSession.deleteMany()
@@ -1425,6 +1426,134 @@ maybeDescribe('engineering API integration', () => {
     expect(missingReorder.status).toBe(404)
   })
 
+  test('keeps draft and archived blog posts out of public API while admin can publish and archive', async () => {
+    const accessToken = await loginAdmin('blog-management@example.com')
+    const published = await createBlogPost(accessToken, {
+      slug: 'teplovoy-nasos-raschet',
+      title: 'Тепловой насос: когда нужен расчет',
+      excerpt: 'Короткий экспертный материал для публичного блога.',
+      content: 'Plain text body.\n\n## Расчет нагрузки\n\n- Сначала исходные данные\n- Затем схема',
+      coverImageUrl: '/landing-v4/project-preview-plan-08.jpg',
+      category: 'Практика',
+      tags: ['ОВ', 'Расчет'],
+      status: 'published',
+      publishedAt: '2024-01-01T00:00:00.000Z',
+      sortOrder: 10,
+    })
+    const draft = await createBlogPost(accessToken, {
+      slug: 'draft-only',
+      title: 'Draft only',
+      excerpt: 'Draft excerpt',
+      content: '<script>alert("draft")</script>',
+      status: 'draft',
+    })
+    const archived = await createBlogPost(accessToken, {
+      slug: 'archived-post',
+      title: 'Archived post',
+      excerpt: 'Archived excerpt',
+      content: 'Archived body',
+      status: 'archived',
+      publishedAt: '2024-01-02T00:00:00.000Z',
+    })
+    const futurePublished = await app.request('/api/admin/blog-posts', {
+      method: 'POST',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: 'future-post',
+        title: 'Future post',
+        excerpt: 'Future excerpt',
+        content: 'Future body',
+        status: 'published',
+        publishedAt: '2999-01-01T00:00:00.000Z',
+      }),
+    })
+    const nearFuturePublished = await app.request('/api/admin/blog-posts', {
+      method: 'POST',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: 'near-future-post',
+        title: 'Near future post',
+        excerpt: 'Near future excerpt',
+        content: 'Near future body',
+        status: 'published',
+        publishedAt: new Date(Date.now() + 30_000).toISOString(),
+      }),
+    })
+    const duplicateSlug = await app.request(`/api/admin/blog-posts/${draft.id}`, {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ slug: published.slug }),
+    })
+    const clearedPublishedMetadata = await patchBlogPost(accessToken, published.id, {
+      coverImageUrl: null,
+      category: null,
+      seoTitle: null,
+      seoDescription: null,
+    })
+    const publicList = await app.request('/api/public/blog-posts')
+    const publicBody = await publicList.json()
+    const publicDetail = await app.request('/api/public/blog-posts/teplovoy-nasos-raschet')
+    const publicDetailBody = await publicDetail.json()
+    const draftPublic = await app.request('/api/public/blog-posts/draft-only')
+    const archivedPublic = await app.request('/api/public/blog-posts/archived-post')
+    const adminList = await app.request('/api/admin/blog-posts', {
+      headers: authHeaders(accessToken),
+    })
+    const adminBody = await adminList.json()
+    const archivedPublished = await patchBlogPost(accessToken, published.id, {
+      status: 'archived',
+    })
+    const publishedDraft = await patchBlogPost(accessToken, draft.id, {
+      status: 'published',
+    })
+
+    expect(publicList.status).toBe(200)
+    expect(publicBody.posts.map((post: { slug: string }) => post.slug)).toEqual([
+      'teplovoy-nasos-raschet',
+    ])
+    expect(publicBody.posts[0]).not.toHaveProperty('content')
+    expect(publicBody.posts[0]).not.toHaveProperty('status')
+    expect(publicDetail.status).toBe(200)
+    expect(publicDetailBody.post.content).toContain('Расчет нагрузки')
+    expect(publicDetailBody.post).not.toHaveProperty('status')
+    expect(draftPublic.status).toBe(404)
+    expect(archivedPublic.status).toBe(404)
+    expect(adminList.status).toBe(200)
+    expect(adminBody.posts).toHaveLength(3)
+    expect(adminBody.posts.find((post: { slug: string }) => post.slug === archived.slug)).toMatchObject({
+      status: 'archived',
+    })
+    expect(futurePublished.status).toBe(400)
+    expect(nearFuturePublished.status).toBe(400)
+    expect(duplicateSlug.status).toBe(409)
+    expect(clearedPublishedMetadata).toMatchObject({
+      coverImageUrl: null,
+      category: null,
+      seoTitle: null,
+      seoDescription: null,
+    })
+    expect(publicDetailBody.post).toMatchObject({
+      coverImageUrl: null,
+      category: null,
+      seoTitle: null,
+      seoDescription: null,
+    })
+    expect(archivedPublished.status).toBe('archived')
+    expect((await app.request('/api/public/blog-posts/teplovoy-nasos-raschet')).status).toBe(404)
+    expect(publishedDraft.status).toBe('published')
+    expect(publishedDraft.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    expect((await app.request('/api/public/blog-posts/draft-only')).status).toBe(200)
+  })
+
   test('saves lead-gated project example requests and serves PDFs only by request token', async () => {
     const accessToken = await loginAdmin('example-request-admin@example.com')
     const idempotencyKey = nextIdempotencyKey()
@@ -2283,6 +2412,36 @@ maybeDescribe('engineering API integration', () => {
 
     expect(response.status).toBe(200)
     return body.example
+  }
+
+  async function createBlogPost(accessToken: string, payload: Record<string, unknown>) {
+    const response = await app.request('/api/admin/blog-posts', {
+      method: 'POST',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(201)
+    return body.post
+  }
+
+  async function patchBlogPost(accessToken: string, id: string, payload: Record<string, unknown>) {
+    const response = await app.request(`/api/admin/blog-posts/${id}`, {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    return body.post
   }
 
   function saveCalculation(payload: Record<string, unknown>) {

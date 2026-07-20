@@ -9,6 +9,14 @@ import {
   publicProjectExampleRecordSchema,
   publicProjectExampleResponseSchema,
 } from './backend'
+import {
+  blogPostCreateRequestSchema,
+  blogPostRecordSchema,
+  blogPostUpdateRequestSchema,
+  publicBlogPostListResponseSchema,
+  publicBlogPostResponseSchema,
+  publicBlogPostSummarySchema,
+} from './blog'
 
 describe('backend contracts', () => {
   test('validates project example public PDF URLs and paths', () => {
@@ -204,5 +212,63 @@ describe('backend contracts', () => {
 
     expect(result.request.telegramDelivery?.status).toBe('pending_start')
     expect(result.request.telegramDelivery?.deepLinkUrl).not.toContain('telegram-secret-token')
+  })
+
+  test('validates blog post publishing contracts and public response shape', () => {
+    const createPayload = blogPostCreateRequestSchema.parse({
+      slug: ' Teplo-Nasos-Case ',
+      title: 'Тепловой насос: когда нужен расчет',
+      excerpt: 'Короткое описание статьи для каталога и SEO.',
+      content: 'Plain text body.\n\n## Расчет\n\n- Нагрузка\n- Узлы',
+      coverImageUrl: '/landing-v4/project-preview-plan-08.jpg',
+      category: 'Практика',
+      tags: ['ОВ', ' расчет '],
+      status: 'published',
+      publishedAt: '2026-07-20T08:00:00.000Z',
+      sortOrder: 10,
+    })
+    const adminRecord = blogPostRecordSchema.parse({
+      id: '00000000-0000-7000-8000-000000000501',
+      ...createPayload,
+      seoTitle: null,
+      seoDescription: null,
+      createdAt: '2026-07-20T08:00:00.000Z',
+      updatedAt: '2026-07-20T08:00:00.000Z',
+    })
+    const publicSummary = publicBlogPostSummarySchema.parse({
+      id: adminRecord.id,
+      slug: adminRecord.slug,
+      title: adminRecord.title,
+      excerpt: adminRecord.excerpt,
+      coverImageUrl: adminRecord.coverImageUrl,
+      category: adminRecord.category,
+      tags: adminRecord.tags,
+      seoTitle: adminRecord.seoTitle,
+      seoDescription: adminRecord.seoDescription,
+      publishedAt: adminRecord.publishedAt,
+      sortOrder: adminRecord.sortOrder,
+      updatedAt: adminRecord.updatedAt,
+    })
+
+    expect(createPayload.slug).toBe('teplo-nasos-case')
+    expect(publicSummary).not.toHaveProperty('content')
+    expect(publicSummary).not.toHaveProperty('status')
+    expect(publicBlogPostListResponseSchema.parse({ posts: [publicSummary] }).posts).toHaveLength(1)
+    expect(publicBlogPostResponseSchema.parse({ post: { ...publicSummary, content: adminRecord.content } }).post.content).toContain('Расчет')
+
+    expect(() =>
+      blogPostCreateRequestSchema.parse({
+        title: 'Bad cover',
+        excerpt: 'Excerpt',
+        content: 'Body',
+        coverImageUrl: 'javascript:alert(1)',
+      }),
+    ).toThrow()
+
+    expect(() =>
+      blogPostUpdateRequestSchema.parse({
+        tags: ['ОВ', ' ов '],
+      }),
+    ).toThrow()
   })
 })

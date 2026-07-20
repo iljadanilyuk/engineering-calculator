@@ -4,6 +4,7 @@ import { AdminDashboard } from '@/components/AdminDashboard'
 import { AdminTasks } from '@/components/AdminTasks'
 import { AdminWorkspace, type AdminWorkspaceSection } from '@/components/AdminWorkspace'
 import { AuthForm } from '@/components/AuthForm'
+import { BlogPostsManager } from '@/components/BlogPostsManager'
 import { LeadDetailView, LeadsManager } from '@/components/LeadsManager'
 import { ProjectCasesManager } from '@/components/ProjectCasesManager'
 import { ServicesManager } from '@/components/ServicesManager'
@@ -31,6 +32,10 @@ export function ServicesPage() {
 
 export function ProjectCasesPage() {
   return <AdminEntry section="project_cases" />
+}
+
+export function BlogPostsPage() {
+  return <AdminEntry section="blog_posts" />
 }
 
 export function LeadsPage() {
@@ -75,6 +80,7 @@ function AdminEntry({
       {section === 'tasks' && <AdminTasks />}
       {section === 'services' && <ServicesManager />}
       {section === 'project_cases' && <ProjectCasesManager />}
+      {section === 'blog_posts' && <BlogPostsManager />}
       {section === 'record' && leadId && <LeadDetailView leadId={leadId} />}
     </AdminWorkspace>
   )

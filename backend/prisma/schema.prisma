@@ -38,6 +38,14 @@ enum TelegramDeliveryStatus {
   @@map("telegram_delivery_status")
 }
 
+enum BlogPostStatus {
+  draft
+  published
+  archived
+
+  @@map("blog_post_status")
+}
+
 model User {
   id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
   email        String        @unique
@@ -218,6 +226,28 @@ model ProjectExampleRequest {
   @@index([createdAt], map: "project_example_requests_created_at_idx")
   @@index([clientPhone, createdAt], map: "project_example_requests_client_phone_created_at_idx")
   @@map("project_example_requests")
+}
+
+model BlogPost {
+  id            String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  slug          String         @unique
+  title         String
+  excerpt       String
+  content       String
+  coverImageUrl String?        @map("cover_image_url")
+  category      String?
+  tags          Json           @default("[]")
+  seoTitle      String?        @map("seo_title")
+  seoDescription String?       @map("seo_description")
+  status        BlogPostStatus @default(draft)
+  publishedAt   DateTime?     @map("published_at")
+  sortOrder     Int           @default(0) @map("sort_order")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([status, publishedAt, sortOrder], map: "blog_posts_public_sort_idx")
+  @@index([updatedAt], map: "blog_posts_updated_at_idx")
+  @@map("blog_posts")
 }
 
 model TelegramDelivery {

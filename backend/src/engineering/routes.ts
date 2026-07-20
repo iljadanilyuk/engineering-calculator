@@ -1,5 +1,9 @@
 import {
   apiErrorSchema,
+  blogPostCreateRequestSchema,
+  blogPostListResponseSchema,
+  blogPostResponseSchema,
+  blogPostUpdateRequestSchema,
   calculationListQuerySchema,
   calculationListResponseSchema,
   calculationSaveRequestSchema,
@@ -20,6 +24,8 @@ import {
   publicQuestionnaireSessionResponseSchema,
   publicQuestionnaireStartRequestSchema,
   publicQuestionnaireStartResponseSchema,
+  publicBlogPostListResponseSchema,
+  publicBlogPostResponseSchema,
   publicCalculatorConfigResponseSchema,
   publicCalculationSaveResponseSchema,
   publicProjectExampleListResponseSchema,
@@ -64,6 +70,10 @@ const publicTokenParamsSchema = z.object({
 
 const publicProjectExampleSlugParamsSchema = z.object({
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+})
+
+const publicBlogPostSlugParamsSchema = z.object({
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
 })
 
 const publicProjectExampleParamsSchema = publicTokenParamsSchema.extend({
@@ -137,6 +147,43 @@ const publicProjectExampleRoute = createRoute({
     404: {
       content: errorResponseContent,
       description: 'Project example not found',
+    },
+  },
+})
+
+const publicBlogPostsRoute = createRoute({
+  method: 'get',
+  path: '/public/blog-posts',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicBlogPostListResponseSchema,
+        },
+      },
+      description: 'Published public blog posts',
+    },
+  },
+})
+
+const publicBlogPostRoute = createRoute({
+  method: 'get',
+  path: '/public/blog-posts/{slug}',
+  request: {
+    params: publicBlogPostSlugParamsSchema,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicBlogPostResponseSchema,
+        },
+      },
+      description: 'Published public blog post by slug',
+    },
+    404: {
+      content: errorResponseContent,
+      description: 'Blog post not found',
     },
   },
 })
@@ -820,6 +867,96 @@ const updateProjectExampleRoute = createRoute({
   },
 })
 
+const adminBlogPostsRoute = createRoute({
+  method: 'get',
+  path: '/admin/blog-posts',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: blogPostListResponseSchema,
+        },
+      },
+      description: 'All blog posts for admin publishing',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+  },
+})
+
+const createBlogPostRoute = createRoute({
+  method: 'post',
+  path: '/admin/blog-posts',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: blogPostCreateRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      content: {
+        'application/json': {
+          schema: blogPostResponseSchema,
+        },
+      },
+      description: 'Created blog post',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+    409: {
+      content: errorResponseContent,
+      description: 'Blog post slug conflict',
+    },
+  },
+})
+
+const updateBlogPostRoute = createRoute({
+  method: 'patch',
+  path: '/admin/blog-posts/{id}',
+  request: {
+    params: idParamsSchema,
+    body: {
+      content: {
+        'application/json': {
+          schema: blogPostUpdateRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: blogPostResponseSchema,
+        },
+      },
+      description: 'Updated blog post',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+    404: {
+      content: errorResponseContent,
+      description: 'Blog post not found',
+    },
+    409: {
+      content: errorResponseContent,
+      description: 'Blog post slug conflict',
+    },
+  },
+})
+
 export function createEngineeringRoutes() {
   const routes = new OpenAPIHono<AppHonoEnv>({
     defaultHook: validationErrorHook,
@@ -857,6 +994,17 @@ export function createEngineeringRoutes() {
     const engineering = c.get('engineeringDataService')
     const params = c.req.valid('param')
     return c.json({ example: await engineering.getPublicProjectExampleBySlug(params.slug) }, 200)
+  })
+
+  routes.openapi(publicBlogPostsRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    return c.json({ posts: await engineering.listPublicBlogPosts() }, 200)
+  })
+
+  routes.openapi(publicBlogPostRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const params = c.req.valid('param')
+    return c.json({ post: await engineering.getPublicBlogPostBySlug(params.slug) }, 200)
   })
 
   routes.openapi(saveCalculationRoute, async (c) => {
@@ -1071,6 +1219,23 @@ export function createEngineeringRoutes() {
     const engineering = c.get('engineeringDataService')
     const example = await engineering.updateProjectExample(c.req.valid('param').id, c.req.valid('json'))
     return c.json({ example }, 200)
+  })
+
+  protectedRoutes.openapi(adminBlogPostsRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    return c.json({ posts: await engineering.listAdminBlogPosts() }, 200)
+  })
+
+  protectedRoutes.openapi(createBlogPostRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const post = await engineering.createBlogPost(c.req.valid('json'))
+    return c.json({ post }, 201)
+  })
+
+  protectedRoutes.openapi(updateBlogPostRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    const post = await engineering.updateBlogPost(c.req.valid('param').id, c.req.valid('json'))
+    return c.json({ post }, 200)
   })
 
   routes.route('/', protectedRoutes)

@@ -12,7 +12,7 @@ import {
   exchangeRate,
   fallbackServices,
 } from '../lib/public-calculator'
-import { createPageMeta, siteName } from '../lib/seo'
+import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
 
 const initialCalculation = calculateEngineeringOffer({
   areaSqm: defaultAreaSqm,
@@ -112,7 +112,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     <meta name="twitter:description" content={pageMeta.description} />
     <meta name="twitter:image" content={pageMeta.imageUrl} />
     <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
-    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
     <script
       id="questionnaire-data"
       type="application/json"
@@ -139,6 +139,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
         <nav class="nav" aria-label="Навигация">
           <a href="/offer/">Выбор КП</a>
           <a href="/#calculator">Изменить расчет</a>
+          <a href="/blog/">Блог</a>
           <a href="/#contacts">Контакты</a>
         </nav>
       </div>

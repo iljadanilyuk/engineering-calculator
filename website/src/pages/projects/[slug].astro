@@ -1,7 +1,7 @@
 ---
 import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import { loadProjectCases, type ProjectCase } from '../../lib/project-cases'
-import { absoluteUrl, createPageMeta, siteName } from '../../lib/seo'
+import { absoluteUrl, createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
 
 export async function getStaticPaths() {
   const projectCases = await loadProjectCases()
@@ -106,7 +106,7 @@ const structuredData = {
     <meta name="twitter:description" content={pageMeta.description} />
     <meta name="twitter:image" content={pageMeta.imageUrl} />
     <meta name="twitter:image:alt" content={projectCase.coverImageAlt} />
-    <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData)} />
+    <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
   </head>
   <body>
     <header class="header">
@@ -117,6 +117,7 @@ const structuredData = {
       <nav aria-label="Публичная навигация">
         <a href="/#calculator">Калькулятор</a>
         <a href="/projects/">Проекты</a>
+        <a href="/blog/">Блог</a>
         <a href="/#contacts">Контакты</a>
       </nav>
     </header>

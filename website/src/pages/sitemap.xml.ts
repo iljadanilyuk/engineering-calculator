@@ -1,11 +1,13 @@
 import type { APIRoute } from 'astro'
 
+import { loadBlogPosts } from '../lib/blog-posts'
 import { loadProjectCases } from '../lib/project-cases'
 import { absoluteUrl, defaultSiteUrl } from '../lib/seo'
 
 export const GET: APIRoute = async () => {
   const siteUrl = (import.meta.env.PUBLIC_WEBSITE_URL ?? defaultSiteUrl).trim().replace(/\/+$/, '') || defaultSiteUrl
   const projectCases = await loadProjectCases()
+  const blogPosts = await loadBlogPosts()
   const urls = [
     { loc: absoluteUrl(siteUrl, '/'), changefreq: 'weekly', priority: '1.0' },
     { loc: absoluteUrl(siteUrl, '/projects/'), changefreq: 'weekly', priority: '0.8' },
@@ -13,6 +15,12 @@ export const GET: APIRoute = async () => {
       loc: absoluteUrl(siteUrl, `/projects/${projectCase.slug}/`),
       changefreq: 'monthly',
       priority: '0.7',
+    })),
+    { loc: absoluteUrl(siteUrl, '/blog/'), changefreq: 'weekly', priority: '0.7' },
+    ...blogPosts.map((post) => ({
+      loc: absoluteUrl(siteUrl, `/blog/${post.slug}/`),
+      changefreq: 'monthly',
+      priority: '0.6',
     })),
   ]
 
