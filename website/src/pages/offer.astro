@@ -11,6 +11,7 @@ import {
   fallbackServices,
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
+import BrandMark from '../components/BrandMark.astro'
 
 const initialCalculation = calculateEngineeringOffer({
   areaSqm: defaultAreaSqm,
@@ -56,7 +57,7 @@ const pageMeta = createPageMeta({
   path: '/offer/',
   title: 'Получить коммерческое предложение - ИП Позняк',
   description:
-    'Выбор сценария получения коммерческого предложения по инженерному проекту: подробный опросник или предварительное КП после контакта.',
+    'Выбор сценария получения коммерческого предложения по инженерному проекту: подробный опросник или быстрое КП после контакта.',
   robots: 'noindex,follow',
 })
 const structuredData = {
@@ -129,13 +130,7 @@ const structuredData = {
     <header class="header">
       <div class="shell header-inner">
         <a class="brand" href="/" aria-label="ИП Позняк, на главную">
-          <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
-            <rect class="brand-mark-bg" width="48" height="48" rx="14" />
-            <path class="brand-mark-p" d="M15 34V14h10.2c5.1 0 8.8 3.2 8.8 8s-3.7 8-8.8 8H20" />
-            <path class="brand-mark-flow" d="M15 34c7-1.2 10.8-4.2 12.7-8.2" />
-            <circle class="brand-mark-node" cx="13" cy="25" r="2.2" />
-            <circle class="brand-mark-node" cx="25.8" cy="19" r="2.2" />
-          </svg>
+          <BrandMark />
           <span class="brand-copy">
             <strong>ИП Позняк</strong>
             <span>Инженерные системы</span>
@@ -157,7 +152,7 @@ const structuredData = {
             <div class="eyebrow">Следующий шаг после калькулятора</div>
             <h1 id="offer-title">Выберите, как получить коммерческое предложение</h1>
             <p>
-              Можно быстро скачать предварительное КП по выбранной площади и разделам или перейти к
+              Можно быстро скачать КП по выбранной площади и разделам или перейти к
               подробному опроснику для более точного технического задания.
             </p>
             <p class="state-status" data-state-status role="status">
@@ -200,7 +195,7 @@ const structuredData = {
               }
             </div>
             <div class="summary-total">
-              <span>Предварительно</span>
+              <span>Быстрый расчет</span>
               <strong data-total-byn>
                 {formatRubles(initialCalculation.totals.totalBynRoundedRubles)}
                 <img class="currency-symbol" src="/landing-v4/byn-symbol.svg" alt="" aria-hidden="true" />
@@ -221,18 +216,18 @@ const structuredData = {
           <div class="choice-grid">
             <article class="choice-card fast-card">
               <div class="choice-code">01</div>
-              <h3>Скачать предварительное КП</h3>
+              <h3>Скачать быстрое КП</h3>
               <p>
                 Быстрый документ по данным калькулятора. Перед выдачей КП нужно оставить имя, телефон
                 и согласие на обработку данных.
               </p>
               <ul>
                 <li>использует выбранную площадь и разделы;</li>
-                <li>суммы пересчитываются на backend;</li>
-                <li>PDF открывается по защищенной ссылке.</li>
+                <li>суммы проверяются перед выдачей;</li>
+                <li>PDF открывается по персональной ссылке.</li>
               </ul>
               <button class="button primary" type="button" data-preliminary-start disabled>
-                Скачать предварительное КП
+                Скачать быстрое КП
               </button>
             </article>
 
@@ -241,7 +236,7 @@ const structuredData = {
               <h3>Пройти подробный опросник</h3>
               <p>
                 Подходит, если нужно сразу собрать исходные данные: системы, оборудование, пожелания,
-                ограничения объекта и будущий черновик ТЗ.
+                ограничения объекта и данные для ТЗ.
               </p>
               <ul>
                 <li>точнее для сложных объектов;</li>
@@ -252,8 +247,8 @@ const structuredData = {
                 Выбрать подробный опросник
               </button>
               <p class="choice-note" data-questionnaire-note hidden>
-                Вы выбрали подробный сценарий. Полный wizard будет реализован следующим этапом; сейчас
-                расчет сохранен для будущего перехода, а preliminary КП можно получить в быстрой ветке.
+                Вы выбрали подробный сценарий. Опросник откроется отдельной страницей, а быстрое
+                КП можно получить в соседней ветке.
               </p>
             </article>
           </div>
@@ -263,10 +258,10 @@ const structuredData = {
       <section class="preliminary-section" id="preliminary" aria-labelledby="preliminary-title" hidden data-preliminary-panel>
         <div class="shell preliminary-grid">
           <div class="preliminary-copy">
-            <div class="section-kicker">Предварительное КП</div>
+            <div class="section-kicker">Быстрое КП</div>
             <h2 id="preliminary-title">Контакт перед скачиванием</h2>
             <p>
-              После отправки backend заново рассчитает стоимость по опубликованным тарифам и вернет
+              После отправки сервис заново рассчитает стоимость по опубликованным тарифам и вернет
               ссылку на страницу КП и PDF.
             </p>
           </div>
@@ -331,12 +326,12 @@ const structuredData = {
               Получить коммерческое предложение
             </button>
             <p data-lead-status role="status">
-              Заполните контакты: предварительное КП будет доступно после отправки формы.
+              Заполните контакты: быстрое КП будет доступно после отправки формы.
             </p>
             <div class="lead-success" data-lead-success hidden></div>
             <p class="privacy-note" id="privacy-note">
-              На сервер отправляются имя, телефон, согласие, площадь, выбранные разделы проекта,
-              краткое описание объекта при заполнении и технические метки источника заявки.
+              В заявку сохраняются имя, телефон, согласие, площадь, выбранные разделы проекта,
+              краткое описание объекта и источник обращения.
             </p>
           </form>
         </div>
@@ -435,7 +430,7 @@ const structuredData = {
         return
       }
       if (!apiBaseUrl || !hasApiConfig) {
-        setLeadStatus('Скачивание КП требует подключенный backend API.', 'error')
+        setLeadStatus('Скачивание КП временно недоступно.', 'error')
         return
       }
 
@@ -443,7 +438,7 @@ const structuredData = {
       if (preliminaryPanel) preliminaryPanel.hidden = false
       preliminaryPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       leadNameInput?.focus({ preventScroll: true })
-      setLeadStatus('Заполните контакты: preliminary КП будет готово после отправки формы.')
+      setLeadStatus('Заполните контакты: быстрое КП будет готово после отправки формы.')
     })
 
     questionnaireButton?.addEventListener('click', () => {
@@ -490,8 +485,8 @@ const structuredData = {
   async function loadPublicConfig() {
     if (!apiBaseUrl) {
       hasApiConfig = false
-      setStateStatus('Публичный API не подключен: показан сохраненный расчет, скачивание КП недоступно.', 'error')
-      setLeadStatus('Скачивание КП требует подключенный backend API.', 'error')
+      setStateStatus('Актуальная выдача КП временно недоступна: показан сохраненный расчет.', 'error')
+      setLeadStatus('Скачивание КП временно недоступно.', 'error')
       render()
       return
     }
@@ -511,19 +506,19 @@ const structuredData = {
         services = []
         selectedServiceIds = new Set()
         hasApiConfig = false
-        setStateStatus('В API нет опубликованных услуг. Вернитесь к калькулятору позже.', 'error')
+        setStateStatus('Нет опубликованных услуг. Вернитесь к калькулятору позже.', 'error')
         setLeadStatus('Скачивание КП временно недоступно: нет опубликованных услуг.', 'error')
       } else {
         services = publicServices
         resolveSelectedServices()
         hasApiConfig = true
-        setStateStatus('Выбор калькулятора сохранен. Актуальные тарифы загружены из backend.')
-        setLeadStatus('Заполните контакты: предварительное КП будет доступно после отправки формы.')
+        setStateStatus('Выбор калькулятора сохранен. Актуальные тарифы загружены.')
+        setLeadStatus('Заполните контакты: быстрое КП будет доступно после отправки формы.')
       }
     } catch {
       hasApiConfig = false
-      setStateStatus('API недоступен: расчет показан для ориентира, скачивание КП сейчас нельзя выполнить.', 'error')
-      setLeadStatus('API недоступен: попробуйте получить КП позже.', 'error')
+      setStateStatus('Актуальные тарифы временно недоступны: расчет показан для ориентира.', 'error')
+      setLeadStatus('Попробуйте получить КП позже.', 'error')
     }
 
     render()
@@ -660,13 +655,13 @@ const structuredData = {
     }
 
     if (!apiBaseUrl || !hasApiConfig || !currentCalculation) {
-      setLeadStatus('Скачивание КП недоступно: публичный API сейчас не подключен.', 'error')
+      setLeadStatus('Скачивание КП сейчас недоступно. Попробуйте позже.', 'error')
       return
     }
 
     isSubmitting = true
     updateSubmitState()
-    setLeadStatus('Сохраняю контакт и пересчитываю КП на backend...', 'loading')
+    setLeadStatus('Сохраняю контакт и пересчитываю КП...', 'loading')
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/public/calculations`, {
@@ -827,7 +822,7 @@ const structuredData = {
       leadSuccess.hidden = false
       leadSuccess.innerHTML = `
         <strong>${returnedExisting ? 'Этот расчет уже сохранен' : 'Контакт сохранен'}</strong>
-        <span>Backend пересчитал итог: ${formatRubles(calculation.totalBynRoundedRubles)} ${currencyMarkup()}</span>
+        <span>Итог проверен: ${formatRubles(calculation.totalBynRoundedRubles)} ${currencyMarkup()}</span>
         <span>Телефон сохранен как ${escapeHtml(calculation.clientPhone)}.</span>
         <span>${proposalStateText}</span>
         ${
@@ -854,7 +849,7 @@ const structuredData = {
       returnedExisting
         ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
         : calculation.telegramDelivery?.deepLinkUrl
-          ? 'Заявка принята. КП готово по ссылке, Telegram доступен как дополнительный канал.'
+          ? 'Заявка принята. КП готово по ссылке, Telegram доступен как дополнительный способ получения.'
           : calculation.proposal?.status === 'ready'
           ? 'Заявка принята. Коммерческое предложение и PDF готовы по ссылке.'
           : 'Заявка принята. Коммерческое предложение сохранено по ссылке.',
@@ -885,15 +880,12 @@ const structuredData = {
   }
 
   function publicSubmitErrorMessage(status: number, payload: unknown) {
-    const serverMessage =
-      payload && typeof payload === 'object' && 'error' in payload
-        ? (payload as { error?: { message?: string } }).error?.message
-        : undefined
+    void payload
 
-    if (status === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
+    if (status === 400) return 'Проверьте имя, телефон и согласие.'
     if (status === 409) return 'Тарифы изменились. Вернитесь к калькулятору и повторите расчет.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-    return serverMessage ?? 'Не удалось подготовить КП. Попробуйте еще раз.'
+    return 'Не удалось подготовить КП. Попробуйте еще раз.'
   }
 
   function readAttributionMetadata() {
@@ -912,7 +904,7 @@ const structuredData = {
 
   function leadObjectName() {
     const comment = leadObjectInput?.value.trim() ?? ''
-    const base = `Выбор КП: предварительное. Тип проекта: ${projectTypeLabels[selectedProjectType]}`
+    const base = `Выбор КП: быстрое. Тип проекта: ${projectTypeLabels[selectedProjectType]}`
     return comment ? `${base}. ${comment}`.slice(0, 160) : base
   }
 
@@ -1172,8 +1164,6 @@ const structuredData = {
     color: var(--muted);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
   }
 
   .nav {

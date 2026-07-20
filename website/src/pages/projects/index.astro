@@ -1,4 +1,5 @@
 ---
+import BrandMark from '../../components/BrandMark.astro'
 import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import { loadProjectCases } from '../../lib/project-cases'
 import { createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
@@ -9,7 +10,7 @@ const pageMeta = createPageMeta({
   path: '/projects/',
   title: 'Реализованные проекты инженерных систем | ИП Позняк',
   description:
-    'Санитизированные кейсы проектов отопления, вентиляции, водоснабжения и канализации с фрагментами документации и защищенной выдачей PDF-примеров.',
+    'Обезличенные кейсы проектов отопления, вентиляции, водоснабжения и канализации с фрагментами документации и выдачей PDF-примеров после контакта.',
 })
 const structuredData = {
   '@context': 'https://schema.org',
@@ -75,8 +76,11 @@ const structuredData = {
   <body>
     <header class="header">
       <a class="brand" href="/" aria-label="На главную ИП Позняк">
-        <span>ПЗ</span>
-        <strong>ИП Позняк</strong>
+        <BrandMark />
+        <span class="brand-copy">
+          <strong>ИП Позняк</strong>
+          <span>Инженерные системы</span>
+        </span>
       </a>
       <nav aria-label="Публичная навигация">
         <a href="/#calculator">Калькулятор</a>
@@ -94,13 +98,13 @@ const structuredData = {
             <h1>Кейсы с фрагментами рабочей документации</h1>
             <p>
               Показываем обезличенные задачи, состав инженерии и отдельные листы. Полный PDF-пример
-              выдается только после контакта через Telegram или защищенную token-ссылку.
+              отправим после контактной заявки.
             </p>
           </div>
           <div class="hero-proof" aria-label="Что есть в кейсах">
             <span>без персональных данных</span>
             <strong>{projectCases.length} кейса</strong>
-            <span>CTA gated delivery</span>
+            <span>выдача после заявки</span>
           </div>
         </div>
       </section>
@@ -109,7 +113,7 @@ const structuredData = {
         <div class="shell">
           <div class="section-head">
             <p class="eyebrow">Каталог</p>
-            <h2 id="project-list-title">Санитизированные примеры проектов</h2>
+            <h2 id="project-list-title">Обезличенные примеры проектов</h2>
           </div>
           <div class="case-list">
             {
@@ -155,8 +159,8 @@ const structuredData = {
         <div class="shell narrow">
           <div class="section-head">
             <p class="eyebrow">Выдача документов</p>
-            <h2 id="project-delivery-title">Получить полный пример после контакта</h2>
-            <p>Форма использует существующий backend delivery flow: заявка сохраняется, Telegram deep link появляется при готовой настройке бота, web-ссылки остаются token fallback.</p>
+            <h2 id="project-delivery-title">Получить полный PDF-пример</h2>
+            <p>После отправки формы мы сохраним запрос и покажем доступный способ получения документов.</p>
           </div>
           <ProjectExampleRequestForm
             id="project-cases-request-form"
@@ -230,21 +234,63 @@ const structuredData = {
   }
 
   .brand {
+    --brand-mark-size: 34px;
     gap: 10px;
     text-decoration: none;
   }
 
-  .brand span {
-    display: grid;
+  .brand-mark {
     width: 34px;
     height: 34px;
-    place-items: center;
-    border-radius: 8px;
-    background: var(--ink);
-    color: #ffffff;
+    flex: 0 0 34px;
+    overflow: visible;
+  }
+
+  .brand-mark-bg {
+    fill: var(--ink);
+  }
+
+  .brand-mark-p,
+  .brand-mark-flow {
+    fill: none;
+    stroke: #ffffff;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .brand-mark-p {
+    stroke-width: 3.2;
+  }
+
+  .brand-mark-flow {
+    stroke: #85c2ff;
+    stroke-width: 2.4;
+  }
+
+  .brand-mark-node {
+    fill: #ffffff;
+    stroke: #85c2ff;
+    stroke-width: 1.6;
+  }
+
+  .brand-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .brand-copy strong {
     font-family: var(--font-heading);
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .brand-copy > span {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
   }
 
   nav {

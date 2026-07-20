@@ -49,7 +49,7 @@ export function AdminTasks() {
       <AdminPageHeader
         eyebrow="Работа"
         title="Задачи"
-        description="Derived task shell поверх текущих заявок. Persistent task model не создается в PZK-021."
+        description="Рабочий список задач, собранный из текущих заявок и статусов."
         actions={
           <Button type="button" variant="outline" onClick={() => void leadsQuery.refetch()}>
             Обновить
@@ -71,7 +71,7 @@ export function AdminTasks() {
             <Alert>
               <AlertTitle>Задачи загружены частично</AlertTitle>
               <AlertDescription>
-                Показано {leadsQuery.data.loadedCount} из {leadsQuery.data.summary.filteredCount} записей, доступных через текущую пагинацию API.
+                Показано {leadsQuery.data.loadedCount} из {leadsQuery.data.summary.filteredCount} записей, доступных на текущей странице.
               </AlertDescription>
             </Alert>
           )}
@@ -100,10 +100,10 @@ export function AdminTasks() {
 
           <AdminPanel
             title="Список задач"
-            description="Завершение задач пока не сохраняется, чтобы не вводить необратимую workflow-модель."
+            description="Задачи формируются по текущим данным заявки; результат фиксируется статусом и заметками."
           >
             {visibleTasks.length === 0 ? (
-              <EmptyState title="Задач нет" description="В выбранном фильтре нет derived задач по текущим данным." />
+              <EmptyState title="Задач нет" description="В выбранном фильтре нет задач по текущим данным." />
             ) : (
               <div className="admin-task-list">
                 {visibleTasks.map((task) => (

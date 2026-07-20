@@ -13,6 +13,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from '@tanstack/react-router'
 import { type PropsWithChildren, useState } from 'react'
 
+import { BrandMark } from '@/components/BrandMark'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Typography } from '@/components/ui/typography'
@@ -129,14 +130,12 @@ export function AdminWorkspace({
 
   return (
     <div className="admin-workspace-shell">
-      <aside className={cn('admin-sidebar', mobileOpen && 'is-open')} aria-label="Разделы админки V2">
+      <aside className={cn('admin-sidebar', mobileOpen && 'is-open')} aria-label="Разделы админ-панели">
         <div className="admin-brand">
-          <div className="admin-brand-mark">
-            <Typography variant="controlXs">ПЗ</Typography>
-          </div>
+          <BrandMark />
           <div className="admin-brand-copy">
             <Typography variant="bodySmMedium">ИП Позняк</Typography>
-            <Typography variant="caption">engineering workspace</Typography>
+            <Typography variant="caption">Инженерные системы</Typography>
           </div>
         </div>
 

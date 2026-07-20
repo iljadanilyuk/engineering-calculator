@@ -1711,6 +1711,80 @@ Review log:
 - Post-fix reviewer Linnaeus, `gpt-5.5 xhigh`: 9.4/10; required fix for clearing optional cover/category/SEO fields on edit. Required fix applied with webapp API and backend integration coverage.
 - Final post-fix reviewers Dalton and Linnaeus, `gpt-5.5 xhigh`: both 9.7/10; required fixes none; `>=9.5` review gate cleared.
 
+### PZK-STABILIZE-001 - Product Polish And Consistency Pass
+
+Status: Complete
+
+Goal:
+
+- Pause new feature work and stabilize the current product surfaces before continuing pending feature tasks.
+- Bring the public website, project pages, offer flow, questionnaire, and admin V2 closer to one consistent product.
+- Complete the first concrete polish pass: one logo/brand mark across public/admin surfaces and removal of client-visible technical wording.
+
+Feature pause:
+
+- Do not start PZK-024, PZK-026, PZK-027, or other new feature tasks until this stabilization pass is closed.
+- PZK-023 is already complete in this tracker; this task gates the next open feature work rather than rewriting the completed ledger.
+
+Required checks:
+
+- Logo and brand:
+  - choose one primary mark;
+  - use the same public/admin mark and the same `ИП Позняк` / `Инженерные системы` naming;
+  - align website and webapp favicons with the selected mark.
+- UI consistency:
+  - check `/`, `/offer/`, `/questionnaire/`, `/projects/`, `/projects/[slug]/`, `/blog/`, `/blog/[slug]/`, and admin V2;
+  - fix obvious mismatches in headers, buttons, cards, statuses, forms, and admin chrome when they are low-risk.
+- Text:
+  - align terminology around КП, ТЗ, проект, заявка, and реализованные проекты;
+  - remove visible temporary or technical wording such as `backend`, `API`, `token`, `gated`, `fallback`, `preliminary`, `wizard`, `artifact`, `snapshot`, and task-code implementation labels where they are shown as product copy.
+- Navigation:
+  - verify that CTAs go to understandable destinations;
+  - admin links and public links should remain working.
+- Mobile/desktop:
+  - check 390, 768, 1024, 1280, and 1440 widths;
+  - remove unintended horizontal scrolling.
+- Production sanity:
+  - do not change DigitalOcean/cloud/env/secrets;
+  - do not touch the Codex plugin layer;
+  - do not change Telegram/PDF delivery mechanics while polishing copy.
+
+Completion notes:
+
+- Pre-task reviewer Meitner, `gpt-5.5 xhigh`, flagged duplicated public/admin brand marks, Astro/Vite favicons, public `backend/API/token/gated/fallback` wording, and the tracker mismatch where PZK-023 is already complete.
+- Selected the existing engineering `P` mark with route/flow nodes as the primary product sign.
+- Added shared public/admin brand components and aligned website/webapp SVG favicons plus the website ICO favicon to the selected mark.
+- Replaced public/admin visible implementation labels with product-facing wording while preserving the current APIs, Telegram delivery, token-protected links, and generated PDF behavior.
+- Cleaned public project/example, offer, questionnaire, blog, and admin wording around КП, ТЗ, проект, заявка, and реализованные проекты; public forms now show curated Russian error messages instead of raw service messages.
+- Fixed obvious product-consistency issues in admin chrome, statuses, service/project/blog editor labels, and the public 768px calculator layout.
+- No DigitalOcean/cloud/env/secrets or Codex plugin-layer files were changed; unrelated untracked `прототип/опросник/` files were left outside this task.
+
+Verification:
+
+- `bun run typecheck:webapp` passed.
+- `bun run typecheck:website` passed with 0 diagnostics.
+- `bun run test:webapp` passed: 45/45.
+- `bun test website/tests/blog-posts.test.ts` passed: 2/2.
+- `bun run build:webapp` passed; inherited Vite chunk-size warning only.
+- `bun run build:website` passed; inherited local `NODE_TLS_REJECT_UNAUTHORIZED=0` warning only.
+- `git diff --check` passed; only expected Windows LF/CRLF normalization warnings were reported.
+- CDP smoke passed on public routes `/`, `/offer/`, `/questionnaire/`, `/projects/`, `/projects/[slug]/`, `/blog/`, `/blog/[slug]/` and admin routes across 390, 768, 1024, 1280, and 1440 widths; no unintended horizontal overflow was detected.
+- Internal-link smoke checked 10 public links without broken local destinations.
+- Website favicon ICO was regenerated and verified to contain 16, 32, and 48px icon entries matching the unified mark; local preview returned `image/x-icon`.
+- After the final non-blocking copy polish, `bun run typecheck:website`, `bun run typecheck:webapp`, and `git diff --check` were rerun successfully.
+
+Review log:
+
+- 2026-07-20 PZK-STABILIZE-001 pre-task review:
+  - Reviewer Meitner, `gpt-5.5 xhigh`: recommended keeping the task separate from already-complete PZK-023, unifying all public/admin logo variants and favicons, cleaning public project/example/offer/questionnaire technical copy, treating admin technical labels consciously, and verifying website/webapp builds plus responsive browser smoke. Recommendations incorporated.
+- 2026-07-20 PZK-STABILIZE-001 post-task review rounds:
+  - Reviewer Boyle: 9.0/10; required removing remaining workflow/task/UI-only/formula implementation wording from visible admin/public copy. Changes incorporated.
+  - Reviewer Euclid: 9.2/10; required cleaning editor drawer/preview/formula labels, Telegram delivery status details, and public fallback contact wording. Changes incorporated.
+  - Reviewer Nash: 9.3/10; required removing remaining preview/secured-delivery phrasing from service and project-case copy. Changes incorporated.
+  - Reviewer Russell: 9.4/10; required replacing server-oriented public form wording, sanitizing public error messages, and localizing admin slug/SEO/URL/alt labels. Changes incorporated.
+  - Reviewer Carver: 9.4/10; required replacing the stale Astro `favicon.ico` so browser tabs use the unified mark. Changes incorporated.
+  - Reviewer Kuhn: 9.6/10; no blocking findings, confirmed unified public/admin brand, cleaned visible product copy, responsive 390/768/1024/1280/1440 smoke, and ready-to-close tracker state. Non-blocking wording suggestion around `предварительное КП` was also applied. Gate cleared.
+
 ### PZK-024 - Public Documentation Screenshot Lightbox
 
 Status: Pending

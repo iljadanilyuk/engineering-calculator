@@ -70,7 +70,7 @@ export const statusOptions = [
 ] as const satisfies readonly CalculationStatus[]
 
 export const telegramStatusLabels: Record<TelegramDeliveryRecord['status'], string> = {
-  disabled: 'Не настроено',
+  disabled: 'Отключено',
   pending_start: 'Ожидает Telegram',
   sent: 'Отправлено',
   failed: 'Ошибка',
@@ -227,7 +227,7 @@ export function telegramDeliveryTargetLabel(targetType: TelegramDeliveryRecord['
 export function leadSourceLabel(source: string | null) {
   if (source === 'example_request') return 'Запрос примера проекта'
   if (source === 'public_questionnaire') return 'Подробный опросник'
-  if (source === 'public_offer_preliminary') return 'Предварительное КП'
+  if (source === 'public_offer_preliminary') return 'КП по расчету'
   if (source === 'public_website') return 'Публичный сайт'
   if (source === 'public_calculator') return 'Калькулятор'
   return source ?? 'Не указан'
@@ -257,14 +257,14 @@ function taskDescriptor(project: ProjectRecordLike, stage: MacroStageId) {
   if (stage === 'proposal') {
     return {
       title: 'Проверить КП и отправить клиенту',
-      detail: 'Сверить состав услуг, сумму и ссылку на PDF/HTML.',
+      detail: 'Сверить состав услуг, сумму и ссылку на документ.',
       type: 'proposal' as const,
     }
   }
 
   if (stage === 'questionnaire') {
     return {
-      title: 'Довести черновик ТЗ до проверки',
+      title: 'Подготовить ТЗ к проверке',
       detail: questionnaireTaskDetail(project),
       type: 'questionnaire' as const,
     }
@@ -273,7 +273,7 @@ function taskDescriptor(project: ProjectRecordLike, stage: MacroStageId) {
   if (stage === 'contract') {
     return {
       title: 'Подготовить договор после согласования КП',
-      detail: 'Договор в этой задаче только будущий слот, без генерации шаблонов.',
+      detail: 'Собрать данные для договора после согласования КП.',
       type: 'contract' as const,
     }
   }
@@ -289,7 +289,7 @@ function taskDescriptor(project: ProjectRecordLike, stage: MacroStageId) {
   if (stage === 'handover') {
     return {
       title: 'Проверить выдачу и финальную оплату',
-      detail: 'Проверка требований и спецификации остаются UI-only слотами.',
+      detail: 'Проверить требования, оплату и состав выдачи перед передачей клиенту.',
       type: 'handover' as const,
     }
   }

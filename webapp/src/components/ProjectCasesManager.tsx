@@ -163,7 +163,7 @@ export function ProjectCasesManager() {
     setConfirmArchiveId(null)
 
     if (isPublic && !canPublishProjectCase(projectCase)) {
-      setActionError('Заполните описание, объект, площадь, задачу, разделы, фрагменты и linked PDF asset перед публикацией кейса.')
+      setActionError('Чтобы опубликовать кейс, заполните описание, объект, площадь, задачу, разделы, фрагменты и хотя бы один PDF-пример.')
       return
     }
 
@@ -225,7 +225,7 @@ export function ProjectCasesManager() {
       <AdminPageHeader
         eyebrow="Настройка продукта"
         title="Кейсы проектов"
-        description="Публичные страницы реализованных проектов: санитизированные фрагменты, SEO-поля и привязка к gated PDF-выдаче."
+        description="Публичные страницы реализованных проектов: обезличенные фрагменты, SEO-поля и привязка к PDF-примерам после контакта."
         actions={
           <Button type="button" onClick={openCreateDrawer}>
             Добавить кейс
@@ -241,7 +241,7 @@ export function ProjectCasesManager() {
 
       <AdminPanel
         title="Публичный каталог кейсов"
-        description="PDF не публикуется напрямую: CTA на сайте создает контактный запрос и использует Telegram/token delivery."
+        description="PDF не публикуется напрямую: посетитель оставляет контакт и получает доступный способ получения документов."
         action={
           <Button type="button" variant="outline" size="sm" onClick={() => void casesQuery.refetch()}>
             Обновить
@@ -267,7 +267,7 @@ export function ProjectCasesManager() {
           ) : sortedCases.length === 0 ? (
             <EmptyState
               title="Кейсов пока нет"
-              description="Добавьте первый санитизированный кейс, чтобы подготовить публичный каталог."
+              description="Добавьте первый обезличенный кейс, чтобы подготовить публичный каталог."
               action={
                 <Button type="button" onClick={openCreateDrawer}>
                   Добавить кейс
@@ -284,7 +284,7 @@ export function ProjectCasesManager() {
                       <TableHead>Кейс</TableHead>
                       <TableHead>Объект</TableHead>
                       <TableHead>Разделы</TableHead>
-                      <TableHead>PDF assets</TableHead>
+                      <TableHead>PDF-примеры</TableHead>
                       <TableHead>Публикация</TableHead>
                       <TableHead>Статус</TableHead>
                       <TableHead className="text-right">Действия</TableHead>
@@ -368,7 +368,7 @@ export function ProjectCasesManager() {
             <SheetHeader>
               <SheetTitle>{editingCase ? 'Редактировать кейс' : 'Добавить кейс'}</SheetTitle>
               <SheetDescription>
-                Публикуйте только обезличенные данные. PDF asset остается gated через заявку и Telegram delivery.
+                Публикуйте только обезличенные данные. Полные PDF выдаются только после контактной заявки.
               </SheetDescription>
             </SheetHeader>
 
@@ -393,7 +393,7 @@ export function ProjectCasesManager() {
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="case-slug">Slug</FieldLabel>
+                    <FieldLabel htmlFor="case-slug">Адрес страницы</FieldLabel>
                     <Input
                       id="case-slug"
                       value={formState.slug}
@@ -401,7 +401,7 @@ export function ProjectCasesManager() {
                       autoComplete="off"
                       placeholder="otoplenie-doma-180m"
                     />
-                    <FieldDescription>Можно оставить пустым при создании: backend сгенерирует slug.</FieldDescription>
+                    <FieldDescription>Можно оставить пустым при создании: система сформирует адрес автоматически.</FieldDescription>
                   </Field>
                 </div>
 
@@ -480,7 +480,7 @@ export function ProjectCasesManager() {
 
                 <div className="admin-drawer-grid two">
                   <Field>
-                    <FieldLabel htmlFor="case-file-url">Внутренний PDF asset URL</FieldLabel>
+                    <FieldLabel htmlFor="case-file-url">Внутренняя ссылка на PDF-пример</FieldLabel>
                     <Input
                       id="case-file-url"
                       value={formState.fileUrl}
@@ -488,7 +488,7 @@ export function ProjectCasesManager() {
                       autoComplete="off"
                       required
                     />
-                    <FieldDescription>Не выводится в public API. Для выдачи используйте linked asset slugs ниже.</FieldDescription>
+                    <FieldDescription>Не показывается на публичном сайте. Для выдачи используйте коды PDF-примеров ниже.</FieldDescription>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="case-cover">Обложка</FieldLabel>
@@ -503,7 +503,7 @@ export function ProjectCasesManager() {
                 </div>
 
                 <Field>
-                  <FieldLabel htmlFor="case-assets">Linked PDF asset slugs</FieldLabel>
+                  <FieldLabel htmlFor="case-assets">Коды PDF-примеров</FieldLabel>
                   <Input
                     id="case-assets"
                     value={formState.exampleSlugs}
@@ -660,7 +660,7 @@ function FragmentEditor({
         </Field>
       </div>
       <Field>
-        <FieldLabel htmlFor={`case-fragment-url-${index}`}>URL изображения</FieldLabel>
+        <FieldLabel htmlFor={`case-fragment-url-${index}`}>Ссылка на изображение</FieldLabel>
         <Input
           id={`case-fragment-url-${index}`}
           value={fragment.imageUrl}
@@ -670,7 +670,7 @@ function FragmentEditor({
         />
       </Field>
       <Field>
-        <FieldLabel htmlFor={`case-fragment-alt-${index}`}>Alt text</FieldLabel>
+        <FieldLabel htmlFor={`case-fragment-alt-${index}`}>Описание изображения</FieldLabel>
         <Input
           id={`case-fragment-alt-${index}`}
           value={fragment.imageAlt}
@@ -842,7 +842,7 @@ function ProjectCaseMobileCard({
         <ProjectCaseMobileFact label="Объект" value={[projectCase.objectType, projectCase.areaSqm].filter(Boolean).join(' · ') || 'Не указан'} />
         <ProjectCaseMobileFact label="Фрагменты" value={String(projectCase.fragments.length)} />
         <ProjectCaseMobileFact label="Разделы" value={projectCase.engineeringSections.join(', ') || 'Не указаны'} />
-        <ProjectCaseMobileFact label="PDF assets" value={projectCase.exampleSlugs.map(assetLabel).join(', ') || 'Не привязаны'} />
+        <ProjectCaseMobileFact label="PDF-примеры" value={projectCase.exampleSlugs.map(assetLabel).join(', ') || 'Не привязаны'} />
       </div>
       <div className="admin-mobile-card-actions split">
         <div className="admin-switch-line">
@@ -944,11 +944,11 @@ function buildPayload(state: ProjectCaseFormState): { value: ProjectExampleCreat
   const unknownAssetSlugs = exampleSlugs.filter((slug) => !knownAssetSlugs.has(slug))
 
   if (unknownAssetSlugs.length > 0) {
-    return { error: `Неизвестные PDF asset slugs: ${unknownAssetSlugs.join(', ')}.` }
+    return { error: `Неизвестные коды PDF-примеров: ${unknownAssetSlugs.join(', ')}.` }
   }
 
   if (state.isPublic && !state.isArchived && exampleSlugs.length === 0) {
-    return { error: 'Опубликованный кейс должен иметь хотя бы один linked PDF asset slug для gated выдачи.' }
+    return { error: 'Опубликованный кейс должен иметь хотя бы один код PDF-примера для выдачи после контакта.' }
   }
 
   if (state.isPublic && !state.isArchived) {

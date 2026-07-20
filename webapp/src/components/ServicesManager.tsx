@@ -127,7 +127,7 @@ export function ServicesManager() {
 
   function openEditDrawer(service: ServiceRecord) {
     if (!isSupportedPricingType(service.pricingType)) {
-      setActionError('Формульные услуги пока нельзя редактировать в админке. Их можно архивировать или менять порядок.')
+      setActionError('Формульные услуги недоступны для ручного редактирования. Их можно архивировать или менять порядок.')
       return
     }
 
@@ -245,7 +245,7 @@ export function ServicesManager() {
       <AdminPageHeader
         eyebrow="Настройка продукта"
         title="Услуги и цены"
-        description="Текущие API хранят одну базовую USD-ставку; V2-таблица показывает будущую private/commercial форму без изменения схемы."
+        description="Тарифная сетка хранит базовую USD-ставку и показывает, какие услуги доступны в публичном калькуляторе."
         actions={
           <Button type="button" onClick={openCreateDrawer}>
             Добавить услугу
@@ -261,7 +261,7 @@ export function ServicesManager() {
 
       <AdminPanel
         title="Тарифная сетка"
-        description="Таблица по умолчанию работает в режиме просмотра; редактирование открывается в drawer."
+        description="Таблица по умолчанию работает в режиме просмотра; редактирование открывается в боковой панели."
         action={<ExchangeRateBadge exchangeRate={exchangeRate} updatedAt={exchangeRateQuery.data?.updatedAt ?? null} />}
       >
         <div className="admin-stack">
@@ -310,7 +310,7 @@ export function ServicesManager() {
                       <TableHead>Тип расчета</TableHead>
                       <TableHead>Частный дом, USD</TableHead>
                       <TableHead>Коммерческий объект, USD</TableHead>
-                      <TableHead>Публичный preview, BYN</TableHead>
+                      <TableHead>Цена в калькуляторе, BYN</TableHead>
                       <TableHead>Видимость</TableHead>
                       <TableHead>Статус</TableHead>
                       <TableHead className="text-right">Действия</TableHead>
@@ -638,7 +638,7 @@ function ServiceActions({
         title={
           isSupportedPricingType(service.pricingType)
             ? undefined
-            : 'Формульные услуги пока нельзя редактировать'
+            : 'Формульные услуги недоступны для ручного редактирования'
         }
         onClick={() => onEdit(service)}
       >
@@ -695,7 +695,7 @@ function ServiceMobileCard({
         <ServiceMobileFact label="Расчет" value={pricingTypeLabel(service.pricingType)} />
         <ServiceMobileFact label="Частный дом" value={formatUsdPrice(service)} />
         <ServiceMobileFact label="Коммерческий" value={commercialPriceLabel(service)} />
-        <ServiceMobileFact label="Preview BYN" value={formatBynPreview(service, exchangeRate)} />
+        <ServiceMobileFact label="Цена в калькуляторе" value={formatBynPreview(service, exchangeRate)} />
       </div>
 
       <div className="admin-mobile-card-actions split">
@@ -774,7 +774,7 @@ function formatUsdPrice(service: ServiceRecord) {
 }
 
 function commercialPriceLabel(service: ServiceRecord) {
-  if (!isSupportedPricingType(service.pricingType)) return 'Формула позже'
+  if (!isSupportedPricingType(service.pricingType)) return 'Формульный расчет'
   return 'Не задано'
 }
 
@@ -783,7 +783,7 @@ function formatBynPreview(
   exchangeRate: { usdToBynRateScaled: number } | null,
 ) {
   if (!exchangeRate) return 'Курс не задан'
-  if (!isSupportedPricingType(service.pricingType)) return 'Формула позже'
+  if (!isSupportedPricingType(service.pricingType)) return 'Формульный расчет'
 
   const bynCents = convertUsdCentsToBynCents(
     service.priceUsdCents,

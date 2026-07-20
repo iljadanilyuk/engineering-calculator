@@ -165,7 +165,7 @@ export function LeadsManager() {
       <AdminPageHeader
         eyebrow="Работа"
         title="Заявки"
-        description="V2-представление заявок и проектов: канбан для ежедневной работы, таблица для поиска и массовой проверки."
+        description="Рабочее представление заявок и проектов: канбан для ежедневной работы, таблица для поиска и массовой проверки."
         actions={
           <Button type="button" variant="outline" onClick={() => void leadsQuery.refetch()}>
             Обновить
@@ -713,7 +713,7 @@ function LeadMobileCard({
 function ProjectOverview({ lead }: { lead: CalculationRecord }) {
   return (
     <div className="admin-stack">
-      <AdminPanel title="Процессные блоки" description="V2 record объединяет текущие данные и будущие слоты без backend-расширения.">
+      <AdminPanel title="Процессные блоки" description="Карточка объединяет текущие данные, ТЗ, КП и документы проекта.">
         <div className="admin-process-grid">
           <ProcessCard
             title="КП"
@@ -721,13 +721,13 @@ function ProjectOverview({ lead }: { lead: CalculationRecord }) {
             meta={proposalMeta(lead)}
             tone={lead.proposalArtifacts[0] ? 'green' : 'gray'}
           />
-          <ProcessCard title="ТЗ" status={lead.questionnaire ? `${lead.questionnaire.progress.completionPercent}%` : 'Не начато'} meta={lead.questionnaire ? 'Черновик из PZK-019' : 'Ожидает заполнения'} tone={lead.questionnaire ? 'amber' : 'gray'} />
-          <ProcessCard title="Договор" status="Слот" meta="Генерация договоров вне PZK-021" tone="violet" />
-          <ProcessCard title="Проект и сдача" status="Слот" meta="Проверка, оплата и спецификации пока read-only" tone="orange" />
+          <ProcessCard title="ТЗ" status={lead.questionnaire ? `${lead.questionnaire.progress.completionPercent}%` : 'Не начато'} meta={lead.questionnaire ? 'Заполнено через опросник' : 'Ожидает заполнения'} tone={lead.questionnaire ? 'amber' : 'gray'} />
+          <ProcessCard title="Договор" status="Вручную" meta="Отдельный документный этап" tone="violet" />
+          <ProcessCard title="Проект и сдача" status="Вручную" meta="Контроль выдачи ведется вручную" tone="orange" />
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Расчетный snapshot" description={`Курс ${lead.exchangeRate.usdToBynRate} BYN/USD · ${exchangeRateSourceLabel(lead.exchangeRate.source)}`}>
+      <AdminPanel title="Сохраненный расчет" description={`Курс ${lead.exchangeRate.usdToBynRate} BYN/USD · ${exchangeRateSourceLabel(lead.exchangeRate.source)}`}>
         <div className="admin-lines">
           {lead.calculationSnapshot.lineItems.map((lineItem) => (
             <CalculationLine key={lineItem.serviceId} lineItem={lineItem} />
@@ -745,24 +745,26 @@ function ProjectOverview({ lead }: { lead: CalculationRecord }) {
 }
 
 function ProposalTab({ lead }: { lead: CalculationRecord }) {
+  const firstArtifact = lead.proposalArtifacts[0]
+
   return (
     <AdminPanel
       title="Коммерческое предложение"
-      description="Ссылки ведут на сохраненные immutable КП/PDF artifacts."
-      action={<ProposalLink lead={lead} preferredLabel={hasPdfArtifact(lead.proposalArtifacts[0]) ? 'Открыть PDF' : 'Открыть КП'} />}
+      description="Ссылки ведут на сохраненные КП и PDF, созданные для этой заявки."
+      action={<ProposalLink lead={lead} preferredLabel={hasPdfArtifact(firstArtifact) ? 'Открыть PDF' : 'Открыть КП'} />}
     >
       <div className="admin-property-grid">
-        <DetailItem label="Offer" value={lead.proposalArtifacts[0]?.offerNumber ?? 'Не создано'} />
-        <DetailItem label="Версия шаблона" value={lead.proposalArtifacts[0]?.templateVersion ?? 'Нет'} />
-        <DetailItem label="Статус artifact" value={lead.proposalArtifacts[0]?.status ?? 'Нет'} />
-        <DetailItem label="Создано" value={lead.proposalArtifacts[0] ? formatDateTime(lead.proposalArtifacts[0].createdAt) : 'Нет'} />
+        <DetailItem label="КП" value={firstArtifact?.offerNumber ?? 'Не создано'} />
+        <DetailItem label="Формат КП" value={firstArtifact ? proposalArtifactFormat(firstArtifact) : 'Нет'} />
+        <DetailItem label="Статус документа" value={firstArtifact ? proposalArtifactStatusLabel(firstArtifact) : 'Нет'} />
+        <DetailItem label="Создано" value={firstArtifact ? formatDateTime(firstArtifact.createdAt) : 'Нет'} />
       </div>
       <div className="admin-lines">
         {lead.serviceSnapshots.map((service) => (
           <div key={service.id} className="admin-line-row">
             <div className="admin-line-main">
               <Typography variant="bodySmMedium">{service.title}</Typography>
-              <Typography variant="caption" tone="muted">{pricingTypeLabel(service.pricingType)} · snapshot услуги</Typography>
+              <Typography variant="caption" tone="muted">{pricingTypeLabel(service.pricingType)} · сохраненная услуга</Typography>
             </div>
             <Typography className="numeric" variant="bodySmMedium">{formatUsd(service.priceUsdCents)}</Typography>
           </div>
@@ -775,19 +777,19 @@ function ProposalTab({ lead }: { lead: CalculationRecord }) {
 function DeliveryTab({ lead }: { lead: CalculationRecord }) {
   return (
     <div className="admin-stack">
-      <AdminPanel title="Матрица требований" description="Read-only placeholder: ProjectRequirement/evidence не создаются в PZK-021.">
+      <AdminPanel title="Матрица требований" description="Проверка требований по ТЗ и проекту.">
         <div className="admin-requirement-grid">
-          <MetricTile label="Требования" value={lead.questionnaire?.progress.answeredCount ?? 0} tone="blue" caption="из draft-ТЗ" />
-          <MetricTile label="Без evidence" value={lead.questionnaire?.progress.answeredCount ?? 0} tone="amber" caption="нет persistent model" />
-          <MetricTile label="Проверено" value={0} tone="gray" caption="будущий этап" />
+          <MetricTile label="Требования" value={lead.questionnaire?.progress.answeredCount ?? 0} tone="blue" caption="из ТЗ" />
+          <MetricTile label="Без подтверждения" value={lead.questionnaire?.progress.answeredCount ?? 0} tone="amber" caption="требуют проверки" />
+          <MetricTile label="Проверено" value={0} tone="gray" caption="после проверки" />
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Чек-лист завершения" description="Пункты отображают будущий контроль выдачи без сохранения состояния.">
+      <AdminPanel title="Чек-лист завершения" description="Контрольные пункты перед выдачей проекта.">
         <div className="admin-checklist">
           {[
             ['Комплектность документации', 'Проверка всех разделов по согласованному КП'],
-            ['Соответствие ТЗ и договоренностям', 'Требуется матрица требований и evidence'],
+            ['Соответствие ТЗ и договоренностям', 'Требуется матрица требований и подтверждений'],
             ['Выдача проекта без спецификаций', 'Отдельный пакет до финальной оплаты'],
             ['Финальная оплата и спецификации', 'Разблокировка после подтверждения оплаты'],
           ].map(([title, description]) => (
@@ -797,7 +799,7 @@ function DeliveryTab({ lead }: { lead: CalculationRecord }) {
                 <Typography variant="bodySmMedium">{title}</Typography>
                 <Typography variant="caption" tone="muted">{description}</Typography>
               </div>
-              <StatusPill tone="gray">Будущий gate</StatusPill>
+              <StatusPill tone="gray">К проверке</StatusPill>
             </div>
           ))}
         </div>
@@ -808,7 +810,7 @@ function DeliveryTab({ lead }: { lead: CalculationRecord }) {
 
 function CommunicationTab({ lead }: { lead: CalculationRecord }) {
   return (
-    <AdminPanel title="Коммуникация" description="PZK-021 показывает существующие Telegram delivery logs и менеджерские заметки.">
+    <AdminPanel title="Коммуникация" description="Показывает выдачу документов в Telegram и менеджерские заметки.">
       <div className="admin-stack">
         <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
         <div className="admin-notice">
@@ -822,13 +824,13 @@ function CommunicationTab({ lead }: { lead: CalculationRecord }) {
 
 function DocumentsTab({ lead }: { lead: CalculationRecord }) {
   return (
-    <AdminPanel title="Документы" description="Сохраненные КП/PDF и будущие слоты документов проекта.">
+    <AdminPanel title="Документы" description="Сохраненные КП/PDF и документы проекта.">
       <div className="admin-lines">
         {lead.proposalArtifacts.map((artifact) => (
           <div key={artifact.id} className="admin-line-row">
             <div className="admin-line-main">
               <Typography variant="bodySmMedium">{artifact.offerNumber}</Typography>
-              <Typography variant="caption" tone="muted">{artifact.templateVersion} · {artifact.status}</Typography>
+              <Typography variant="caption" tone="muted">{proposalArtifactSummary(artifact)}</Typography>
             </div>
             <ProposalLink lead={{ clientName: lead.clientName, proposalArtifacts: [artifact] }} />
           </div>
@@ -836,9 +838,9 @@ function DocumentsTab({ lead }: { lead: CalculationRecord }) {
         <div className="admin-line-row muted">
           <div className="admin-line-main">
             <Typography variant="bodySmMedium">Договор / проект / спецификации</Typography>
-            <Typography variant="caption" tone="muted">Документная модель запланирована отдельными задачами.</Typography>
+            <Typography variant="caption" tone="muted">Оформляется вручную по проекту.</Typography>
           </div>
-          <StatusPill tone="gray">Слот</StatusPill>
+          <StatusPill tone="gray">Вручную</StatusPill>
         </div>
       </div>
     </AdminPanel>
@@ -847,11 +849,11 @@ function DocumentsTab({ lead }: { lead: CalculationRecord }) {
 
 function HistoryTab({ lead }: { lead: CalculationRecord }) {
   return (
-    <AdminPanel title="История" description="Текущие immutable события из существующей записи расчета.">
+    <AdminPanel title="История" description="Ключевые события по заявке и коммерческому предложению.">
       <div className="admin-timeline">
         <HistoryItem title="Заявка создана" value={formatDateTime(lead.createdAt)} />
         <HistoryItem title="Статус обновлен" value={`${statusLabels[lead.status]} · ${formatDateTime(lead.statusUpdatedAt)}`} />
-        <HistoryItem title="КП snapshot создан" value={lead.proposalArtifacts[0] ? formatDateTime(lead.proposalArtifacts[0].createdAt) : 'Нет artifact'} />
+        <HistoryItem title="КП создано" value={lead.proposalArtifacts[0] ? formatDateTime(lead.proposalArtifacts[0].createdAt) : 'Нет документа'} />
         <HistoryItem title="Последнее обновление карточки" value={formatDateTime(lead.updatedAt)} />
       </div>
     </AdminPanel>
@@ -866,7 +868,7 @@ function QuestionnaireDraftCard({
   if (!questionnaire) {
     return (
       <AdminPanel title="Черновик ТЗ" description="Подробный опросник для этой заявки еще не заполнен.">
-        <EmptyState title="Ответов пока нет" description="PZK-019 draft-ТЗ появится здесь после заполнения публичного опросника." />
+        <EmptyState title="Ответов пока нет" description="Черновик ТЗ появится здесь после заполнения публичного опросника." />
       </AdminPanel>
     )
   }
@@ -1223,8 +1225,8 @@ function TelegramDeliveryLog({ deliveries }: { deliveries: readonly TelegramDeli
           <div className="admin-telegram-main">
             <Typography variant="bodySmMedium">{telegramDeliveryTargetLabel(delivery.targetType)}</Typography>
             <Typography variant="caption" tone="muted">{telegramRecipientLabel(delivery)}</Typography>
-            {delivery.statusMessage && (
-              <Typography variant="caption" tone="muted">{delivery.statusMessage}</Typography>
+            {telegramDeliveryStatusDetail(delivery) && (
+              <Typography variant="caption" tone="muted">{telegramDeliveryStatusDetail(delivery)}</Typography>
             )}
           </div>
           <div className="admin-telegram-meta">
@@ -1346,7 +1348,19 @@ function proposalProcessStatus(lead: CalculationRecord) {
   const artifact = lead.proposalArtifacts[0]
   if (!artifact) return 'Не создано'
   if (artifact.status === 'ready') return 'Готово'
-  return hasPdfArtifact(artifact) ? 'PDF' : 'HTML'
+  return hasPdfArtifact(artifact) ? 'PDF готовится' : 'Открыть онлайн'
+}
+
+function proposalArtifactSummary(artifact: CalculationRecord['proposalArtifacts'][number]) {
+  return `${proposalArtifactFormat(artifact)}, ${proposalArtifactStatusLabel(artifact).toLowerCase()}`
+}
+
+function proposalArtifactFormat(artifact: CalculationRecord['proposalArtifacts'][number]) {
+  return hasPdfArtifact(artifact) ? 'PDF' : 'Онлайн-версия'
+}
+
+function proposalArtifactStatusLabel(artifact: CalculationRecord['proposalArtifacts'][number]) {
+  return artifact.status === 'ready' ? 'Готово' : 'В обработке'
 }
 
 function telegramTone(status: TelegramDeliveryRecord['status']) {
@@ -1366,9 +1380,17 @@ function telegramDeliveryMeta(delivery: TelegramDeliveryRecord) {
 
 function telegramRecipientLabel(delivery: TelegramDeliveryRecord) {
   if (delivery.telegramUsername) return `Получатель: @${delivery.telegramUsername}`
-  if (delivery.telegramUserId) return `Telegram user ${delivery.telegramUserId}`
-  if (delivery.telegramChatId) return `Telegram chat ${delivery.telegramChatId}`
-  return 'Telegram chat еще не привязан'
+  if (delivery.telegramUserId) return `Получатель: ID пользователя ${delivery.telegramUserId}`
+  if (delivery.telegramChatId) return `Получатель: ID чата ${delivery.telegramChatId}`
+  return 'Получатель еще не привязан'
+}
+
+function telegramDeliveryStatusDetail(delivery: TelegramDeliveryRecord) {
+  if (delivery.status === 'disabled') return 'Канал доставки отключен.'
+  if (delivery.status === 'pending_start') return 'Ожидаем, когда клиент откроет Telegram для получения документов.'
+  if (delivery.status === 'sent') return 'Документы отправлены.'
+  if (delivery.status === 'failed') return 'Автоматическая отправка не прошла, проверьте канал доставки.'
+  return null
 }
 
 function calculationStatus(value: string): CalculationStatus {

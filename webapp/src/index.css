@@ -226,7 +226,6 @@
     padding: 0 18px;
   }
 
-  .admin-brand-mark,
   .admin-avatar {
     display: grid;
     place-items: center;
@@ -238,7 +237,35 @@
   .admin-brand-mark {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
+    flex: 0 0 34px;
+    overflow: visible;
+  }
+
+  .admin-brand-mark-bg {
+    fill: #ffffff;
+  }
+
+  .admin-brand-mark-p,
+  .admin-brand-mark-flow {
+    fill: none;
+    stroke: var(--pzk-navy);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .admin-brand-mark-p {
+    stroke-width: 3.2;
+  }
+
+  .admin-brand-mark-flow {
+    stroke: #2f7ecb;
+    stroke-width: 2.4;
+  }
+
+  .admin-brand-mark-node {
+    fill: #ffffff;
+    stroke: #2f7ecb;
+    stroke-width: 1.6;
   }
 
   .admin-brand-copy,

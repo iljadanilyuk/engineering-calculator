@@ -13,6 +13,7 @@ import {
   fallbackServices,
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
+import BrandMark from '../components/BrandMark.astro'
 
 const initialCalculation = calculateEngineeringOffer({
   areaSqm: defaultAreaSqm,
@@ -37,9 +38,9 @@ const formatRubles = (value: number) => new Intl.NumberFormat('ru-RU').format(va
 const pageMeta = createPageMeta({
   siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
   path: '/questionnaire/',
-  title: 'Подробный опросник для технического задания - ИП Позняк',
+  title: 'Подробный опросник для ТЗ - ИП Позняк',
   description:
-    'Пошаговый опросник по инженерным системам дома для подготовки черновика технического задания.',
+    'Пошаговый опросник по инженерным системам дома для подготовки технического задания.',
   robots: 'noindex,nofollow',
 })
 
@@ -124,13 +125,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     <header class="header">
       <div class="shell header-inner">
         <a class="brand" href="/" aria-label="ИП Позняк, на главную">
-          <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
-            <rect class="brand-mark-bg" width="48" height="48" rx="14" />
-            <path class="brand-mark-p" d="M15 34V14h10.2c5.1 0 8.8 3.2 8.8 8s-3.7 8-8.8 8H20" />
-            <path class="brand-mark-flow" d="M15 34c7-1.2 10.8-4.2 12.7-8.2" />
-            <circle class="brand-mark-node" cx="13" cy="25" r="2.2" />
-            <circle class="brand-mark-node" cx="25.8" cy="19" r="2.2" />
-          </svg>
+          <BrandMark />
           <span class="brand-copy">
             <strong>ИП Позняк</strong>
             <span>Инженерные системы</span>
@@ -150,7 +145,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
         <div class="shell hero-grid">
           <div class="hero-copy">
             <div class="eyebrow">Подробный сценарий</div>
-            <h1 id="questionnaire-title">Опросник для черновика технического задания</h1>
+            <h1 id="questionnaire-title">Опросник для подготовки ТЗ</h1>
             <p>
               Ответы сохраняются по шагам и попадают в карточку заявки. Если данных пока нет,
               отметьте это явно: менеджер увидит открытые вопросы.
@@ -482,7 +477,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   async function loadPublicConfig() {
     if (!apiBaseUrl) {
       hasApiConfig = false
-      setConfigStatus('Публичный API не подключен: старт опросника временно недоступен.', 'error')
+      setConfigStatus('Опросник временно недоступен: не удалось загрузить настройки.', 'error')
       return
     }
 
@@ -501,7 +496,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
         services = []
         selectedServiceIds = new Set()
         hasApiConfig = false
-        setConfigStatus('В API нет опубликованных услуг. Опросник можно будет начать позже.', 'error')
+        setConfigStatus('Нет опубликованных услуг. Опросник можно будет начать позже.', 'error')
       } else {
         services = publicServices
         resolveSelectedServices()
@@ -510,7 +505,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       }
     } catch {
       hasApiConfig = false
-      setConfigStatus('API недоступен: попробуйте начать опросник позже.', 'error')
+      setConfigStatus('Опросник временно недоступен. Попробуйте начать позже.', 'error')
     }
   }
 
@@ -524,7 +519,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     if (!apiBaseUrl || !hasApiConfig || !currentCalculation || currentCalculation.lineItems.length === 0) {
-      setWizardStatus('Опросник требует подключенный API и выбранные разделы проекта.', 'error')
+      setWizardStatus('Для старта выберите разделы проекта и дождитесь загрузки настроек.', 'error')
       return
     }
 
@@ -1066,16 +1061,13 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   function publicQuestionnaireErrorMessage(status: number, payload: unknown) {
-    const serverMessage =
-      payload && typeof payload === 'object' && 'error' in payload
-        ? (payload as { error?: { message?: string } }).error?.message
-        : undefined
+    void payload
 
-    if (status === 400) return serverMessage ?? 'Проверьте поля формы.'
+    if (status === 400) return 'Проверьте поля формы.'
     if (status === 404) return 'Сохраненный опросник не найден.'
     if (status === 409) return 'Выбранные разделы изменились. Вернитесь к калькулятору и повторите старт.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-    return serverMessage ?? 'Не удалось выполнить действие. Попробуйте еще раз.'
+    return 'Не удалось выполнить действие. Попробуйте еще раз.'
   }
 
   function allocateDisplayBynRubles(calculation: CalculationResult) {
@@ -1287,8 +1279,6 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     color: var(--muted);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
   }
 
   .nav {

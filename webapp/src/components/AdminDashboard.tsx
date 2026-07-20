@@ -95,7 +95,7 @@ export function AdminDashboard() {
               <AlertTitle>Рабочий стол загружен частично</AlertTitle>
               <AlertDescription>
                 Показано {numberFormatter.format(leadsQuery.data.loadedCount)} из{' '}
-                {numberFormatter.format(leadsQuery.data.summary.filteredCount)} записей, доступных через текущую пагинацию API.
+                {numberFormatter.format(leadsQuery.data.summary.filteredCount)} записей, доступных на текущей странице.
               </AlertDescription>
             </Alert>
           )}
@@ -110,7 +110,7 @@ export function AdminDashboard() {
             <div className="admin-stack">
               <AdminPanel
                 title="Мои действия"
-                description="Derived view из статусов, КП, черновиков ТЗ и Telegram-доставки."
+                description="Рабочий список по статусам, КП, опросникам ТЗ и выдаче документов."
                 action={
                   <div className="admin-segmented">
                     {actionFilters.map((item) => (
@@ -128,7 +128,7 @@ export function AdminDashboard() {
                 }
               >
                 {visibleTasks.length === 0 ? (
-                  <EmptyState title="Действий нет" description="В этой категории сейчас нет derived задач." />
+                  <EmptyState title="Действий нет" description="В этой категории сейчас нет задач." />
                 ) : (
                   <div className="admin-action-list">
                     {visibleTasks.map((task) => (
@@ -140,7 +140,7 @@ export function AdminDashboard() {
 
               <AdminPanel
                 title="Новые необработанные заявки"
-                description="Только свежий входящий поток, без больших декоративных KPI."
+                description="Свежие заявки, которым нужен первый контакт."
               >
                 {newLeads.length === 0 ? (
                   <EmptyState title="Новых заявок нет" description="Все входящие заявки уже получили следующий рабочий статус." />
@@ -155,7 +155,7 @@ export function AdminDashboard() {
 
               <AdminPanel
                 title="Запросы примеров проектов"
-                description="Отдельный поток PZK-017/PZK-020 с Telegram-доставкой."
+                description="Отдельный поток посетителей, которые оставили контакт для получения PDF-примеров."
                 action={
                   <Button type="button" variant="outline" size="sm" onClick={() => void exampleRequestsQuery.refetch()}>
                     Обновить
@@ -227,18 +227,18 @@ export function AdminDashboard() {
                 )}
               </AdminPanel>
 
-              <AdminPanel title="Контроль выдачи" description="Stage 1 placeholder без платежных и документных мутаций.">
+              <AdminPanel title="Контроль выдачи" description="Проверка документов, требований и оплаты по текущим данным.">
                 <div className="admin-notice-list">
                   <div className="admin-notice">
                     <Typography variant="bodySmMedium">Спецификации заблокированы оплатой</Typography>
                     <Typography variant="caption" tone="muted">
-                      В текущих данных нет платежного gate, поэтому блок показан как read-only слот будущего этапа.
+                      Нет подтверждения финальной оплаты по этой заявке.
                     </Typography>
                   </div>
                   <div className="admin-notice">
                     <Typography variant="bodySmMedium">Непроверенные требования</Typography>
                     <Typography variant="caption" tone="muted">
-                      Матрица требований не создается в PZK-021 и не пишет новые backend-состояния.
+                      Требования нужно сверить с ТЗ перед финальной выдачей.
                     </Typography>
                   </div>
                 </div>

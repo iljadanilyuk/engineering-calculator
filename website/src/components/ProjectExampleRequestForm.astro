@@ -13,7 +13,7 @@ type Props = {
 const {
   id = 'example-request-form',
   title = 'Получить примеры проектов',
-  description = 'После контакта сайт покажет защищенные ссылки и предложит Telegram-доставку, если бот подключен.',
+  description = 'После контакта здесь появятся ссылки на выбранные PDF-примеры.',
   source = 'example_request',
   selectedSlugs,
   submitLabel = 'Получить PDF-примеры',
@@ -95,7 +95,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     </p>
   </div>
   <button class="primary-btn" type="submit" data-example-trigger>{submitLabel}</button>
-  <p class="form-status" data-example-status>PDF не публикуется прямой ссылкой: сначала сохраняем контакт.</p>
+  <p class="form-status" data-example-status>Оставьте контакт, чтобы получить выбранные PDF-примеры.</p>
   <div class="proposal-success" data-example-success hidden></div>
 </form>
 
@@ -167,12 +167,12 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
         updateSubmitState()
         form.scrollIntoView({ behavior: 'smooth', block: 'center' })
         nameInput?.focus({ preventScroll: true })
-        setStatus('Оставьте контакт: выбранный PDF откроется здесь по защищенной ссылке.')
+        setStatus('Оставьте контакт: выбранный PDF откроется здесь после отправки формы.')
       })
     })
 
     if (!apiBaseUrl) {
-      setStatus('Выдача PDF-примеров требует подключенный backend API.')
+      setStatus('Выдача PDF-примеров временно недоступна.')
     }
     updateSubmitState()
 
@@ -186,13 +186,13 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
       }
 
       if (!apiBaseUrl) {
-        setStatus('Выдача PDF недоступна: backend API сейчас не подключен.', 'error')
+        setStatus('Выдача PDF сейчас недоступна. Попробуйте позже.', 'error')
         return
       }
 
       isSubmitting = true
       updateSubmitState()
-      setStatus('Сохраняю контакт и готовлю защищенную выдачу...', 'loading')
+      setStatus('Сохраняю контакт и подготавливаю PDF-примеры...', 'loading')
 
       try {
         const response = await fetch(`${apiBaseUrl}/api/public/project-example-requests`, {
@@ -290,7 +290,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
                 target="_blank"
                 rel="noopener"
               >
-                ${escapeHtml(example.code)} · защищенная PDF-ссылка
+                ${escapeHtml(example.code)} · открыть PDF-пример
               </a>
             `,
           )
@@ -299,7 +299,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
         success.innerHTML = `
           <strong>${returnedExisting ? 'Этот запрос уже сохранен' : 'Контакт сохранен'}</strong>
           <span>Телефон сохранен как ${escapeHtml(request.clientPhone)}.</span>
-          <span>Прямой публичный PDF URL не раскрывается: выдача идет через Telegram или token-ссылку.</span>
+          <span>Документы доступны только по ссылкам из этого запроса.</span>
           <div class="proposal-actions">
             ${telegramLink}
             ${fallbackLinks}
@@ -311,8 +311,8 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
         returnedExisting
           ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
           : request.telegramDelivery?.deepLinkUrl
-            ? 'Запрос принят. Telegram-доставка готова; защищенные web-ссылки оставлены как fallback.'
-            : 'Запрос принят. PDF-примеры готовы по защищенным token-ссылкам.',
+            ? 'Запрос принят. PDF-примеры готовы; Telegram доступен как дополнительный способ получения.'
+            : 'Запрос принят. PDF-примеры готовы по персональным ссылкам.',
         'ready',
       )
     }
@@ -345,15 +345,12 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     }
 
     function errorMessage(statusCode: number, payload: unknown) {
-      const serverMessage =
-        payload && typeof payload === 'object' && 'error' in payload
-          ? (payload as { error?: { message?: string } }).error?.message
-          : undefined
+      void payload
 
-      if (statusCode === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
+      if (statusCode === 400) return 'Проверьте имя, телефон и согласие.'
       if (statusCode === 409) return 'Выбранный пример временно недоступен. Обновите страницу и попробуйте еще раз.'
       if (statusCode === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-      return serverMessage ?? 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
+      return 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
     }
 
     function setStatus(message: string, state?: 'ready' | 'error' | 'loading') {

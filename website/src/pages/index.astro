@@ -12,6 +12,7 @@ import {
   fallbackServices,
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
+import BrandMark from '../components/BrandMark.astro'
 
 const selectedServiceIds = defaultSelectedServiceIds
 const initialCalculation = calculateEngineeringOffer({
@@ -411,13 +412,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     <header class="header">
       <div class="shell header-inner">
         <a class="brand" href="#top" aria-label="ИП Позняк — проектирование инженерных систем">
-          <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true">
-            <rect class="brand-mark-bg" x="2" y="2" width="40" height="40" rx="10" />
-            <path class="brand-mark-p" d="M13 31V13h18v18" />
-            <path class="brand-mark-flow" d="M13 25h8c3.5 0 4.8-2.5 4.8-6" />
-            <circle class="brand-mark-node" cx="13" cy="25" r="2.2" />
-            <circle class="brand-mark-node" cx="25.8" cy="19" r="2.2" />
-          </svg>
+          <BrandMark />
           <span class="brand-copy">
             <strong>ИП Позняк</strong>
             <span>Инженерные системы</span>
@@ -503,11 +498,11 @@ function serviceRublesMap(calculation: CalculationResult) {
       <section class="section soft" id="calculator" aria-labelledby="calculator-title">
         <div class="shell">
           <div class="section-head">
-            <div class="section-kicker">Предварительный расчет</div>
+            <div class="section-kicker">Быстрый расчет</div>
             <h2 id="calculator-title">Калькулятор стоимости проектных работ</h2>
             <p>Укажите площадь объекта, выберите тип проекта и необходимые инженерные разделы.</p>
             <p class="sr-only" data-service-source aria-live="polite">
-              Базовые тарифы для предварительного расчета.
+              Базовые тарифы для быстрого расчета.
             </p>
           </div>
 
@@ -712,7 +707,7 @@ function serviceRublesMap(calculation: CalculationResult) {
           <div class="section-head">
             <div class="section-kicker">Результат работы</div>
             <h2 id="documents-title">Реализованные проекты и фрагменты документации</h2>
-            <p>Краткие фрагменты можно посмотреть сразу, а полный PDF-пример выдается только после контакта.</p>
+            <p>Краткие фрагменты можно посмотреть сразу, а полный PDF-пример отправим после контактной заявки.</p>
             <a class="section-more-link" href="/projects/">Открыть каталог кейсов</a>
           </div>
           <div class="docs-grid">
@@ -740,7 +735,7 @@ function serviceRublesMap(calculation: CalculationResult) {
           <form class="example-request-form" id="example-request-form" data-example-form novalidate>
             <div class="example-form-copy">
               <strong>Получить примеры проектов</strong>
-              <span>После контакта сайт откроет защищенные ссылки на выбранные PDF.</span>
+              <span>После контакта здесь появятся ссылки на выбранные PDF.</span>
             </div>
             <fieldset class="example-choice-group" aria-describedby="example-choice-error">
               <legend>Какие примеры нужны</legend>
@@ -812,7 +807,7 @@ function serviceRublesMap(calculation: CalculationResult) {
                   Получить PDF-примеры
                 </button>
                 <p data-example-status role="status">
-                  Прямые PDF-ссылки не публикуются: после отправки здесь появятся защищенные ссылки.
+                  Оставьте контакт: выбранные PDF будут доступны после отправки формы.
                 </p>
               </div>
               <div class="lead-success" data-example-success hidden></div>
@@ -897,7 +892,7 @@ function serviceRublesMap(calculation: CalculationResult) {
             <div class="cta-copy">
               <h2 id="lead-title">Готовы начать проект?</h2>
               <p>
-                Выберите быстрый preliminary PDF или подробный сценарий для будущего технического задания.
+                Выберите быстрое КП или подробный сценарий для подготовки ТЗ.
               </p>
               <div class="cta-facts">
                 <div class="cta-fact">
@@ -918,7 +913,7 @@ function serviceRublesMap(calculation: CalculationResult) {
             <div class="lead-form lead-choice-card" id="lead-shell">
               <strong>Коммерческое предложение</strong>
               <p>
-                Сначала откроется страница выбора. Preliminary КП можно скачать только после имени,
+                Сначала откроется страница выбора. Быстрое КП можно скачать только после имени,
                 телефона и согласия; подробный опросник остается отдельным следующим шагом.
               </p>
               <div class="lead-choice-actions">
@@ -928,7 +923,7 @@ function serviceRublesMap(calculation: CalculationResult) {
                 <a class="proposal-link" href="#calculator">Изменить расчет</a>
               </div>
               <p class="privacy-note">
-                На странице выбора backend примет только исходные параметры расчета и пересчитает итог сам.
+                На странице выбора сервис проверит исходные параметры расчета и пересчитает итог.
               </p>
             </div>
 
@@ -939,7 +934,7 @@ function serviceRublesMap(calculation: CalculationResult) {
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     {lucideIcons.phone.paths?.map((path) => <path d={path} />)}
                   </svg>
-                  <span>{contactPhone || 'Телефон будет указан после подтверждения владельца'}</span>
+                  <span>{contactPhone || 'Свяжемся после заявки'}</span>
                 </div>
                 <div class="contact-row">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -956,7 +951,7 @@ function serviceRublesMap(calculation: CalculationResult) {
                     }
                     {lucideIcons.mail.paths?.map((path) => <path d={path} />)}
                   </svg>
-                  <span>{contactEmail || 'Контактный email указывается перед публикацией'}</span>
+                  <span>{contactEmail || 'Ответим по указанным контактам'}</span>
                 </div>
                 <div class="contact-row">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -973,7 +968,7 @@ function serviceRublesMap(calculation: CalculationResult) {
           <footer class="footer">
             <span>ИП Позняк</span>
             <span>Проектирование инженерных систем</span>
-            <span>Данные контактов и юридические тексты уточняются перед публикацией</span>
+            <span>Работаем по договору с физическими и юридическими лицами</span>
           </footer>
         </div>
       </section>
@@ -1142,8 +1137,8 @@ function serviceRublesMap(calculation: CalculationResult) {
 
   async function loadPublicConfig() {
     if (!apiBaseUrl) {
-      setSourceMessage('Базовые тарифы для предварительного расчета.')
-      setExampleStatus('Выдача PDF-примеров требует подключенный backend API.')
+      setSourceMessage('Базовые тарифы для быстрого расчета.')
+      setExampleStatus('Выдача PDF-примеров временно недоступна.')
       updateOfferLink()
       updateExampleSubmitState()
       return
@@ -1163,7 +1158,7 @@ function serviceRublesMap(calculation: CalculationResult) {
       if (publicServices.length === 0) {
         services = []
         selectedServiceIds = new Set()
-        setSourceMessage('Нет опубликованных услуг в API.')
+        setSourceMessage('Нет опубликованных услуг.')
       } else {
         services = publicServices
         reconcileSelectedServices(!hasUserChangedServices)
@@ -1174,11 +1169,11 @@ function serviceRublesMap(calculation: CalculationResult) {
     } catch (error) {
       services = normalizeServices(data.fallbackServices)
       reconcileSelectedServices(!hasUserChangedServices)
-      setSourceMessage('API недоступен, показаны базовые тарифы.')
+      setSourceMessage('Актуальные тарифы временно недоступны, показаны базовые значения.')
       if (error instanceof Error && error.message.includes('failed: 409')) {
-        setExampleStatus('Калькулятор ждет настройку тарифа, но PDF-примеры можно запросить после контакта.')
+        setExampleStatus('Калькулятор ожидает актуальные тарифы, но PDF-примеры можно запросить после контакта.')
       } else {
-        setExampleStatus('API недоступен: PDF-примеры сейчас нельзя выдать по защищенной ссылке.', 'error')
+        setExampleStatus('PDF-примеры сейчас нельзя выдать. Попробуйте позже.', 'error')
       }
       render()
     }
@@ -1348,7 +1343,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     }
 
     if (!apiBaseUrl) {
-      setExampleStatus('Выдача PDF недоступна: backend API сейчас не подключен.', 'error')
+      setExampleStatus('Выдача PDF сейчас недоступна. Попробуйте позже.', 'error')
       return
     }
 
@@ -1458,7 +1453,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     updateExampleSubmitState()
     exampleForm?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     exampleNameInput?.focus({ preventScroll: true })
-    setExampleStatus('Оставьте контакт: выбранный PDF откроется здесь по защищенной ссылке.')
+    setExampleStatus('Оставьте контакт: выбранный PDF откроется здесь после отправки формы.')
   }
 
   function showExampleSuccess(
@@ -1470,7 +1465,7 @@ function serviceRublesMap(calculation: CalculationResult) {
       exampleSuccess.innerHTML = `
         <strong>${returnedExisting ? 'Этот запрос уже сохранен' : 'Контакт сохранен'}</strong>
         <span>Телефон сохранен как ${escapeHtml(request.clientPhone)}.</span>
-        <span>PDF-ссылки защищены token-адресом и не публикуются на странице.</span>
+        <span>Документы доступны только по ссылкам из этого запроса.</span>
         <div class="proposal-actions">
           ${request.requestedExamples
             .map(
@@ -1506,8 +1501,8 @@ function serviceRublesMap(calculation: CalculationResult) {
       returnedExisting
         ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
         : request.telegramDelivery?.deepLinkUrl
-          ? 'Запрос принят. PDF-примеры готовы по защищенным ссылкам; Telegram доступен как дополнительный канал.'
-          : 'Запрос принят. PDF-примеры готовы по защищенным ссылкам.',
+          ? 'Запрос принят. PDF-примеры готовы; Telegram доступен как дополнительный способ получения.'
+          : 'Запрос принят. PDF-примеры готовы по персональным ссылкам.',
       'ready',
     )
   }
@@ -1558,15 +1553,12 @@ function serviceRublesMap(calculation: CalculationResult) {
   }
 
   function exampleRequestErrorMessage(status: number, payload: unknown) {
-    const serverMessage =
-      payload && typeof payload === 'object' && 'error' in payload
-        ? (payload as { error?: { message?: string } }).error?.message
-        : undefined
+    void payload
 
-    if (status === 400) return serverMessage ?? 'Проверьте имя, телефон и согласие.'
+    if (status === 400) return 'Проверьте имя, телефон и согласие.'
     if (status === 409) return 'Выбранный пример временно недоступен. Обновите страницу и попробуйте еще раз.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-    return serverMessage ?? 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
+    return 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
   }
 
   function selectedExampleSlugs() {
@@ -1902,8 +1894,6 @@ function serviceRublesMap(calculation: CalculationResult) {
     color: var(--muted);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
   }
 
   .brand:hover .brand-mark-bg {
@@ -3146,7 +3136,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     }
   }
 
-  @media (max-width: 760px) {
+  @media (max-width: 820px) {
     .shell {
       width: min(100% - 28px, var(--shell));
     }

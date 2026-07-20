@@ -206,7 +206,7 @@ export function BlogPostsManager() {
       <AdminPageHeader
         eyebrow="Настройка продукта"
         title="Блог и публикации"
-        description="Статьи, новости и SEO-материалы для публичного раздела /blog/. Черновики и архив не попадают в public API."
+        description="Статьи, новости и SEO-материалы для публичного раздела /blog/. Черновики и архив не показываются на сайте."
         actions={
           <Button type="button" onClick={openCreateDrawer}>
             Добавить статью
@@ -330,7 +330,7 @@ export function BlogPostsManager() {
             <SheetHeader>
               <SheetTitle>{editingPost ? 'Редактировать статью' : 'Добавить статью'}</SheetTitle>
               <SheetDescription>
-                V1 редактор хранит plain text/markdown-подобный текст. Публичный рендер не исполняет HTML.
+                Текст статьи можно подготовить с простыми заголовками и списками.
               </SheetDescription>
             </SheetHeader>
 
@@ -355,7 +355,7 @@ export function BlogPostsManager() {
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="blog-slug">Slug</FieldLabel>
+                    <FieldLabel htmlFor="blog-slug">Адрес страницы</FieldLabel>
                     <Input
                       id="blog-slug"
                       value={formState.slug}
@@ -363,7 +363,7 @@ export function BlogPostsManager() {
                       autoComplete="off"
                       placeholder="kak-podgotovitsya-k-proektu"
                     />
-                    <FieldDescription>Можно оставить пустым при создании: backend сгенерирует slug.</FieldDescription>
+                    <FieldDescription>Можно оставить пустым при создании: система сформирует адрес автоматически.</FieldDescription>
                   </Field>
                 </div>
 
@@ -428,7 +428,7 @@ export function BlogPostsManager() {
 
                 <div className="admin-drawer-grid two">
                   <Field>
-                    <FieldLabel htmlFor="blog-seo-title">SEO title</FieldLabel>
+                    <FieldLabel htmlFor="blog-seo-title">Заголовок для поиска</FieldLabel>
                     <Input
                       id="blog-seo-title"
                       value={formState.seoTitle}
@@ -437,7 +437,7 @@ export function BlogPostsManager() {
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="blog-seo-description">SEO description</FieldLabel>
+                    <FieldLabel htmlFor="blog-seo-description">Описание для поиска</FieldLabel>
                     <Textarea
                       id="blog-seo-description"
                       value={formState.seoDescription}
@@ -473,7 +473,7 @@ export function BlogPostsManager() {
                       onChange={(event) => setFormState({ ...formState, publishedAt: event.target.value })}
                       autoComplete="off"
                     />
-                    <FieldDescription>Если пусто при публикации, backend поставит текущее время.</FieldDescription>
+                    <FieldDescription>Если пусто при публикации, система поставит текущее время.</FieldDescription>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="blog-sort-order">Порядок</FieldLabel>

@@ -1,4 +1,5 @@
 ---
+import BrandMark from '../../components/BrandMark.astro'
 import {
   blogCoverImageUrl,
   formatBlogDate,
@@ -95,8 +96,11 @@ const structuredData = {
   <body>
     <header class="header">
       <a class="brand" href="/" aria-label="На главную ИП Позняк">
-        <span>ПЗ</span>
-        <strong>ИП Позняк</strong>
+        <BrandMark />
+        <span class="brand-copy">
+          <strong>ИП Позняк</strong>
+          <span>Инженерные системы</span>
+        </span>
       </a>
       <nav aria-label="Публичная навигация">
         <a href="/#calculator">Калькулятор</a>
@@ -221,19 +225,62 @@ const structuredData = {
   }
 
   .brand {
+    --brand-mark-size: 34px;
     gap: 10px;
     text-decoration: none;
   }
 
-  .brand span {
-    display: grid;
+  .brand-mark {
     width: 34px;
     height: 34px;
-    place-items: center;
-    border-radius: 8px;
-    background: var(--blue);
-    color: white;
+    flex: 0 0 34px;
+    overflow: visible;
+  }
+
+  .brand-mark-bg {
+    fill: var(--ink);
+  }
+
+  .brand-mark-p,
+  .brand-mark-flow {
+    fill: none;
+    stroke: #ffffff;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .brand-mark-p {
+    stroke-width: 3.2;
+  }
+
+  .brand-mark-flow {
+    stroke: #85c2ff;
+    stroke-width: 2.4;
+  }
+
+  .brand-mark-node {
+    fill: #ffffff;
+    stroke: #85c2ff;
+    stroke-width: 1.6;
+  }
+
+  .brand-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .brand-copy strong {
+    font-size: 16px;
     font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .brand-copy > span {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
   }
 
   .brand strong,
