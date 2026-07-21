@@ -1785,6 +1785,91 @@ Review log:
   - Reviewer Carver: 9.4/10; required replacing the stale Astro `favicon.ico` so browser tabs use the unified mark. Changes incorporated.
   - Reviewer Kuhn: 9.6/10; no blocking findings, confirmed unified public/admin brand, cleaned visible product copy, responsive 390/768/1024/1280/1440 smoke, and ready-to-close tracker state. Non-blocking wording suggestion around `предварительное КП` was also applied. Gate cleared.
 
+### PZK-029 - Commercial Proposal HTML V2 And PDF Export
+
+Status: Complete
+
+Goal:
+
+- Make the token-protected commercial proposal HTML page the primary client-facing proposal surface.
+- Bring the HTML/PDF visual design to the new V2 commercial proposal template while preserving immutable artifacts and existing protected links.
+
+Source materials:
+
+- `прототип/poznyak-commercial-proposal-v2-package/poznyak-commercial-proposal-v2-codex-task.md`
+- `прототип/poznyak-commercial-proposal-v2-package/poznyak-commercial-proposal-v2.html`
+- `прототип/poznyak-commercial-proposal-v2-package/poznyak-commercial-proposal-v2.pdf`
+- `прототип/poznyak-commercial-proposal-v2-package/*.png`
+
+Required behavior:
+
+- Use the V2 КП prototype as the visual source for new generated proposals.
+- Keep `/api/public/proposals/{token}` and `/api/public/proposals/{token}/pdf` token-protected and backed by stored immutable artifacts.
+- `/api/public/proposals/{token}` serves a polished V2 HTML proposal page for new V2 artifacts.
+- Add screen-only actions on the HTML proposal page:
+  - `Поделиться` uses the Web Share API when available and falls back to copying the current proposal link.
+  - `Сохранить PDF` links to the existing immutable PDF export for the same proposal token.
+- Generate the PDF from the same V2 HTML snapshot, with web actions hidden from print/PDF.
+- Keep proposal data from the saved calculation/proposal snapshot, not from current service prices, service titles, or exchange-rate settings.
+- Client proposal sums are BYN-first; do not make USD or exchange-rate details primary in the public HTML/PDF.
+- Do not expose sequential database IDs, storage keys, checksums, or internal artifact metadata in public HTML/JS.
+- Preserve existing admin and Telegram proposal/PDF links.
+- Old proposal artifacts, including `commercial-proposal-v1` and legacy HTML-only rows, must still open without crashing.
+- Add a new V2 `templateVersion`.
+- Verify mobile HTML behavior and A4 PDF output.
+
+Out of scope:
+
+- Contracts.
+- Calculation cost logic.
+- Questionnaire implementation or `/questionnaire/` flow changes.
+- DigitalOcean/cloud/env/secrets.
+- Codex plugin/profile changes.
+- Full client cabinet or portal beyond proposal HTML/PDF.
+
+Completion notes:
+
+- New artifacts now use `commercial-proposal-v2` and render a self-contained V2 HTML snapshot that is also the exact PDF render source.
+- `/api/public/proposals/{token}` keeps serving the stored immutable HTML snapshot, with screen-only `Поделиться` and `Сохранить PDF` actions for V2 snapshots.
+- `/api/public/proposals/{token}/pdf` keeps serving the stored immutable PDF bytes for the same token; legacy HTML-only artifacts still return HTML and a 404 for PDF.
+- The public proposal output is BYN-only/client-facing and omits USD, exchange-rate details, sequential IDs, storage keys, checksums, and direct proof-PDF URLs.
+- The V2 hero asset is committed under `backend/assets/proposal/` and embedded into generated snapshots as a data URI.
+
+Verification target:
+
+- `bun run typecheck`
+- `bun run test:backend:unit`
+- `bun run test:backend:integration`
+- Browser smoke:
+  - open token-protected HTML proposal;
+  - share/copy action works or shows fallback state;
+  - PDF link downloads/opens the immutable PDF;
+  - mobile proposal page has no horizontal overflow;
+  - old proposal artifact still opens.
+- PDF smoke:
+  - 2 A4 pages;
+  - Cyrillic renders;
+  - BYN totals and service rows match the immutable snapshot;
+  - screen-only actions are not printed.
+- `git diff --check`
+
+Verification notes:
+
+- `bun test src/engineering/proposal.test.ts` from `backend` - passed, 4 tests / 36 expects.
+- `bun run typecheck` in an isolated PZK-029 commit worktree - passed across backend, contracts, webapp, and website.
+- `bun run typecheck:backend` in the main working folder - passed before the isolated full typecheck.
+- `bun run test:contracts` - passed, 27 tests / 307 expects in the isolated PZK-029 commit worktree; also passed in the main working folder with parallel PZK-028 contract changes present.
+- `bun run test:backend:unit` - passed, 40 tests / 167 expects.
+- `bun run test:backend:integration` - passed, 40 tests / 556 expects in the isolated PZK-029 commit worktree, including V2 proposal routes and legacy HTML-only artifact coverage.
+- Browser/API smoke - passed: token proposal HTML returned 200, share/copy fallback copied the page URL, PDF href points to `/api/public/proposals/{token}/pdf`, PDF route returned bytes, and 390px mobile viewport had no horizontal overflow.
+- Real PDF smoke with Playwright renderer - passed: `pdfinfo` reported 2 pages, A4 page size; `pdftotext` extracted Cyrillic and BYN amounts; screen-only action labels were absent from PDF text; PNG visual inspection of both pages showed clean page breaks.
+- `git diff --check` - passed; line-ending warnings only.
+
+Review log:
+
+- 2026-07-21 pre-task reviewer Carson, `gpt-5.5 xhigh`: flagged immutable snapshot preservation, screen-only share/PDF controls, BYN-only client output from V2 brief, legacy `commercial-proposal-v1`/HTML-only compatibility, no public IDs/storage/checksums, existing admin/Telegram URL contracts, questionnaire CTA scope risk, mobile 390px risk, and Chromium A4/page-break/BYN rendering checks. Recommendations incorporated into the implementation plan.
+- 2026-07-21 post-task reviewer Raman, `gpt-5.5 xhigh`: 9.6/10; no blockers. Non-blocking notes: ensure the hero asset is committed, consider future CI coverage for real Chromium PDF rendering, and watch very long service descriptions against the fixed two-page layout. Gate cleared.
+
 ### PZK-024 - Public Documentation Screenshot Lightbox
 
 Status: Pending

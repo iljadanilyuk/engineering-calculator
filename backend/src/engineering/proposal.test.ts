@@ -22,12 +22,19 @@ describe('commercial proposal generation', () => {
     expect(artifact.htmlSnapshot).toContain('Андрей Клиент')
     expect(artifact.htmlSnapshot).toContain('Дом в Ратомке')
     expect(artifact.htmlSnapshot).toContain('Площадь')
-    expect(artifact.htmlSnapshot).toContain('Итого к проектированию')
-    expect(artifact.htmlSnapshot).toContain('70% старт / 30%')
+    expect(artifact.htmlSnapshot).toContain('Стоимость проекта')
+    expect(artifact.htmlSnapshot).toContain('Поделиться')
+    expect(artifact.htmlSnapshot).toContain('Сохранить PDF')
+    expect(artifact.htmlSnapshot).toContain('/api/public/proposals/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/pdf')
+    expect(artifact.htmlSnapshot).toContain('70% для начала работы')
+    expect(artifact.htmlSnapshot).toContain('data:image/jpeg;base64')
     expect(artifact.htmlSnapshot).toContain('Открыть раздел с примерами')
     expect(artifact.htmlSnapshot).not.toContain('/project-examples/proekt-primer-ov.pdf')
     expect(artifact.htmlSnapshot).not.toContain('/project-examples/primer-proekt-vk.pdf')
-    expect(artifact.htmlSnapshot).toContain('PDF-комплект для согласования и монтажа')
+    expect(artifact.htmlSnapshot).not.toContain('USD')
+    expect(artifact.htmlSnapshot).not.toContain('$')
+    expect(artifact.htmlSnapshot).not.toContain('Курс расчета')
+    expect(artifact.htmlSnapshot).toContain('PDF-комплект для согласования')
     expect(countMatches(artifact.htmlSnapshot, 'class="pdf-page')).toBe(2)
     expect(artifact.pdfByteSize).toBe(artifact.pdfBytes.byteLength)
     expect(artifact.checksumSha256).toBe(sha256Hex(artifact.pdfBytes))
@@ -39,9 +46,9 @@ describe('commercial proposal generation', () => {
     const html = renderCommercialProposalHtmlSnapshot(input)
 
     expect(countMatches(html, 'class="pdf-page')).toBe(2)
-    expect(countMatches(html, 'class="service-row"')).toBe(8)
-    expect(countMatches(html, 'class="service-row muted"')).toBe(1)
-    expect(html).toContain('Еще 3 раздел(ов) зафиксировано в расчете')
+    expect(countMatches(html, 'class="scope-row"')).toBe(7)
+    expect(countMatches(html, 'class="scope-row muted"')).toBe(1)
+    expect(html).toContain('Еще 4 раздел(ов) зафиксировано в расчете')
     expect(sumVisibleServiceRubles(html) + remainingRubles(html)).toBe(
       input.calculation.totals.totalBynRoundedRubles,
     )
@@ -78,7 +85,7 @@ describe('commercial proposal generation', () => {
     expect(html).not.toContain('https://cdn.example.com/examples/approved-ov.pdf')
     expect(html).toContain('Relative VK PDF')
     expect(html).not.toContain('https://website.example.com/media/examples/approved-vk.pdf')
-    expect(countMatches(html, 'Открыть раздел с примерами')).toBeGreaterThanOrEqual(2)
+    expect(countMatches(html, 'Открыть раздел с примерами')).toBeGreaterThanOrEqual(1)
     expect(html).not.toContain('proekt-primer-ov.pdf')
     expect(html).not.toContain('primer-proekt-vk.pdf')
   })
@@ -122,13 +129,13 @@ function countMatches(value: string, needle: string) {
 }
 
 function sumVisibleServiceRubles(html: string) {
-  return [...html.matchAll(/<div class="service-row">[\s\S]*?<em>([\d\s]+) BYN/g)].reduce(
-    (total, match) => total + Number(match[1].replace(/\s/g, '')),
+  return [...html.matchAll(/<div class="scope-row">[\s\S]*?data-byn-rubles="(\d+)"/g)].reduce(
+    (total, match) => total + Number(match[1]),
     0,
   )
 }
 
 function remainingRubles(html: string) {
-  const match = html.match(/<div class="service-row muted">[\s\S]*?<em>([\d\s]+) BYN<small>остаток<\/small>/)
-  return match ? Number(match[1].replace(/\s/g, '')) : 0
+  const match = html.match(/<div class="scope-row muted">[\s\S]*?data-byn-rubles="(\d+)"/)
+  return match ? Number(match[1]) : 0
 }

@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-export const commercialProposalTemplateVersion = 'commercial-proposal-v1'
+export const commercialProposalTemplateVersion = 'commercial-proposal-v2'
 
 export type CommercialProposalInput = {
   offerNumber: string
@@ -51,9 +51,15 @@ export type CommercialProposalGeneratorOptions = {
   renderPdf?: ProposalPdfRenderer
 }
 
-const maxVisibleServiceRows = 8
-const paymentTerms = '70% старт / 30% после передачи проектного PDF-комплекта'
+type CommercialProposalHtmlRenderOptions = {
+  heroImageDataUri?: string | null
+}
+
+const maxVisibleServiceRows = 7
+const paymentTerms = '70% для начала работы, 30% перед выдачей полного комплекта со спецификациями'
 const validityDays = 14
+const proposalHeroImageUrl = new URL('../../assets/proposal/hero-consultation-v2.jpg', import.meta.url)
+let proposalHeroImageDataUriPromise: Promise<string | null> | null = null
 
 export function createCommercialProposalGenerator(
   options: CommercialProposalGeneratorOptions = {},
@@ -73,7 +79,9 @@ export async function createCommercialProposalArtifact(
   input: CommercialProposalInput,
   renderPdf: ProposalPdfRenderer,
 ): Promise<CommercialProposalArtifact> {
-  const htmlSnapshot = renderCommercialProposalHtmlSnapshot(input)
+  const htmlSnapshot = renderCommercialProposalHtmlSnapshot(input, {
+    heroImageDataUri: await proposalHeroImageDataUri(),
+  })
   const pdfBytes = await renderPdf(htmlSnapshot)
   const checksumSha256 = sha256Hex(pdfBytes)
 
@@ -87,7 +95,10 @@ export async function createCommercialProposalArtifact(
   }
 }
 
-export function renderCommercialProposalHtmlSnapshot(input: CommercialProposalInput) {
+export function renderCommercialProposalHtmlSnapshot(
+  input: CommercialProposalInput,
+  options: CommercialProposalHtmlRenderOptions = {},
+) {
   const issuedDate = formatDate(input.issuedAt)
   const validUntil = formatDate(addDays(input.issuedAt, validityDays))
   const visibleLineItems = input.calculation.lineItems.slice(0, maxVisibleServiceRows)
@@ -95,9 +106,15 @@ export function renderCommercialProposalHtmlSnapshot(input: CommercialProposalIn
   const displayBynRubles = allocateDisplayBynRubles(input.calculation, visibleLineItems)
   const examplesUrl = withHash(input.sourcePageUrl, 'examples')
   const contactsUrl = withHash(input.sourcePageUrl, 'contacts')
+  const siteUrl = siteOriginUrl(input.sourcePageUrl) ?? contactsUrl ?? 'https://poznyak.by/'
+  const nextStepUrl = contactsUrl ?? siteUrl
   const projectExamples = proposalProjectExamples(input)
   const totalRubles = formatInteger(input.calculation.totals.totalBynRoundedRubles)
-  const totalUsd = formatUsd(input.calculation.totals.totalUsdCents)
+  const proposalUrlPath = `/api/public/proposals/${encodeURIComponent(input.publicToken)}`
+  const proposalPdfUrlPath = `${proposalUrlPath}/pdf`
+  const heroImageAttribute = options.heroImageDataUri
+    ? ` style="background-image: linear-gradient(90deg, rgba(8,26,47,.04), rgba(8,26,47,0)), url('${escapeHtml(options.heroImageDataUri)}');"`
+    : ''
 
   return [
     '<!doctype html>',
@@ -105,109 +122,183 @@ export function renderCommercialProposalHtmlSnapshot(input: CommercialProposalIn
     '<head>',
     '<meta charset="utf-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    '<meta name="robots" content="noindex,nofollow" />',
     `<title>${escapeHtml(input.offerNumber)} | Коммерческое предложение</title>`,
     '<style>',
     proposalCss(),
     '</style>',
     '</head>',
     '<body>',
-    '<main class="proposal-document">',
-    '<section class="pdf-page page-one" aria-label="Расчет коммерческого предложения">',
-    '<header class="offer-header">',
-    '<div>',
-    '<p class="kicker">ИП Позняк · инженерное проектирование</p>',
-    '<h1>Коммерческое предложение</h1>',
+    '<div class="proposal-shell">',
+    '<nav class="proposal-actions-shell" aria-label="Действия с коммерческим предложением">',
+    '<div class="proposal-actions-copy">',
+    `<strong>Коммерческое предложение ${escapeHtml(input.offerNumber)}</strong>`,
+    '<span>Персональная ссылка открывает сохраненную HTML-версию, PDF доступен как экспорт этой же версии.</span>',
     '</div>',
-    '<dl class="offer-meta">',
-    metaRow('Номер', input.offerNumber),
-    metaRow('Дата', issuedDate),
-    metaRow('Действует до', validUntil),
+    '<div class="proposal-actions">',
+    '<button class="action-button secondary" type="button" data-share-proposal>Поделиться</button>',
+    `<a class="action-button primary" href="${escapeHtml(proposalPdfUrlPath)}" download="${escapeHtml(input.offerNumber)}.pdf" data-proposal-pdf-link>Сохранить PDF</a>`,
+    '</div>',
+    '<p class="share-status" data-share-status aria-live="polite"></p>',
+    '</nav>',
+    '<main class="proposal-pages">',
+    '<section class="pdf-page page-one" aria-label="Коммерческое предложение">',
+    '<div class="inner">',
+    '<header class="topline">',
+    '<div class="brand">',
+    '<strong>ИП Позняк</strong>',
+    '<span>Проектирование инженерных систем</span>',
+    '</div>',
+    '<dl class="doc-meta">',
+    '<div class="doc-meta-item">',
+    '<dt>Коммерческое предложение</dt>',
+    `<dd>${escapeHtml(input.offerNumber)}</dd>`,
+    '</div>',
+    '<div class="doc-meta-item">',
+    '<dt>Дата</dt>',
+    `<dd>${escapeHtml(issuedDate)}</dd>`,
+    '</div>',
+    '<div class="doc-meta-item">',
+    '<dt>Действует до</dt>',
+    `<dd>${escapeHtml(validUntil)}</dd>`,
+    '</div>',
     '</dl>',
     '</header>',
-    '<section class="client-grid">',
-    infoBlock('Клиент', input.clientName),
-    infoBlock('Объект', input.objectName ?? 'частный дом / объект заказчика'),
-    infoBlock('Площадь', `${input.calculation.areaSqm} м²`),
-    infoBlock('Курс расчета', `${input.calculation.exchangeRate.usdToBynRate} BYN за 1 USD`),
+    '<section class="hero">',
+    '<div class="hero-copy">',
+    '<p class="eyebrow">Проект до закупки оборудования и начала монтажа</p>',
+    '<h1>Проектирование инженерных систем для вашего объекта</h1>',
+    '<p>Проект заранее определит мощности, расположение оборудования, трассы коммуникаций, состав материалов и понятные задания для монтажников.</p>',
+    '</div>',
+    `<div class="hero-image" role="img" aria-label="Обсуждение инженерного проекта с заказчиком"${heroImageAttribute}></div>`,
     '</section>',
-    '<section class="commercial-grid">',
-    '<div class="services-block">',
-    '<div class="block-title"><span>Выбранный состав</span><strong>Разделы проекта</strong></div>',
-    '<div class="service-table">',
+    '<section class="summary-strip" aria-label="Краткая сводка коммерческого предложения">',
+    summaryItem('Клиент', input.clientName),
+    summaryItem('Объект', input.objectName ?? 'частный дом / объект заказчика'),
+    summaryItem('Площадь', `${input.calculation.areaSqm} м²`),
+    '<div class="summary-item total-summary">',
+    '<span>Стоимость проекта</span>',
+    `<strong>${bynAmount(input.calculation.totals.totalBynRoundedRubles)}</strong>`,
+    '</div>',
+    '</section>',
+    '<section class="scope-section">',
+    '<div class="scope-head">',
+    '<div>',
+    '<h2>Выбранный состав проектирования</h2>',
+    '<p>Стоимость рассчитана по площади объекта и выбранным разделам.</p>',
+    '</div>',
+    '<span>Все суммы указаны в белорусских рублях</span>',
+    '</div>',
+    '<div class="scope-table">',
     visibleLineItems.length > 0
       ? visibleLineItems
           .map((lineItem, index) =>
             serviceRow(lineItem, index + 1, displayBynRubles.get(lineItem.serviceId) ?? 0),
           )
           .join('')
-      : '<div class="service-row muted"><span>00</span><strong>Разделы не выбраны</strong><em>0 BYN</em></div>',
+      : emptyServiceRow(),
     hiddenLineItemCount > 0
-      ? `<div class="service-row muted"><span>+${hiddenLineItemCount}</span><strong>Еще ${hiddenLineItemCount} раздел(ов) зафиксировано в расчете</strong><em>${formatInteger(displayBynRubles.get('__remaining__') ?? 0)} BYN<small>остаток</small></em></div>`
+      ? remainingServiceRow(hiddenLineItemCount, displayBynRubles.get('__remaining__') ?? 0)
       : '',
     '</div>',
-    '</div>',
-    '<aside class="total-block">',
-    '<span>Итого к проектированию</span>',
-    `<strong>${totalRubles} BYN</strong>`,
-    `<em>~${totalUsd} USD справочно</em>`,
-    '<div class="terms">',
-    '<p><b>Оплата:</b> ' + escapeHtml(paymentTerms) + '.</p>',
-    '<p><b>Срок действия КП:</b> ' + validityDays + ' календарных дней, до уточнения исходных данных.</p>',
-    '</div>',
-    '</aside>',
     '</section>',
     '<footer class="page-footer">',
-    '<span>Расчет фиксирует выбранные разделы, площадь, курс и тарифы на дату выпуска КП.</span>',
+    '<span>Финальная стоимость и срок подтверждаются после проверки исходных данных объекта.</span>',
     '<span>1 / 2</span>',
     '</footer>',
-    '</section>',
-    '<section class="pdf-page page-two" aria-label="Состав работ и контакты">',
-    '<header class="compact-header">',
-    '<p class="kicker">Что получает заказчик</p>',
-    `<strong>${escapeHtml(input.offerNumber)}</strong>`,
-    '</header>',
-    '<section class="two-column">',
-    '<div>',
-    '<h2>Что входит в проектирование</h2>',
-    '<ul class="included-list">',
-    '<li><b>Опросный лист и исходные данные</b><span>площадь, оборудование, материалы, пожелания по системам.</span></li>',
-    '<li><b>Расчетная база</b><span>теплотехнические данные и инженерные решения для подбора оборудования.</span></li>',
-    '<li><b>Схемы и планы</b><span>листы для согласования и передачи монтажникам.</span></li>',
-    '<li><b>Спецификация</b><span>состав оборудования и материалов для закупки и контроля бюджета.</span></li>',
-    '</ul>',
     '</div>',
+    '</section>',
+    '<section class="pdf-page page-two" aria-label="Результат, порядок работы и условия">',
+    '<div class="inner">',
+    '<header class="topline compact">',
+    '<div class="brand">',
+    '<strong>ИП Позняк</strong>',
+    '<span>Проектирование инженерных систем</span>',
+    '</div>',
+    '<dl class="doc-meta single">',
+    '<div class="doc-meta-item">',
+    '<dt>Коммерческое предложение</dt>',
+    `<dd>${escapeHtml(input.offerNumber)}</dd>`,
+    '</div>',
+    '</dl>',
+    '</header>',
+    '<section class="page2-title">',
     '<div>',
-    '<h2>Этапы работы</h2>',
-    '<ol class="process-list">',
-    '<li><span>01</span><b>Фиксация КП</b><em>состав, площадь, условия оплаты.</em></li>',
-    '<li><span>02</span><b>Исходные данные</b><em>опросник и уточнения по объекту.</em></li>',
-    '<li><span>03</span><b>Проектирование</b><em>расчеты, схемы, спецификация.</em></li>',
-    '<li><span>04</span><b>Передача PDF</b><em>готовый комплект для согласования и монтажа.</em></li>',
+    '<p class="eyebrow">Результат для заказчика</p>',
+    '<h2>Документация, по которой можно принимать решения и выполнять монтаж</h2>',
+    '</div>',
+    '<p>Вы получаете не набор отдельных схем, а согласованный комплект по выбранным инженерным системам.</p>',
+    '</section>',
+    '<section class="result-band">',
+    '<div>',
+    '<h3>Что изменится после проектирования</h3>',
+    '<p>До закупки оборудования станет понятно, какие мощности нужны, где пройдут коммуникации, что закупать и по каким решениям должна работать монтажная бригада.</p>',
+    '</div>',
+    '<div class="result-points">',
+    resultPoint('Меньше неопределенности', 'при выборе оборудования'),
+    resultPoint('Единые исходные данные', 'для поставщиков и монтажников'),
+    resultPoint('Контроль бюджета', 'через спецификацию'),
+    '</div>',
+    '</section>',
+    '<section class="deliverables" aria-label="Что входит в результат">',
+    deliverablesForCalculation(input.calculation).map(deliverableCard).join(''),
+    '</section>',
+    '<section class="section-row">',
+    '<div>',
+    '<h3 class="section-title">Как проходит работа</h3>',
+    '<ol class="steps">',
+    workStep('01', 'Подтверждение состава', 'Фиксируем выбранные разделы и условия коммерческого предложения.'),
+    workStep('02', 'Техническое задание', 'Вы заполняете подробный опросник и прикладываете исходные материалы.'),
+    workStep('03', 'Расчеты и проектирование', 'Разрабатываем решения, схемы, планы и необходимые узлы.'),
+    workStep('04', 'Согласование', 'Передаем комплект без спецификаций, обсуждаем решения и корректировки.'),
+    workStep('05', 'Финальная передача', 'После окончательной оплаты передаем полный комплект со спецификациями.'),
     '</ol>',
     '</div>',
-    '</section>',
-    '<section class="proof-grid">',
-    projectExamples.map((example) => proofCard(example, examplesUrl)).join(''),
-    '</section>',
-    '<section class="contact-block">',
     '<div>',
-    '<p class="kicker">Контакты</p>',
-    '<h2>ИП Позняк</h2>',
-    '<p>Инженерное проектирование отопления, вентиляции, водоснабжения и канализации для частных домов и небольших коммерческих объектов.</p>',
+    '<h3 class="section-title">Основные условия</h3>',
+    '<div class="proposal-terms">',
+    termBlock('Оплата', paymentTerms + '.'),
+    termBlock('Срок действия КП', `${validityDays} календарных дней, до ${validUntil}.`),
+    termBlock('Срок проектирования', 'Фиксируется после получения и проверки исходных данных по объекту.'),
+    termBlock('Формат результата', 'PDF-комплект для согласования, закупки оборудования и выполнения монтажных работ.'),
     '</div>',
-    '<dl>',
-    metaRow('Телефон / мессенджер', 'контактные данные уточняются перед публичным запуском'),
-    metaRow('Страница контактов', contactsUrl ?? 'раздел контактов на публичной странице'),
-    metaRow('Телефон заявки', input.clientPhone),
-    metaRow('Формат выдачи', 'PDF-комплект для согласования и монтажа'),
-    '</dl>',
+    '</div>',
     '</section>',
+    '<section class="next-step">',
+    '<div>',
+    '<h3>Следующий шаг - подтвердить состав и уточнить данные</h3>',
+    '<p>Подробные исходные данные помогут зафиксировать параметры дома, оборудование, материалы и пожелания по каждой выбранной системе.</p>',
+    examplesSummary(projectExamples, examplesUrl),
+    '</div>',
+    '<div class="next-actions">',
+    `<a class="document-button primary" href="${escapeHtml(nextStepUrl)}">Обсудить следующий шаг</a>`,
+    examplesUrl
+      ? `<a class="document-button secondary" href="${escapeHtml(examplesUrl)}">Открыть раздел с примерами</a>`
+      : `<a class="document-button secondary" href="${escapeHtml(siteUrl)}">Открыть сайт проекта</a>`,
+    '</div>',
+    '</section>',
+    '<footer class="footer-card">',
+    '<div>',
+    '<strong>ИП Позняк</strong>',
+    '<span>Проектирование инженерных систем для частных домов и небольших коммерческих объектов.</span>',
+    '</div>',
+    '<div>',
+    `<a href="${escapeHtml(siteUrl)}">${escapeHtml(displayUrl(siteUrl))}</a>`,
+    '<span>Контакты и ссылки подставляются из публичной страницы проекта.</span>',
+    '<span>PDF/HTML сохраняются как неизменяемая версия · 2 / 2</span>',
+    '</div>',
+    '</footer>',
     '<footer class="page-footer">',
-    '<span>PDF и HTML-версия КП являются immutable artifact для этой заявки.</span>',
+    `<span>Итого по этому КП: ${totalRubles} белорусских рублей.</span>`,
     '<span>2 / 2</span>',
     '</footer>',
+    '</div>',
     '</section>',
     '</main>',
+    '</div>',
+    '<script>',
+    shareScript(),
+    '</script>',
     '</body>',
     '</html>',
   ].join('')
@@ -441,39 +532,156 @@ async function waitForFile(path: string, timeoutMs: number) {
 
 function serviceRow(lineItem: CalculationLineItem, index: number, displayBynRubles: number) {
   const description = lineItem.serviceSnapshot.description
-  const price = `${formatInteger(displayBynRubles)} BYN`
-  const usd = `~${formatUsd(lineItem.totalUsdCents)} USD`
 
   return [
-    '<div class="service-row">',
-    `<span>${String(index).padStart(2, '0')}</span>`,
-    '<strong>',
-    escapeHtml(lineItem.serviceSnapshot.title),
-    description ? `<small>${escapeHtml(description)}</small>` : '',
-    '</strong>',
-    `<em>${price}<small>${usd}</small></em>`,
+    '<div class="scope-row">',
+    '<span class="scope-check" aria-hidden="true">&#10003;</span>',
+    '<div class="scope-copy">',
+    `<strong class="scope-title">${escapeHtml(lineItem.serviceSnapshot.title)}</strong>`,
+    `<span class="scope-desc">${escapeHtml(description || serviceFallbackDescription(lineItem))}</span>`,
+    '</div>',
+    '<div class="scope-price">',
+    bynAmount(displayBynRubles),
+    `<small>${escapeHtml(pricingLabel(lineItem))}</small>`,
+    '</div>',
     '</div>',
   ].join('')
 }
 
-function proofCard(
-  example: ReturnType<typeof proposalProjectExamples>[number],
-  examplesUrl: string | null,
-) {
-  const fallbackLink = examplesUrl
-    ? `<a href="${escapeHtml(examplesUrl)}">Открыть раздел с примерами</a>`
-    : '<p>Ссылка на PDF-пример будет добавлена после настройки публичного URL.</p>'
-
+function emptyServiceRow() {
   return [
-    '<div class="proof-card">',
-    `<span class="proof-code">${escapeHtml(example.code)}</span>`,
-    `<h3>${escapeHtml(example.title)}</h3>`,
-    `<p>${escapeHtml(example.description)}</p>`,
-    example.href
-      ? `<a href="${escapeHtml(example.href)}" aria-label="${escapeHtml(`Открыть PDF-пример: ${example.title}`)}">Открыть PDF-пример</a>`
-      : fallbackLink,
+    '<div class="scope-row muted">',
+    '<span class="scope-check" aria-hidden="true">0</span>',
+    '<div class="scope-copy">',
+    '<strong class="scope-title">Разделы не выбраны</strong>',
+    '<span class="scope-desc">Стоимость будет зафиксирована после выбора состава проектирования.</span>',
+    '</div>',
+    '<div class="scope-price">',
+    bynAmount(0),
+    '<small>нет выбранных разделов</small>',
+    '</div>',
     '</div>',
   ].join('')
+}
+
+function remainingServiceRow(hiddenLineItemCount: number, displayBynRubles: number) {
+  return [
+    '<div class="scope-row muted">',
+    `<span class="scope-check" aria-hidden="true">+${hiddenLineItemCount}</span>`,
+    '<div class="scope-copy">',
+    `<strong class="scope-title">Еще ${hiddenLineItemCount} раздел(ов) зафиксировано в расчете</strong>`,
+    '<span class="scope-desc">Итог по дополнительным разделам включен в общую стоимость КП.</span>',
+    '</div>',
+    '<div class="scope-price">',
+    bynAmount(displayBynRubles),
+    '<small>остаток</small>',
+    '</div>',
+    '</div>',
+  ].join('')
+}
+
+function summaryItem(label: string, value: string) {
+  return [
+    '<div class="summary-item">',
+    `<span>${escapeHtml(label)}</span>`,
+    `<strong>${escapeHtml(value)}</strong>`,
+    '</div>',
+  ].join('')
+}
+
+function resultPoint(title: string, description: string) {
+  return [
+    '<div class="result-point">',
+    '<span class="dot" aria-hidden="true">&#10003;</span>',
+    `<span><b>${escapeHtml(title)}</b> ${escapeHtml(description)}</span>`,
+    '</div>',
+  ].join('')
+}
+
+function deliverableCard(deliverable: ReturnType<typeof deliverablesForCalculation>[number]) {
+  return [
+    '<article class="deliverable">',
+    `<span class="icon" aria-hidden="true">${iconSvg(deliverable.icon)}</span>`,
+    '<div>',
+    `<strong>${escapeHtml(deliverable.title)}</strong>`,
+    `<p>${escapeHtml(deliverable.description)}</p>`,
+    '</div>',
+    '</article>',
+  ].join('')
+}
+
+function deliverablesForCalculation(calculation: CalculationResult) {
+  const selectedText = calculation.lineItems
+    .map((lineItem) => `${lineItem.serviceSnapshot.title} ${lineItem.serviceSnapshot.description ?? ''}`)
+    .join(' ')
+    .toLowerCase()
+  const hasThreeDimensionalWork = /(?:3d|3д|визуал|узел|узл)/i.test(selectedText)
+  const deliverables = [
+    {
+      icon: 'document',
+      title: 'Расчетная база',
+      description: 'Теплотехнические и инженерные расчеты для выбора мощностей и оборудования.',
+    },
+    {
+      icon: 'plan',
+      title: 'Планы и схемы',
+      description: 'Трассы, оборудование, подключения, узлы и привязки для согласования и монтажа.',
+    },
+    {
+      icon: 'clipboard',
+      title: 'Спецификация',
+      description: 'Перечень оборудования и материалов с количеством для закупки и контроля бюджета.',
+    },
+  ]
+
+  if (hasThreeDimensionalWork) {
+    deliverables.push({
+      icon: 'chart',
+      title: '3D и монтажные узлы',
+      description: 'Наглядная компоновка сложных участков и пояснения для реализации проекта.',
+    })
+  } else {
+    deliverables.push({
+      icon: 'chart',
+      title: 'Согласованный комплект',
+      description: 'Единая версия решений для проверки, корректировок и передачи монтажной бригаде.',
+    })
+  }
+
+  return deliverables
+}
+
+function workStep(index: string, title: string, description: string) {
+  return [
+    '<li class="step">',
+    `<span class="step-num">${escapeHtml(index)}</span>`,
+    '<span>',
+    `<strong>${escapeHtml(title)}</strong>`,
+    `<em>${escapeHtml(description)}</em>`,
+    '</span>',
+    '</li>',
+  ].join('')
+}
+
+function termBlock(title: string, description: string) {
+  return [
+    '<div class="term">',
+    `<strong>${escapeHtml(title)}</strong>`,
+    `<span>${escapeHtml(description)}</span>`,
+    '</div>',
+  ].join('')
+}
+
+function examplesSummary(
+  projectExamples: ReturnType<typeof proposalProjectExamples>,
+  examplesUrl: string | null,
+) {
+  if (projectExamples.length === 0 || !examplesUrl) return ''
+  const labels = projectExamples
+    .map((example) => `${example.code} - ${example.title}`)
+    .join('; ')
+
+  return `<p class="examples-note">Примеры: ${escapeHtml(labels)} доступны в разделе сайта с проектной документацией.</p>`
 }
 
 function proposalProjectExamples(input: CommercialProposalInput) {
@@ -483,17 +691,56 @@ function proposalProjectExamples(input: CommercialProposalInput) {
     return customExamples.slice(0, 2).map((example, index) => ({
       code: example.code?.trim() || `П${index + 1}`,
       title: example.title.trim(),
-      description: example.description?.trim() || 'PDF-пример проекта для проверки состава и оформления.',
-      href: null,
+      description: example.description?.trim() || 'Пример проекта для проверки состава и оформления.',
     }))
   }
 
   return publicProjectExampleAssets.slice(0, 2).map((example) => ({
     code: example.code,
     title: example.title,
-    description: `${example.description} ${example.pageCount} листов, PDF ${formatMegabytes(example.fileSizeBytes)}.`,
-    href: null,
+    description: `${example.description} ${example.pageCount} листов.`,
   }))
+}
+
+function serviceFallbackDescription(lineItem: CalculationLineItem) {
+  if (lineItem.pricingType === 'per_sqm') {
+    return 'Раздел рассчитывается по площади объекта и фиксируется в составе КП.'
+  }
+
+  return 'Фиксированный раздел проектной документации для выбранного состава работ.'
+}
+
+function pricingLabel(lineItem: CalculationLineItem) {
+  return lineItem.pricingType === 'per_sqm'
+    ? 'по площади объекта'
+    : 'фиксированная стоимость'
+}
+
+function bynAmount(value: number) {
+  return [
+    `<span class="money" data-byn-rubles="${value}">`,
+    escapeHtml(formatInteger(value)),
+    ' <span class="byn" aria-label="белорусских рублей">Б</span>',
+    '</span>',
+  ].join('')
+}
+
+function iconSvg(icon: string) {
+  const common = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+
+  if (icon === 'plan') {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" ${common}/><path d="M9 5v14M15 5v14M5 9h14M5 15h14" ${common}/></svg>`
+  }
+
+  if (icon === 'clipboard') {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 3H8l1-3Z" ${common}/><path d="M7 6H5v15h14V6h-2" ${common}/><path d="M8 12h8M8 16h6" ${common}/></svg>`
+  }
+
+  if (icon === 'chart') {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V5M5 19h14" ${common}/><path d="M9 16v-5M13 16V8M17 16v-7" ${common}/></svg>`
+  }
+
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l3 3v15H7V3Z" ${common}/><path d="M14 3v4h4M9 12h6M9 16h6" ${common}/></svg>`
 }
 
 function allocateDisplayBynRubles(
@@ -543,19 +790,6 @@ function allocateDisplayBynRubles(
   return allocation
 }
 
-function infoBlock(label: string, value: string) {
-  return [
-    '<div class="info-block">',
-    `<span>${escapeHtml(label)}</span>`,
-    `<strong>${escapeHtml(value)}</strong>`,
-    '</div>',
-  ].join('')
-}
-
-function metaRow(label: string, value: string) {
-  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`
-}
-
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
@@ -578,16 +812,6 @@ function formatInteger(value: number) {
   }).format(value)
 }
 
-function formatUsd(usdCents: number) {
-  return formatInteger(Math.round(usdCents / 100))
-}
-
-function formatMegabytes(bytes: number) {
-  return new Intl.NumberFormat('ru-RU', {
-    maximumFractionDigits: 1,
-  }).format(bytes / 1024 / 1024) + ' МБ'
-}
-
 function withHash(rawUrl: string | null | undefined, hash: string) {
   if (!rawUrl) return null
 
@@ -601,6 +825,34 @@ function withHash(rawUrl: string | null | undefined, hash: string) {
   }
 }
 
+function siteOriginUrl(rawUrl: string | null | undefined) {
+  if (!rawUrl) return null
+
+  try {
+    const url = new URL(rawUrl)
+    return `${url.origin}/`
+  } catch {
+    return null
+  }
+}
+
+function displayUrl(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl)
+    return url.host
+  } catch {
+    return rawUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')
+  }
+}
+
+function proposalHeroImageDataUri() {
+  proposalHeroImageDataUriPromise ??= readFile(proposalHeroImageUrl)
+    .then((bytes) => `data:image/jpeg;base64,${Buffer.from(bytes).toString('base64')}`)
+    .catch(() => null)
+
+  return proposalHeroImageDataUriPromise
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -610,339 +862,796 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#039;')
 }
 
+function shareScript() {
+  return `
+    (() => {
+      const button = document.querySelector('[data-share-proposal]');
+      const status = document.querySelector('[data-share-status]');
+      const title = document.title || 'Коммерческое предложение ИП Позняк';
+
+      if (!button) return;
+
+      const showStatus = (message) => {
+        if (!status) return;
+        status.textContent = message;
+        window.clearTimeout(showStatus.timeoutId);
+        showStatus.timeoutId = window.setTimeout(() => {
+          status.textContent = '';
+        }, 3600);
+      };
+
+      const fallbackCopy = async () => {
+        const url = window.location.href;
+
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(url);
+          return true;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        if (!copied) throw new Error('copy_failed');
+        return true;
+      };
+
+      button.addEventListener('click', async () => {
+        try {
+          if (navigator.share) {
+            await navigator.share({
+              title,
+              text: 'Коммерческое предложение ИП Позняк',
+              url: window.location.href,
+            });
+            showStatus('Ссылка готова к отправке.');
+            return;
+          }
+
+          await fallbackCopy();
+          showStatus('Ссылка скопирована.');
+        } catch (error) {
+          if (error && error.name === 'AbortError') return;
+
+          try {
+            await fallbackCopy();
+            showStatus('Ссылка скопирована.');
+          } catch {
+            showStatus('Не удалось скопировать автоматически. Скопируйте адрес из строки браузера.');
+          }
+        }
+      });
+    })();
+  `.trim()
+}
+
 function proposalCss() {
   return `
     @page { size: A4; margin: 0; }
     :root {
       color-scheme: light;
-      --ink: #16202a;
-      --muted: #5b6670;
-      --blue: #0b2239;
-      --steel: #2f5f7f;
-      --paper: #f9f7f4;
-      --line: #ded7cc;
-      --accent: #ff6b35;
+      --navy: #081a2f;
+      --navy-2: #0d2b4c;
+      --blue: #0b5fb5;
+      --blue-soft: #edf5fc;
+      --ink: #102033;
+      --body: #4d5b6a;
+      --muted: #788695;
+      --line: #dbe3eb;
+      --paper: #ffffff;
+      --surface: #f6f8fb;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: #e8e4de; }
+    html, body { margin: 0; min-height: 100%; background: #e9edf2; }
     body {
       color: var(--ink);
-      font-family: Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
-      font-size: 14px;
-      line-height: 1.35;
+      font-family: "Segoe UI", Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+      font-size: 10.2pt;
+      line-height: 1.38;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .proposal-document { width: 210mm; margin: 0 auto; background: white; }
+    h1, h2, h3, p { margin: 0; }
+    h1, h2, h3 { letter-spacing: 0; }
+    a { color: inherit; }
+    .proposal-shell {
+      min-height: 100vh;
+      padding: 22px;
+    }
+    .proposal-actions-shell {
+      width: min(100%, 210mm);
+      margin: 0 auto 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px 18px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid #cbd8e5;
+      border-radius: 8px;
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 10px 30px rgba(8,26,47,.08);
+    }
+    .proposal-actions-copy {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+    .proposal-actions-copy strong {
+      color: var(--navy);
+      font-size: 14px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .proposal-actions-copy span,
+    .share-status {
+      color: var(--body);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .proposal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    .action-button {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      border-radius: 7px;
+      border: 1px solid #b9cadb;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .action-button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+    .action-button.secondary {
+      background: #fff;
+      color: var(--navy);
+    }
+    .share-status {
+      grid-column: 1 / -1;
+      min-height: 16px;
+    }
+    .proposal-pages {
+      width: 210mm;
+      margin: 0 auto;
+    }
     .pdf-page {
       position: relative;
       display: flex;
       flex-direction: column;
-      min-height: 297mm;
-      padding: 15mm 16mm 12mm;
+      width: 210mm;
+      height: 297mm;
       page-break-after: always;
-      background: linear-gradient(90deg, var(--paper) 0 18mm, #ffffff 18mm 100%);
+      break-after: page;
+      background: var(--paper);
       overflow: hidden;
     }
-    .pdf-page:last-child { page-break-after: auto; }
-    .offer-header, .compact-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 18px;
-      padding-bottom: 12mm;
-      border-bottom: 1px solid var(--line);
+    .pdf-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
     }
-    .kicker {
-      margin: 0 0 6px;
-      color: var(--steel);
-      font-size: 11px;
-      font-weight: 700;
+    .inner {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 12mm 16mm 9mm;
+    }
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10mm;
+      padding-bottom: 5mm;
+      border-bottom: .35mm solid var(--line);
+    }
+    .topline.compact { padding-bottom: 5mm; }
+    .brand strong {
+      display: block;
+      color: var(--navy);
+      font-size: 11.5pt;
+      line-height: 1.1;
+    }
+    .brand span {
+      display: block;
+      margin-top: 1mm;
+      color: var(--muted);
+      font-size: 7.1pt;
+    }
+    dl { margin: 0; }
+    dt { margin: 0; }
+    dd { margin: 0; }
+    .doc-meta {
+      display: flex;
+      gap: 6mm;
+      text-align: right;
+    }
+    .doc-meta.single { max-width: 75mm; }
+    .doc-meta-item dt {
+      color: var(--muted);
+      font-size: 6.8pt;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+    .doc-meta-item dd {
+      margin-top: 1mm;
+      color: var(--navy);
+      font-size: 8.6pt;
+      font-weight: 800;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.18fr .82fr;
+      gap: 8mm;
+      align-items: stretch;
+      margin-top: 4mm;
+    }
+    .hero-copy { padding: 3.5mm 0 2mm; }
+    .eyebrow {
+      color: var(--blue);
+      font-size: 7.4pt;
+      font-weight: 800;
       letter-spacing: 0;
       text-transform: uppercase;
     }
-    h1, h2, h3, p { margin: 0; }
     h1 {
-      max-width: 118mm;
-      color: var(--blue);
-      font-size: 31px;
-      line-height: 1.06;
+      max-width: 112mm;
+      margin-top: 2.5mm;
+      color: var(--navy);
+      font-size: 23pt;
+      line-height: 1.03;
     }
-    h2 {
-      margin-bottom: 6mm;
-      color: var(--blue);
-      font-size: 18px;
-      line-height: 1.15;
+    .hero-copy p:not(.eyebrow) {
+      margin-top: 3mm;
+      max-width: 105mm;
+      color: var(--body);
+      font-size: 8.8pt;
+      line-height: 1.42;
     }
-    h3 { color: var(--blue); font-size: 13px; line-height: 1.2; }
-    dl { margin: 0; }
-    .offer-meta {
-      min-width: 52mm;
-      padding: 5mm;
-      background: var(--blue);
-      color: white;
+    .hero-image {
+      min-height: 47mm;
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(11,95,181,.18), rgba(8,26,47,.04)),
+        repeating-linear-gradient(0deg, rgba(11,95,181,.12) 0 1px, transparent 1px 12px),
+        repeating-linear-gradient(90deg, rgba(11,95,181,.10) 0 1px, transparent 1px 12px),
+        #f5f8fb;
+      background-size: cover;
+      background-position: 53% center;
+      position: relative;
+      overflow: hidden;
     }
-    .offer-meta div, .contact-block dl div {
+    .hero-image::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: .35mm solid rgba(8,26,47,.08);
+      border-radius: inherit;
+    }
+    .summary-strip {
       display: grid;
-      gap: 1mm;
-      margin-bottom: 3mm;
+      grid-template-columns: 1.1fr 1.55fr .65fr 1fr;
+      margin-top: 4mm;
+      border: .35mm solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
     }
-    .offer-meta div:last-child, .contact-block dl div:last-child { margin-bottom: 0; }
-    dt { color: rgba(255,255,255,.68); font-size: 10px; text-transform: uppercase; }
-    dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
-    .client-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 4mm;
-      margin: 8mm 0;
+    .summary-item {
+      min-height: 19.5mm;
+      padding: 3.4mm 4mm;
+      border-left: .35mm solid var(--line);
+      background: #fff;
     }
-    .info-block {
-      min-height: 22mm;
-      padding: 4mm;
-      border: 1px solid var(--line);
-      background: white;
-    }
-    .info-block span {
+    .summary-item:first-child { border-left: 0; }
+    .summary-item > span {
       display: block;
-      margin-bottom: 3mm;
       color: var(--muted);
-      font-size: 10px;
+      font-size: 6.4pt;
       text-transform: uppercase;
+      letter-spacing: 0;
     }
-    .info-block strong {
+    .summary-item strong {
       display: block;
-      color: var(--blue);
-      font-size: 14px;
-      line-height: 1.2;
-      overflow-wrap: anywhere;
-    }
-    .commercial-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 58mm;
-      gap: 6mm;
-      align-items: stretch;
-      flex: 1;
-    }
-    .services-block, .total-block {
-      border: 1px solid var(--line);
-      background: white;
-    }
-    .block-title {
-      display: flex;
-      justify-content: space-between;
-      gap: 4mm;
-      padding: 4mm;
-      border-bottom: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 11px;
-    }
-    .block-title strong { color: var(--blue); }
-    .service-table { display: grid; }
-    .service-row {
-      display: grid;
-      grid-template-columns: 10mm minmax(0, 1fr) 30mm;
-      gap: 3mm;
-      align-items: start;
-      min-height: 13mm;
-      padding: 3mm 4mm;
-      border-bottom: 1px solid #ece6dc;
-    }
-    .service-row:last-child { border-bottom: 0; }
-    .service-row > span {
-      color: var(--accent);
-      font-size: 11px;
-      font-weight: 700;
-    }
-    .service-row strong {
-      display: grid;
-      gap: 1.2mm;
+      margin-top: 1.4mm;
       color: var(--ink);
-      font-size: 12px;
-      line-height: 1.2;
+      font-size: 9.1pt;
+      line-height: 1.18;
       overflow-wrap: anywhere;
     }
-    .service-row small {
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 400;
-      line-height: 1.2;
+    .summary-item.total-summary {
+      background: var(--navy);
+      color: #fff;
     }
-    .service-row em {
-      display: grid;
-      gap: 1mm;
-      color: var(--blue);
-      font-size: 12px;
-      font-style: normal;
-      font-weight: 700;
-      text-align: right;
+    .summary-item.total-summary span { color: rgba(255,255,255,.66); }
+    .summary-item.total-summary strong {
+      color: #fff;
+      font-size: 15.5pt;
       white-space: nowrap;
     }
-    .service-row em small { font-size: 9px; }
-    .service-row.muted strong, .service-row.muted em { color: var(--muted); }
-    .total-block {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 6mm;
-      background: var(--blue);
-      color: white;
-    }
-    .total-block > span { color: rgba(255,255,255,.72); font-size: 11px; text-transform: uppercase; }
-    .total-block > strong {
-      margin-top: 5mm;
-      color: white;
-      font-size: 31px;
+    .byn {
+      position: relative;
+      display: inline-block;
+      width: .72em;
+      margin-left: .05em;
+      font-weight: 800;
       line-height: 1;
+    }
+    .byn::after {
+      content: "";
+      position: absolute;
+      left: .13em;
+      right: .02em;
+      top: .49em;
+      height: .065em;
+      background: currentColor;
+      border-radius: 999px;
+    }
+    .scope-section { margin-top: 4mm; }
+    .scope-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 6mm;
+      padding-bottom: 3mm;
+    }
+    .scope-head h2 {
+      color: var(--navy);
+      font-size: 14.4pt;
+      line-height: 1.15;
+    }
+    .scope-head p,
+    .scope-head span {
+      color: var(--muted);
+      font-size: 7.4pt;
+      line-height: 1.35;
+    }
+    .scope-table { border-top: .55mm solid var(--navy); }
+    .scope-row {
+      display: grid;
+      grid-template-columns: 8mm minmax(0, 1fr) 30mm;
+      gap: 3mm;
+      align-items: center;
+      min-height: 15.2mm;
+      padding: 2mm 0;
+      border-bottom: .32mm solid var(--line);
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .scope-check {
+      width: 5.1mm;
+      height: 5.1mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 7pt;
+      font-weight: 900;
+    }
+    .scope-title {
+      display: block;
+      color: var(--ink);
+      font-size: 8.7pt;
+      font-weight: 800;
+      line-height: 1.2;
       overflow-wrap: anywhere;
     }
-    .total-block > em {
-      margin: 3mm 0 8mm;
-      color: rgba(255,255,255,.76);
-      font-size: 12px;
-      font-style: normal;
+    .scope-desc {
+      display: block;
+      margin-top: .7mm;
+      color: var(--body);
+      font-size: 6.75pt;
+      line-height: 1.28;
     }
-    .terms {
+    .scope-price {
+      justify-self: end;
+      text-align: right;
+      color: var(--navy);
+      font-size: 9.4pt;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .scope-price small {
+      display: block;
+      margin-top: 1mm;
+      color: var(--muted);
+      font-size: 6.5pt;
+      font-weight: 600;
+    }
+    .scope-row.muted .scope-title,
+    .scope-row.muted .scope-price { color: var(--muted); }
+    .page2-title {
       display: grid;
-      gap: 3mm;
-      padding-top: 5mm;
-      border-top: 1px solid rgba(255,255,255,.22);
-      color: rgba(255,255,255,.82);
-      font-size: 11px;
+      grid-template-columns: 1.25fr .75fr;
+      gap: 7mm;
+      align-items: start;
+      margin-top: 5mm;
+      margin-bottom: 4mm;
     }
-    .terms b { color: white; }
+    .page2-title h2 {
+      color: var(--navy);
+      font-size: 18.8pt;
+      line-height: 1.04;
+    }
+    .page2-title p:not(.eyebrow) {
+      padding-top: 5mm;
+      color: var(--body);
+      font-size: 7.8pt;
+      line-height: 1.42;
+    }
+    .result-band {
+      margin-top: 4mm;
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 7mm;
+      padding: 4mm;
+      border-radius: 8px;
+      background: var(--navy);
+      color: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .result-band h3 {
+      color: #fff;
+      font-size: 12.5pt;
+      line-height: 1.18;
+    }
+    .result-band p {
+      margin-top: 1.4mm;
+      color: rgba(255,255,255,.72);
+      font-size: 6.65pt;
+      line-height: 1.35;
+    }
+    .result-points {
+      display: grid;
+      gap: 1.25mm;
+      align-content: center;
+    }
+    .result-point {
+      display: flex;
+      gap: 2mm;
+      align-items: flex-start;
+      color: rgba(255,255,255,.82);
+      font-size: 6.35pt;
+      line-height: 1.25;
+    }
+    .result-point b { color: #fff; }
+    .dot {
+      width: 4mm;
+      height: 4mm;
+      flex: 0 0 4mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: #fff;
+      color: var(--blue);
+      font-size: 6pt;
+      font-weight: 900;
+    }
+    .deliverables {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3mm;
+      margin-top: 4mm;
+    }
+    .deliverable {
+      min-height: 23mm;
+      display: grid;
+      grid-template-columns: 11mm 1fr;
+      gap: 4mm;
+      align-items: start;
+      padding: 3.2mm;
+      border: .35mm solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .icon {
+      width: 9mm;
+      height: 9mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: .35mm solid #bcd1e6;
+      border-radius: 7px;
+      color: var(--blue);
+      background: #fff;
+    }
+    .icon svg { width: 5.5mm; height: 5.5mm; }
+    .deliverable strong {
+      color: var(--ink);
+      font-size: 8.3pt;
+      line-height: 1.2;
+    }
+    .deliverable p {
+      margin-top: 1mm;
+      color: var(--body);
+      font-size: 6.5pt;
+      line-height: 1.33;
+    }
+    .section-row {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 6mm;
+      margin-top: 4.5mm;
+    }
+    .section-title {
+      margin-bottom: 2mm;
+      color: var(--navy);
+      font-size: 11.8pt;
+      line-height: 1.18;
+    }
+    .steps {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-top: .5mm solid var(--navy);
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 7mm 1fr;
+      gap: 2mm;
+      padding: 1.8mm 0;
+      border-bottom: .32mm solid var(--line);
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .step-num {
+      color: var(--blue);
+      font-size: 8pt;
+      font-weight: 800;
+    }
+    .step strong {
+      display: block;
+      color: var(--ink);
+      font-size: 7.8pt;
+      line-height: 1.2;
+    }
+    .step em {
+      display: block;
+      margin-top: .5mm;
+      color: var(--body);
+      font-size: 6.25pt;
+      font-style: normal;
+      line-height: 1.3;
+    }
+    .proposal-terms {
+      display: grid;
+      gap: 2mm;
+    }
+    .term {
+      padding: 2.2mm 3mm;
+      border-left: 1mm solid #bcd1e6;
+      background: var(--surface);
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .term strong {
+      display: block;
+      color: var(--ink);
+      font-size: 7.6pt;
+      line-height: 1.2;
+    }
+    .term span {
+      display: block;
+      margin-top: .6mm;
+      color: var(--body);
+      font-size: 6.2pt;
+      line-height: 1.32;
+    }
+    .next-step {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 7mm;
+      align-items: center;
+      margin-top: auto;
+      padding: 4mm;
+      border: .35mm solid #c9dcec;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .next-step h3 {
+      color: var(--navy);
+      font-size: 11.8pt;
+      line-height: 1.2;
+    }
+    .next-step p {
+      margin-top: 1.2mm;
+      color: var(--body);
+      font-size: 6.6pt;
+      line-height: 1.35;
+    }
+    .examples-note { font-weight: 600; }
+    .next-actions {
+      display: grid;
+      gap: 2.5mm;
+    }
+    .document-button {
+      display: block;
+      padding: 2.6mm 3mm;
+      border-radius: 7px;
+      text-align: center;
+      text-decoration: none;
+      font-size: 7pt;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .document-button.primary {
+      background: var(--blue);
+      color: #fff;
+    }
+    .document-button.secondary {
+      border: .35mm solid #b9cadb;
+      background: #fff;
+      color: var(--navy);
+    }
+    .footer-card {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 7mm;
+      margin-top: 4mm;
+      padding: 5mm;
+      border-radius: 8px;
+      background: var(--navy);
+      color: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .footer-card strong,
+    .footer-card a {
+      display: block;
+      color: #fff;
+      font-size: 8.6pt;
+      font-weight: 800;
+      text-decoration: none;
+    }
+    .footer-card span {
+      display: block;
+      margin-top: 1.2mm;
+      color: rgba(255,255,255,.68);
+      font-size: 6.35pt;
+      line-height: 1.35;
+    }
     .page-footer {
       display: flex;
       justify-content: space-between;
       gap: 8mm;
-      margin-top: 7mm;
-      padding-top: 4mm;
-      border-top: 1px solid var(--line);
+      margin-top: 4mm;
+      padding-top: 2.5mm;
+      border-top: .35mm solid var(--line);
       color: var(--muted);
-      font-size: 10px;
+      font-size: 6.6pt;
+      line-height: 1.35;
     }
-    .compact-header { padding-bottom: 8mm; }
-    .compact-header strong {
-      padding: 2mm 4mm;
-      background: var(--blue);
-      color: white;
-      font-size: 12px;
-    }
-    .two-column {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 7mm;
-      margin-top: 8mm;
-    }
-    .included-list, .process-list {
-      display: grid;
-      gap: 3mm;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .included-list li {
-      display: grid;
-      gap: 1mm;
-      padding: 4mm;
-      border: 1px solid var(--line);
-      background: white;
-    }
-    .included-list b { color: var(--blue); }
-    .included-list span, .process-list em, .proof-card p, .contact-block p {
-      color: var(--muted);
-      font-size: 11px;
-      font-style: normal;
-    }
-    .process-list li {
-      display: grid;
-      grid-template-columns: 12mm 1fr;
-      column-gap: 3mm;
-      row-gap: 1mm;
-      align-items: start;
-      padding-bottom: 3mm;
-      border-bottom: 1px solid var(--line);
-    }
-    .process-list span {
-      grid-row: span 2;
-      color: var(--accent);
-      font-weight: 700;
-    }
-    .process-list b { color: var(--blue); }
-    .proof-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5mm;
-      margin-top: 8mm;
-    }
-    .proof-card {
-      min-height: 28mm;
-      padding: 4mm;
-      border: 1px solid var(--line);
-      background:
-        linear-gradient(90deg, rgba(47,95,127,.08) 1px, transparent 1px),
-        linear-gradient(0deg, rgba(47,95,127,.08) 1px, transparent 1px),
-        #fff;
-      background-size: 7mm 7mm;
-    }
-    .proof-code {
-      display: inline-flex;
-      min-width: 11mm;
-      min-height: 8mm;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 3mm;
-      background: var(--accent);
-      color: white;
-      font-size: 10px;
-      font-weight: 700;
-    }
-    .proof-card a {
-      display: inline-block;
-      margin-top: 3mm;
-      color: var(--steel);
-      font-size: 11px;
-      font-weight: 700;
-      text-decoration: none;
-      overflow-wrap: anywhere;
-    }
-    .contact-block {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 68mm;
-      gap: 6mm;
-      margin-top: 8mm;
-      padding: 6mm;
-      background: var(--blue);
-      color: white;
-    }
-    .contact-block h2 { color: white; margin-bottom: 3mm; }
-    .contact-block p { color: rgba(255,255,255,.78); }
-    .contact-block dt { color: rgba(255,255,255,.62); }
-    .contact-block dd { color: white; font-size: 11px; }
     @media screen {
-      .proposal-document {
-        width: min(100%, 920px);
-        padding: 16px;
-        background: transparent;
+      .pdf-page {
+        margin: 0 auto 18px;
+        box-shadow: 0 16px 60px rgba(8,26,47,.12);
       }
+    }
+    @media print {
+      html, body { background: #fff; }
+      .proposal-shell { min-height: 0; padding: 0; }
+      .proposal-actions-shell { display: none !important; }
+      .proposal-pages { width: 210mm; margin: 0; }
+      .pdf-page {
+        width: 210mm;
+        height: 297mm;
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+    @media screen and (max-width: 860px) {
+      .proposal-shell { padding: 0; }
+      .proposal-actions-shell {
+        width: 100%;
+        margin: 0;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+        box-shadow: none;
+      }
+      .proposal-pages { width: 100%; }
       .pdf-page {
         width: 100%;
+        height: auto;
         min-height: auto;
-        margin: 0 auto 16px;
-        padding: clamp(22px, 5vw, 58px);
-        box-shadow: 0 16px 60px rgba(11,34,57,.14);
+        margin: 0;
+        box-shadow: none;
       }
-    }
-    @media (max-width: 720px) {
-      body { background: white; }
-      .proposal-document { padding: 0; }
-      .pdf-page { margin: 0; box-shadow: none; }
-      .offer-header, .compact-header, .client-grid, .commercial-grid, .two-column, .proof-grid, .contact-block {
+      .inner { padding: clamp(22px, 6vw, 42px); }
+      .topline,
+      .hero,
+      .summary-strip,
+      .page2-title,
+      .result-band,
+      .deliverables,
+      .section-row,
+      .next-step,
+      .footer-card {
         grid-template-columns: 1fr;
-        display: grid;
       }
-      .offer-meta { min-width: 0; }
-      h1 { font-size: 28px; }
-      .total-block > strong { font-size: 28px; }
+      .topline {
+        display: grid;
+        gap: 14px;
+      }
+      .doc-meta {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        text-align: left;
+      }
+      .hero-image { min-height: 190px; }
+      .summary-item {
+        min-height: auto;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+      .summary-item:first-child { border-top: 0; }
+      .scope-head {
+        display: grid;
+        align-items: start;
+      }
+      .scope-row {
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: 12px;
+        padding: 14px 0;
+      }
+      .scope-price {
+        grid-column: 2;
+        justify-self: start;
+        text-align: left;
+      }
+      .result-band,
+      .next-step,
+      .footer-card {
+        gap: 18px;
+      }
+      .proposal-actions-shell {
+        grid-template-columns: 1fr;
+      }
+      .proposal-actions {
+        justify-content: stretch;
+      }
+      .action-button {
+        flex: 1 1 150px;
+      }
+      h1 { font-size: 30px; }
+      .page2-title h2 { font-size: 28px; }
+    }
+    @media screen and (max-width: 420px) {
+      .inner { padding: 20px; }
+      .scope-row {
+        grid-template-columns: 26px minmax(0, 1fr);
+      }
+      .scope-check {
+        width: 24px;
+        height: 24px;
+      }
     }
   `
 }

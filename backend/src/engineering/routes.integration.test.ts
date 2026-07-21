@@ -180,7 +180,7 @@ maybeDescribe('engineering API integration', () => {
     expect(saved.consentIpAddress).toBe('203.0.113.10')
     expect(saved.publicToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/)
     expect(saved.proposals).toHaveLength(1)
-    expect(saved.proposals[0].templateVersion).toBe('commercial-proposal-v1')
+    expect(saved.proposals[0].templateVersion).toBe('commercial-proposal-v2')
     expect(saved.proposals[0].storageKey).toMatch(/^proposals\/\d{4}\/\d{2}\/pzk-\d{4}-/)
     expect(saved.proposals[0].checksumSha256).toMatch(/^[a-f0-9]{64}$/)
     expect(saved.proposals[0].pdfByteSize).toBeGreaterThan(20)
@@ -195,9 +195,19 @@ maybeDescribe('engineering API integration', () => {
     expect(publicProposalHtml).toContain('Коммерческое предложение')
     expect(publicProposalHtml).toContain('Анна Клиент')
     expect(publicProposalHtml).toContain('Boiler room fixed package')
+    expect(publicProposalHtml).toContain('Поделиться')
+    expect(publicProposalHtml).toContain('Сохранить PDF')
+    expect(publicProposalHtml).toContain(`/api/public/proposals/${saved.proposals[0].publicToken}/pdf`)
     expect(publicProposalHtml).toContain('Открыть раздел с примерами')
     expect(publicProposalHtml).not.toContain('/project-examples/proekt-primer-ov.pdf')
     expect(publicProposalHtml).not.toContain('/project-examples/primer-proekt-vk.pdf')
+    expect(publicProposalHtml).not.toContain(saved.id)
+    expect(publicProposalHtml).not.toContain(String(saved.proposals[0].id))
+    expect(publicProposalHtml).not.toContain(saved.proposals[0].storageKey ?? 'missing-storage-key')
+    expect(publicProposalHtml).not.toContain(saved.proposals[0].checksumSha256 ?? 'missing-checksum')
+    expect(publicProposalHtml).not.toContain('USD')
+    expect(publicProposalHtml).not.toContain('$')
+    expect(publicProposalHtml).not.toContain('Курс расчета')
     expect(publicProposalHtml).not.toContain('Коммерческое предложение готовится')
 
     const publicProposalPdf = await app.request(`/api/public/proposals/${saved.proposals[0].publicToken}/pdf`)
@@ -231,7 +241,7 @@ maybeDescribe('engineering API integration', () => {
     expect(snapshotBody.calculation.exchangeRate.usdToBynRate).toBe('3')
     expect(snapshotBody.calculation.proposalArtifacts[0]).toMatchObject({
       offerNumber: saved.proposals[0].offerNumber,
-      templateVersion: 'commercial-proposal-v1',
+      templateVersion: 'commercial-proposal-v2',
       storageKey: saved.proposals[0].storageKey,
       checksumSha256: saved.proposals[0].checksumSha256,
       pdfByteSize: saved.proposals[0].pdfByteSize,
@@ -828,6 +838,8 @@ maybeDescribe('engineering API integration', () => {
     await prisma.proposal.update({
       where: { id: savedProposal.id },
       data: {
+        templateVersion: 'commercial-proposal-v1',
+        htmlSnapshot: '<!doctype html><html lang="ru"><body><main>Legacy V1 proposal page</main></body></html>',
         pdfBytes: null,
         pdfByteSize: null,
         storageKey: null,
@@ -848,8 +860,11 @@ maybeDescribe('engineering API integration', () => {
     expect(htmlOnlyProposal.pdfUrlPath).toBeUndefined()
 
     const html = await app.request(`/api/public/proposals/${savedProposal.publicToken}`)
+    const htmlText = await html.text()
     const pdf = await app.request(`/api/public/proposals/${savedProposal.publicToken}/pdf`)
     expect(html.status).toBe(200)
+    expect(htmlText).toContain('Legacy V1 proposal page')
+    expect(htmlText).not.toContain('Сохранить PDF')
     expect(pdf.status).toBe(404)
   })
 
