@@ -870,14 +870,15 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   function renderCalculationSummary() {
     if (session) {
+      const activeSession = session
       summaryAreas.forEach((element) => {
-        element.textContent = compactArea(session.calculation.areaSqm)
+        element.textContent = compactArea(activeSession.calculation.areaSqm)
       })
       summaryTypes.forEach((element) => {
         element.textContent = projectTypeLabels[selectedProjectType]
       })
       if (summaryList) {
-        summaryList.innerHTML = session.calculation.serviceTitles
+        summaryList.innerHTML = activeSession.calculation.serviceTitles
           .map(
             (title) => `
               <div class="summary-row">
@@ -889,7 +890,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
           .join('')
       }
       totalBynElements.forEach((element) => {
-        element.innerHTML = `${formatRubles(session.calculation.totalBynRoundedRubles)} ${currencyMarkup()}`
+        element.innerHTML = `${formatRubles(activeSession.calculation.totalBynRoundedRubles)} ${currencyMarkup()}`
       })
       return
     }
@@ -910,23 +911,24 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     resolveSelectedServices()
-    currentCalculation = calculateEngineeringOffer({
+    const calculation = calculateEngineeringOffer({
       areaSqm,
       selectedServiceIds: [...selectedServiceIds],
       services,
       exchangeRate: data.exchangeRate,
     })
+    currentCalculation = calculation
 
     summaryAreas.forEach((element) => {
-      element.textContent = compactArea(currentCalculation.areaSqm)
+      element.textContent = compactArea(calculation.areaSqm)
     })
     summaryTypes.forEach((element) => {
       element.textContent = projectTypeLabels[selectedProjectType]
     })
     if (!summaryList || totalBynElements.length === 0) return
 
-    const displayRubles = allocateDisplayBynRubles(currentCalculation)
-    summaryList.innerHTML = currentCalculation.lineItems
+    const displayRubles = allocateDisplayBynRubles(calculation)
+    summaryList.innerHTML = calculation.lineItems
       .map(
         (lineItem) => `
           <div class="summary-row">
@@ -937,7 +939,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       )
       .join('')
     totalBynElements.forEach((element) => {
-      element.innerHTML = `${formatRubles(currentCalculation.totals.totalBynRoundedRubles)} ${currencyMarkup()}`
+      element.innerHTML = `${formatRubles(calculation.totals.totalBynRoundedRubles)} ${currencyMarkup()}`
     })
   }
 
