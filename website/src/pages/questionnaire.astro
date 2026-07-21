@@ -13,6 +13,7 @@ import {
   fallbackServices,
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
+import PublicFontLinks from '../components/PublicFontLinks.astro'
 import SiteHeader from '../components/SiteHeader.astro'
 
 const initialCalculation = calculateEngineeringOffer({
@@ -84,12 +85,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
-      rel="stylesheet"
-    />
+    <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
     <title>{pageMeta.title}</title>
@@ -269,7 +265,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
                 ></textarea>
               </label>
               <label class="consent-row" for="questionnaire-consent">
-                <input id="questionnaire-consent" data-consent type="checkbox" />
+                <input id="questionnaire-consent" data-consent type="checkbox" checked />
                 <span>Согласен на обработку персональных данных и ответов опросника для подготовки ТЗ и обратной связи.</span>
               </label>
               <button class="button primary" type="submit" data-start-trigger>
@@ -450,6 +446,10 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     type QuestionnaireSection,
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
+  import {
+    maskPublicContactPhoneInput,
+    validatePublicContactPhone,
+  } from '../lib/public-contact-validation'
 
   type ProjectType = 'private' | 'commercial'
   type CalculatorService = EngineeringService & { isPublic?: boolean }
@@ -576,7 +576,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
     clientNameInput?.addEventListener('input', resetStartKey)
     clientPhoneInput?.addEventListener('input', () => {
-      maskPhoneInput()
+      maskPublicContactPhoneInput(clientPhoneInput)
       resetStartKey()
     })
     objectNameInput?.addEventListener('input', resetStartKey)
@@ -869,8 +869,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   function renderCalculationSummary() {
-    if (session) {
-      const activeSession = session
+    const activeSession = session
+
+    if (activeSession) {
       summaryAreas.forEach((element) => {
         element.textContent = compactArea(activeSession.calculation.areaSqm)
       })
@@ -911,24 +912,24 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     resolveSelectedServices()
-    const calculation = calculateEngineeringOffer({
+    const nextCalculation = calculateEngineeringOffer({
       areaSqm,
       selectedServiceIds: [...selectedServiceIds],
       services,
       exchangeRate: data.exchangeRate,
     })
-    currentCalculation = calculation
+    currentCalculation = nextCalculation
 
     summaryAreas.forEach((element) => {
-      element.textContent = compactArea(calculation.areaSqm)
+      element.textContent = compactArea(nextCalculation.areaSqm)
     })
     summaryTypes.forEach((element) => {
       element.textContent = projectTypeLabels[selectedProjectType]
     })
     if (!summaryList || totalBynElements.length === 0) return
 
-    const displayRubles = allocateDisplayBynRubles(calculation)
-    summaryList.innerHTML = calculation.lineItems
+    const displayRubles = allocateDisplayBynRubles(nextCalculation)
+    summaryList.innerHTML = nextCalculation.lineItems
       .map(
         (lineItem) => `
           <div class="summary-row">
@@ -939,7 +940,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       )
       .join('')
     totalBynElements.forEach((element) => {
-      element.innerHTML = `${formatRubles(calculation.totals.totalBynRoundedRubles)} ${currencyMarkup()}`
+      element.innerHTML = `${formatRubles(nextCalculation.totals.totalBynRoundedRubles)} ${currencyMarkup()}`
     })
   }
 
@@ -1117,7 +1118,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   function validateContact() {
     const clientName = clientNameInput?.value.trim() ?? ''
     const clientPhone = clientPhoneInput?.value.trim() ?? ''
-    const phone = validateQuestionnairePhone(clientPhone)
+    const phone = validatePublicContactPhone(clientPhone)
     const nameValid = clientName.length >= 2 && clientName.length <= 120
     const phoneValid = phone.valid
     const consentValid = consentInput?.checked === true
@@ -1132,71 +1133,6 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       clientName,
       clientPhone: phone.normalized ?? clientPhone,
     }
-  }
-
-  function validateQuestionnairePhone(rawPhone: string) {
-    const trimmed = rawPhone.trim()
-    if (!/^[+\d\s().-]{5,40}$/.test(trimmed)) return { valid: false }
-
-    const digits = trimmed.replace(/\D/g, '')
-    const normalizedDigits = normalizedPhoneDigits(digits)
-    if (!normalizedDigits) return { valid: false }
-    if (!/^(375\d{9}|7\d{10})$/.test(normalizedDigits)) return { valid: false }
-    if (/^(\d)\1+$/.test(normalizedDigits) || hasLongRepeatedDigitRun(normalizedDigits)) {
-      return { valid: false }
-    }
-
-    return { valid: true, normalized: `+${normalizedDigits}` }
-  }
-
-  function normalizedPhoneDigits(digits: string) {
-    if (digits.startsWith('00375') && digits.length === 14) return digits.slice(2)
-    if (digits.startsWith('007') && digits.length === 13) return digits.slice(2)
-    if (digits.startsWith('375') && digits.length === 12) return digits
-    if (digits.startsWith('7') && digits.length === 11) return digits
-    if (/^80\d{9}$/.test(digits)) return `375${digits.slice(2)}`
-    if (/^0\d{9}$/.test(digits)) return `375${digits.slice(1)}`
-    if (/^(25|29|33|44)\d{7}$/.test(digits)) return `375${digits}`
-    return null
-  }
-
-  function hasLongRepeatedDigitRun(value: string) {
-    return /(\d)\1{5,}/.test(value)
-  }
-
-  function maskPhoneInput() {
-    if (!clientPhoneInput) return
-    const raw = clientPhoneInput.value
-    const digits = raw.replace(/\D/g, '')
-
-    if (raw.trim().startsWith('+375') || digits.startsWith('375')) {
-      clientPhoneInput.value = formatBelarusPhone(digits.startsWith('375') ? digits : `375${digits.slice(0, 9)}`)
-      return
-    }
-
-    if (raw.trim().startsWith('+7') || digits.startsWith('7')) {
-      clientPhoneInput.value = formatRussianPhone(digits.startsWith('7') ? digits : `7${digits.slice(0, 10)}`)
-    }
-  }
-
-  function formatBelarusPhone(digits: string) {
-    const local = digits.replace(/^375/, '').slice(0, 9)
-    let formatted = '+375'
-    if (local.length > 0) formatted += ` ${local.slice(0, 2)}`
-    if (local.length > 2) formatted += ` ${local.slice(2, 5)}`
-    if (local.length > 5) formatted += `-${local.slice(5, 7)}`
-    if (local.length > 7) formatted += `-${local.slice(7, 9)}`
-    return formatted
-  }
-
-  function formatRussianPhone(digits: string) {
-    const local = digits.replace(/^7/, '').slice(0, 10)
-    let formatted = '+7'
-    if (local.length > 0) formatted += ` ${local.slice(0, 3)}`
-    if (local.length > 3) formatted += ` ${local.slice(3, 6)}`
-    if (local.length > 6) formatted += `-${local.slice(6, 8)}`
-    if (local.length > 8) formatted += `-${local.slice(8, 10)}`
-    return formatted
   }
 
   function setInputValidity(input: HTMLInputElement | null, isValid: boolean) {
@@ -1411,7 +1347,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   function storeQuestionnaireResume(token: string, clientName?: string, clientPhone?: string) {
     try {
       const existing = readStoredQuestionnaireResume()
-      const phone = clientPhone ? validateQuestionnairePhone(clientPhone).normalized : existing?.clientPhone
+      const phone = clientPhone ? validatePublicContactPhone(clientPhone).normalized : existing?.clientPhone
       const name = clientName?.trim().toLowerCase() || existing?.clientName
       localStorage.setItem(questionnaireSessionStorageKey, JSON.stringify({
         token,
@@ -1448,7 +1384,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     const stored = readStoredQuestionnaireResume()
     if (!stored) return null
 
-    const phone = validateQuestionnairePhone(clientPhone).normalized
+    const phone = validatePublicContactPhone(clientPhone).normalized
     const name = clientName.trim().toLowerCase()
     if (stored.clientPhone && phone && stored.clientPhone === phone) return stored
     if (stored.clientName && stored.clientName === name) return stored
