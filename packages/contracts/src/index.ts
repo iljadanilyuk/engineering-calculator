@@ -1,5 +1,6 @@
 export * from './auth'
 export * from './backend'
+export * from './blog-content'
 export * from './blog'
 export * from './calculation'
 export * from './errors'
