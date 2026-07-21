@@ -67,6 +67,7 @@ import {
   type LeadNotifier,
 } from '../notifications/telegram'
 import {
+  ensureCommercialProposalPublicTypography,
   type CommercialProposalProjectExample,
   createCommercialProposalGenerator,
   type ProposalGenerator,
@@ -1130,7 +1131,7 @@ export class EngineeringDataService {
       })
 
     if (proposal.htmlSnapshot) {
-      return proposal.htmlSnapshot
+      return ensureCommercialProposalPublicTypography(proposal.htmlSnapshot)
     }
 
     throw new AppError(404, 'NOT_FOUND', 'Proposal page is not available')

@@ -4,6 +4,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   commercialProposalTemplateVersion,
   createCommercialProposalArtifact,
+  ensureCommercialProposalPublicTypography,
   renderCommercialProposalHtmlSnapshot,
   sha256Hex,
   type CommercialProposalInput,
@@ -91,6 +92,17 @@ describe('commercial proposal generation', () => {
     expect(countMatches(html, 'Открыть раздел с примерами')).toBeGreaterThanOrEqual(1)
     expect(html).not.toContain('proekt-primer-ov.pdf')
     expect(html).not.toContain('primer-proekt-vk.pdf')
+  })
+
+  test('adds the public font pair to legacy stored proposal pages once', () => {
+    const legacyHtml = '<!doctype html><html lang="ru"><head><title>КП</title></head><body><h1>КП</h1></body></html>'
+    const patchedHtml = ensureCommercialProposalPublicTypography(legacyHtml)
+
+    expect(patchedHtml).toContain('fonts.googleapis.com/css2?family=Inter')
+    expect(patchedHtml).toContain('family=Nunito:wght@700;800')
+    expect(patchedHtml).toContain('--font-body: "Inter"')
+    expect(patchedHtml).toContain('--font-heading: "Nunito"')
+    expect(ensureCommercialProposalPublicTypography(patchedHtml)).toBe(patchedHtml)
   })
 })
 

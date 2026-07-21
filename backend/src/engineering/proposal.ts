@@ -61,6 +61,7 @@ const validityDays = 14
 const proposalHeroImageUrl = new URL('../../assets/proposal/hero-consultation-v2.jpg', import.meta.url)
 const proposalFontStylesheetHref =
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap'
+const proposalPublicTypographyMarker = 'data-commercial-proposal-public-fonts'
 let proposalHeroImageDataUriPromise: Promise<string | null> | null = null
 
 export function createCommercialProposalGenerator(
@@ -307,6 +308,37 @@ export function renderCommercialProposalHtmlSnapshot(
     '</body>',
     '</html>',
   ].join('')
+}
+
+export function ensureCommercialProposalPublicTypography(html: string) {
+  if (html.includes(proposalPublicTypographyMarker) || html.includes(proposalFontStylesheetHref)) {
+    return html
+  }
+
+  const typographyHead = [
+    `<link rel="preconnect" href="https://fonts.googleapis.com" ${proposalPublicTypographyMarker} />`,
+    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin ${proposalPublicTypographyMarker} />`,
+    `<link href="${proposalFontStylesheetHref}" rel="stylesheet" ${proposalPublicTypographyMarker} />`,
+    `<style ${proposalPublicTypographyMarker}>`,
+    ':root { --font-body: "Inter"; --font-heading: "Nunito"; }',
+    [
+      'body {',
+      'font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
+      '}',
+    ].join(' '),
+    [
+      'h1, h2, h3, .proposal-title, .section-title, .brand strong, .total-value, .amount, .price {',
+      'font-family: var(--font-heading), var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
+      '}',
+    ].join(' '),
+    '</style>',
+  ].join('\n')
+
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${typographyHead}\n</head>`)
+  }
+
+  return `${typographyHead}\n${html}`
 }
 
 export async function renderPdfWithPlaywright(html: string) {
