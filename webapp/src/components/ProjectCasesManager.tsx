@@ -363,7 +363,14 @@ export function ProjectCasesManager() {
       </AdminPanel>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="admin-drawer admin-editor-drawer admin-case-drawer" side="right">
+        <SheetContent
+          className="admin-drawer admin-editor-drawer admin-case-drawer"
+          side="right"
+          style={{
+            width: 'min(1180px, calc(100vw - 24px))',
+            maxWidth: 'min(1180px, calc(100vw - 24px))',
+          }}
+        >
           <form className="admin-drawer-form" onSubmit={(event) => void handleSubmit(event)}>
             <SheetHeader>
               <SheetTitle>{editingCase ? 'Редактировать кейс' : 'Добавить кейс'}</SheetTitle>

@@ -326,7 +326,14 @@ export function BlogPostsManager() {
       </AdminPanel>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="admin-drawer admin-editor-drawer admin-blog-drawer" side="right">
+        <SheetContent
+          className="admin-drawer admin-editor-drawer admin-blog-drawer"
+          side="right"
+          style={{
+            width: 'min(1280px, calc(100vw - 24px))',
+            maxWidth: 'min(1280px, calc(100vw - 24px))',
+          }}
+        >
           <form className="admin-drawer-form" onSubmit={(event) => void handleSubmit(event)}>
             <SheetHeader>
               <SheetTitle>{editingPost ? 'Редактировать статью' : 'Добавить статью'}</SheetTitle>
