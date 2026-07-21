@@ -1,6 +1,7 @@
 import {
   EXCHANGE_RATE_SCALE,
   QUESTIONNAIRE_VERSION,
+  blogContentPlainText,
   type BlogPostCreateRequest,
   type BlogPostRecord,
   type BlogPostStatus,
@@ -2738,7 +2739,7 @@ function assertBlogPostCanBePublished(input: {
   const missing = [
     [input.title, 'title'],
     [input.excerpt, 'excerpt'],
-    [input.content, 'content'],
+    [blogContentPlainText(input.content), 'content'],
   ].filter(([value]) => !String(value).trim())
 
   if (missing.length === 0) return

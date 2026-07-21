@@ -1,10 +1,11 @@
 ---
-import BrandMark from '../../components/BrandMark.astro'
+import { renderBlogContentHtml } from '@poznyak-engineering-calculator/contracts'
+
+import SiteHeader from '../../components/SiteHeader.astro'
 import {
   blogCoverImageUrl,
   formatBlogDate,
   loadBlogPostDetails,
-  parseBlogContent,
   type BlogPost,
 } from '../../lib/blog-posts'
 import { absoluteUrl, createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
@@ -30,7 +31,7 @@ const pageMeta = createPageMeta({
   description: post.seoDescriptionResolved,
   imagePath: coverImage,
 })
-const contentBlocks = parseBlogContent(post.content)
+const contentHtml = renderBlogContentHtml(post.content)
 const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'Article',
@@ -94,21 +95,7 @@ const structuredData = {
     <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
   </head>
   <body>
-    <header class="header">
-      <a class="brand" href="/" aria-label="На главную ИП Позняк">
-        <BrandMark />
-        <span class="brand-copy">
-          <strong>ИП Позняк</strong>
-          <span>Инженерные системы</span>
-        </span>
-      </a>
-      <nav aria-label="Публичная навигация">
-        <a href="/#calculator">Калькулятор</a>
-        <a href="/projects/">Проекты</a>
-        <a href="/blog/">Блог</a>
-        <a href="/#contacts">Контакты</a>
-      </nav>
-    </header>
+    <SiteHeader />
 
     <main>
       <article>
@@ -146,20 +133,7 @@ const structuredData = {
             </aside>
             <div class="article-body">
               <h2 id="article-content-title" class="sr-only">{post.title}</h2>
-              {
-                contentBlocks.map((block) => {
-                  if (block.kind === 'heading' && block.level === 2) return <h2>{block.text}</h2>
-                  if (block.kind === 'heading') return <h3>{block.text}</h3>
-                  if (block.kind === 'list') {
-                    return (
-                      <ul>
-                        {block.items.map((item) => <li>{item}</li>)}
-                      </ul>
-                    )
-                  }
-                  return <p>{block.text}</p>
-                })
-              }
+              <div class="article-rich-body" set:html={contentHtml} />
             </div>
           </div>
         </section>
@@ -446,30 +420,88 @@ const structuredData = {
     gap: 18px;
   }
 
-  .article-body h2 {
+  .article-rich-body {
+    display: grid;
+    gap: 18px;
+  }
+
+  .article-body h2,
+  .article-rich-body h2 {
     margin-top: 18px;
     font-size: clamp(28px, 4vw, 40px);
     line-height: 1.08;
   }
 
-  .article-body h3 {
+  .article-body h3,
+  .article-rich-body h3 {
     margin-top: 8px;
     font-size: 24px;
     line-height: 1.2;
   }
 
   .article-body p,
-  .article-body li {
+  .article-body li,
+  .article-rich-body p,
+  .article-rich-body li {
     color: var(--body);
     font-size: 18px;
     line-height: 1.8;
   }
 
-  .article-body ul {
+  .article-rich-body a {
+    color: var(--blue);
+    font-weight: 700;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+
+  .article-rich-body blockquote {
+    margin: 8px 0;
+    border-left: 4px solid var(--green);
+    background: var(--soft);
+    padding: 16px 20px;
+  }
+
+  .article-body ul,
+  .article-rich-body ul,
+  .article-rich-body ol {
     display: grid;
     gap: 10px;
     margin: 0;
     padding-left: 22px;
+  }
+
+  .article-rich-body img {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .article-rich-body table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .article-rich-body th,
+  .article-rich-body td {
+    border: 1px solid var(--line);
+    padding: 11px 12px;
+    color: var(--body);
+    font-size: 16px;
+    line-height: 1.55;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .article-rich-body th {
+    background: var(--soft);
+    color: var(--ink);
+    font-weight: 800;
   }
 
   .secondary-btn {

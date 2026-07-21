@@ -1,9 +1,11 @@
-import type {
-  BlogPostCreateRequest,
-  BlogPostRecord,
-  BlogPostStatus,
+import {
+  blogContentPlainText,
+  renderBlogContentHtml,
+  type BlogPostCreateRequest,
+  type BlogPostRecord,
+  type BlogPostStatus,
 } from '@poznyak-engineering-calculator/contracts'
-import { type FormEvent, useMemo, useState } from 'react'
+import { lazy, Suspense, type FormEvent, useMemo, useState } from 'react'
 
 import {
   AdminPageHeader,
@@ -72,12 +74,11 @@ type BlogPostFormState = {
   sortOrder: string
 }
 
-type PreviewBlock =
-  | { kind: 'heading'; level: 2 | 3; text: string }
-  | { kind: 'paragraph'; text: string }
-  | { kind: 'list'; items: string[] }
-
 const emptyPosts: BlogPostRecord[] = []
+const BlogRichTextEditor = lazy(async () => {
+  const module = await import('@/components/BlogRichTextEditor')
+  return { default: module.BlogRichTextEditor }
+})
 const blogStatusLabels: Record<BlogPostStatus, string> = {
   draft: 'Черновик',
   published: 'Опубликована',
@@ -325,7 +326,7 @@ export function BlogPostsManager() {
       </AdminPanel>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="admin-drawer admin-blog-drawer" side="right">
+        <SheetContent className="admin-drawer admin-editor-drawer admin-blog-drawer" side="right">
           <form className="admin-drawer-form" onSubmit={(event) => void handleSubmit(event)}>
             <SheetHeader>
               <SheetTitle>{editingPost ? 'Редактировать статью' : 'Добавить статью'}</SheetTitle>
@@ -334,7 +335,7 @@ export function BlogPostsManager() {
               </SheetDescription>
             </SheetHeader>
 
-            <div className="admin-drawer-body">
+            <div className="admin-drawer-body admin-editor-body">
               {formError && (
                 <Alert variant="destructive">
                   <AlertTitle>Не удалось сохранить статью</AlertTitle>
@@ -342,156 +343,162 @@ export function BlogPostsManager() {
                 </Alert>
               )}
 
-              <FieldGroup className="admin-form-grid">
-                <div className="admin-drawer-grid two">
-                  <Field>
-                    <FieldLabel htmlFor="blog-title">Название</FieldLabel>
-                    <Input
-                      id="blog-title"
-                      value={formState.title}
-                      onChange={(event) => setFormState({ ...formState, title: event.target.value })}
-                      autoComplete="off"
-                      required
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="blog-slug">Адрес страницы</FieldLabel>
-                    <Input
-                      id="blog-slug"
-                      value={formState.slug}
-                      onChange={(event) => setFormState({ ...formState, slug: event.target.value })}
-                      autoComplete="off"
-                      placeholder="kak-podgotovitsya-k-proektu"
-                    />
-                    <FieldDescription>Можно оставить пустым при создании: система сформирует адрес автоматически.</FieldDescription>
-                  </Field>
-                </div>
+              <FieldGroup className="admin-form-grid admin-editor-layout">
+                <div className="admin-editor-main">
+                  <div className="admin-drawer-grid two">
+                    <Field>
+                      <FieldLabel htmlFor="blog-title">Название</FieldLabel>
+                      <Input
+                        id="blog-title"
+                        value={formState.title}
+                        onChange={(event) => setFormState({ ...formState, title: event.target.value })}
+                        autoComplete="off"
+                        required
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="blog-slug">Адрес страницы</FieldLabel>
+                      <Input
+                        id="blog-slug"
+                        value={formState.slug}
+                        onChange={(event) => setFormState({ ...formState, slug: event.target.value })}
+                        autoComplete="off"
+                        placeholder="kak-podgotovitsya-k-proektu"
+                      />
+                      <FieldDescription>Можно оставить пустым при создании: система сформирует адрес автоматически.</FieldDescription>
+                    </Field>
+                  </div>
 
-                <Field>
-                  <FieldLabel htmlFor="blog-excerpt">Анонс</FieldLabel>
-                  <Textarea
-                    id="blog-excerpt"
-                    value={formState.excerpt}
-                    onChange={(event) => setFormState({ ...formState, excerpt: event.target.value })}
-                    rows={3}
-                    required
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="blog-content">Текст статьи</FieldLabel>
-                  <Textarea
-                    id="blog-content"
-                    className="admin-blog-content-input"
-                    value={formState.content}
-                    onChange={(event) => setFormState({ ...formState, content: event.target.value })}
-                    rows={14}
-                    required
-                  />
-                  <FieldDescription>Поддерживаются абзацы, строки `## Заголовок`, `### Подзаголовок` и списки `- пункт`.</FieldDescription>
-                </Field>
-
-                <div className="admin-drawer-grid two">
                   <Field>
-                    <FieldLabel htmlFor="blog-cover">Обложка</FieldLabel>
-                    <Input
-                      id="blog-cover"
-                      value={formState.coverImageUrl}
-                      onChange={(event) => setFormState({ ...formState, coverImageUrl: event.target.value })}
-                      autoComplete="off"
-                      placeholder="/landing-v4/project-preview-spec-10.jpg"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="blog-category">Рубрика</FieldLabel>
-                    <Input
-                      id="blog-category"
-                      value={formState.category}
-                      onChange={(event) => setFormState({ ...formState, category: event.target.value })}
-                      autoComplete="off"
-                      placeholder="Практика"
-                    />
-                  </Field>
-                </div>
-
-                <Field>
-                  <FieldLabel htmlFor="blog-tags">Теги</FieldLabel>
-                  <Input
-                    id="blog-tags"
-                    value={formState.tags}
-                    onChange={(event) => setFormState({ ...formState, tags: event.target.value })}
-                    autoComplete="off"
-                    placeholder="ОВ, отопление, частный дом"
-                  />
-                  <FieldDescription>Разделяйте запятыми или новой строкой.</FieldDescription>
-                </Field>
-
-                <div className="admin-drawer-grid two">
-                  <Field>
-                    <FieldLabel htmlFor="blog-seo-title">Заголовок для поиска</FieldLabel>
-                    <Input
-                      id="blog-seo-title"
-                      value={formState.seoTitle}
-                      onChange={(event) => setFormState({ ...formState, seoTitle: event.target.value })}
-                      autoComplete="off"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="blog-seo-description">Описание для поиска</FieldLabel>
+                    <FieldLabel htmlFor="blog-excerpt">Анонс</FieldLabel>
                     <Textarea
-                      id="blog-seo-description"
-                      value={formState.seoDescription}
-                      onChange={(event) => setFormState({ ...formState, seoDescription: event.target.value })}
+                      id="blog-excerpt"
+                      value={formState.excerpt}
+                      onChange={(event) => setFormState({ ...formState, excerpt: event.target.value })}
                       rows={3}
-                    />
-                  </Field>
-                </div>
-
-                <div className="admin-drawer-grid">
-                  <Field>
-                    <FieldLabel htmlFor="blog-status">Статус</FieldLabel>
-                    <NativeSelect
-                      id="blog-status"
-                      className="w-full"
-                      value={formState.status}
-                      onChange={(event) => setFormState({ ...formState, status: blogStatus(event.target.value) })}
-                    >
-                      {blogStatusOptions.map((status) => (
-                        <NativeSelectOption key={status} value={status}>
-                          {blogStatusLabels[status]}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="blog-published-at">Дата публикации</FieldLabel>
-                    <Input
-                      id="blog-published-at"
-                      type="datetime-local"
-                      step="1"
-                      value={formState.publishedAt}
-                      onChange={(event) => setFormState({ ...formState, publishedAt: event.target.value })}
-                      autoComplete="off"
-                    />
-                    <FieldDescription>Если пусто при публикации, система поставит текущее время.</FieldDescription>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="blog-sort-order">Порядок</FieldLabel>
-                    <Input
-                      id="blog-sort-order"
-                      value={formState.sortOrder}
-                      onChange={(event) => setFormState({ ...formState, sortOrder: event.target.value })}
-                      inputMode="numeric"
-                      autoComplete="off"
                       required
                     />
                   </Field>
+
+                  <Field className="admin-editor-content-field">
+                    <FieldLabel htmlFor="blog-content">Текст статьи</FieldLabel>
+                    <Suspense fallback={<LoadingBlock label="Загружаем редактор..." />}>
+                      <BlogRichTextEditor
+                        id="blog-content"
+                        value={formState.content}
+                        disabled={isSaving}
+                        onChange={(content) => setFormState({ ...formState, content })}
+                      />
+                    </Suspense>
+                    <FieldDescription>Поддерживаются форматирование, заголовки, списки, ссылки, изображения по URL, таблицы и HTML-код.</FieldDescription>
+                  </Field>
+
+                  <div className="admin-drawer-grid two">
+                    <Field>
+                      <FieldLabel htmlFor="blog-cover">Обложка</FieldLabel>
+                      <Input
+                        id="blog-cover"
+                        value={formState.coverImageUrl}
+                        onChange={(event) => setFormState({ ...formState, coverImageUrl: event.target.value })}
+                        autoComplete="off"
+                        placeholder="/landing-v4/project-preview-spec-10.jpg"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="blog-category">Рубрика</FieldLabel>
+                      <Input
+                        id="blog-category"
+                        value={formState.category}
+                        onChange={(event) => setFormState({ ...formState, category: event.target.value })}
+                        autoComplete="off"
+                        placeholder="Практика"
+                      />
+                    </Field>
+                  </div>
+
+                  <Field>
+                    <FieldLabel htmlFor="blog-tags">Теги</FieldLabel>
+                    <Input
+                      id="blog-tags"
+                      value={formState.tags}
+                      onChange={(event) => setFormState({ ...formState, tags: event.target.value })}
+                      autoComplete="off"
+                      placeholder="ОВ, отопление, частный дом"
+                    />
+                    <FieldDescription>Разделяйте запятыми или новой строкой.</FieldDescription>
+                  </Field>
+
+                  <div className="admin-drawer-grid two">
+                    <Field>
+                      <FieldLabel htmlFor="blog-seo-title">Заголовок для поиска</FieldLabel>
+                      <Input
+                        id="blog-seo-title"
+                        value={formState.seoTitle}
+                        onChange={(event) => setFormState({ ...formState, seoTitle: event.target.value })}
+                        autoComplete="off"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="blog-seo-description">Описание для поиска</FieldLabel>
+                      <Textarea
+                        id="blog-seo-description"
+                        value={formState.seoDescription}
+                        onChange={(event) => setFormState({ ...formState, seoDescription: event.target.value })}
+                        rows={3}
+                      />
+                    </Field>
+                  </div>
                 </div>
 
-                <Field>
-                  <FieldLabel>Предпросмотр</FieldLabel>
-                  <BlogPreview state={formState} />
-                </Field>
+                <aside className="admin-editor-side" aria-label="Публикация и предпросмотр статьи">
+                  <FieldGroup className="admin-form-grid">
+                    <div className="admin-drawer-grid">
+                      <Field>
+                        <FieldLabel htmlFor="blog-status">Статус</FieldLabel>
+                        <NativeSelect
+                          id="blog-status"
+                          className="w-full"
+                          value={formState.status}
+                          onChange={(event) => setFormState({ ...formState, status: blogStatus(event.target.value) })}
+                        >
+                          {blogStatusOptions.map((status) => (
+                            <NativeSelectOption key={status} value={status}>
+                              {blogStatusLabels[status]}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="blog-published-at">Дата публикации</FieldLabel>
+                        <Input
+                          id="blog-published-at"
+                          type="datetime-local"
+                          step="1"
+                          value={formState.publishedAt}
+                          onChange={(event) => setFormState({ ...formState, publishedAt: event.target.value })}
+                          autoComplete="off"
+                        />
+                        <FieldDescription>Если пусто при публикации, система поставит текущее время.</FieldDescription>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="blog-sort-order">Порядок</FieldLabel>
+                        <Input
+                          id="blog-sort-order"
+                          value={formState.sortOrder}
+                          onChange={(event) => setFormState({ ...formState, sortOrder: event.target.value })}
+                          inputMode="numeric"
+                          autoComplete="off"
+                          required
+                        />
+                      </Field>
+                    </div>
+
+                    <Field>
+                      <FieldLabel>Предпросмотр</FieldLabel>
+                      <BlogPreview state={formState} />
+                    </Field>
+                  </FieldGroup>
+                </aside>
               </FieldGroup>
             </div>
 
@@ -647,7 +654,7 @@ function BlogPostMobileFact({ label, value }: { label: string; value: string }) 
 }
 
 function BlogPreview({ state }: { state: BlogPostFormState }) {
-  const blocks = parsePreviewBlocks(state.content)
+  const contentHtml = renderBlogContentHtml(state.content)
 
   return (
     <article className="admin-blog-preview">
@@ -659,25 +666,10 @@ function BlogPreview({ state }: { state: BlogPostFormState }) {
         <Typography variant="bodySm" tone="muted">{state.excerpt.trim() || 'Анонс статьи появится здесь.'}</Typography>
       </div>
       <div className="admin-blog-preview-body">
-        {blocks.length === 0 ? (
-          <Typography variant="bodySm" tone="muted">Текст статьи появится в предпросмотре после ввода.</Typography>
+        {contentHtml ? (
+          <div className="admin-rich-content" dangerouslySetInnerHTML={{ __html: contentHtml }} />
         ) : (
-          blocks.map((block, index) => {
-            if (block.kind === 'heading' && block.level === 2) {
-              return <Typography key={index} variant="h6">{block.text}</Typography>
-            }
-            if (block.kind === 'heading') {
-              return <Typography key={index} variant="bodySmMedium">{block.text}</Typography>
-            }
-            if (block.kind === 'list') {
-              return (
-                <ul key={index}>
-                  {block.items.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-              )
-            }
-            return <Typography key={index} variant="bodySm" tone="muted">{block.text}</Typography>
-          })
+          <Typography variant="bodySm" tone="muted">Текст статьи появится в предпросмотре после ввода.</Typography>
         )}
       </div>
     </article>
@@ -707,7 +699,7 @@ function formStateFromPost(post: BlogPostRecord): BlogPostFormState {
     slug: post.slug,
     title: post.title,
     excerpt: post.excerpt,
-    content: post.content,
+    content: renderBlogContentHtml(post.content),
     coverImageUrl: post.coverImageUrl ?? '',
     category: post.category ?? '',
     tags: post.tags.join(', '),
@@ -726,11 +718,13 @@ function buildPayload(state: BlogPostFormState): { value: BlogPostCreateRequest 
     return { error: 'Порядок должен быть целым числом от -1000000 до 1000000.' }
   }
 
+  const contentPlainText = blogContentPlainText(state.content)
+
   if (state.status === 'published') {
     const missingFields = [
       [state.title, 'название'],
       [state.excerpt, 'анонс'],
-      [state.content, 'текст статьи'],
+      [contentPlainText, 'текст статьи'],
     ].filter(([value]) => !String(value).trim())
 
     if (missingFields.length > 0) {
@@ -752,7 +746,7 @@ function buildPayload(state: BlogPostFormState): { value: BlogPostCreateRequest 
       slug: state.slug.trim() || undefined,
       title: state.title,
       excerpt: state.excerpt,
-      content: state.content,
+      content: state.content.trim(),
       coverImageUrl: emptyToNull(state.coverImageUrl),
       category: emptyToNull(state.category),
       tags: parseList(state.tags),
@@ -772,64 +766,8 @@ function parseList(value: string) {
     .filter(Boolean))]
 }
 
-function parsePreviewBlocks(content: string): PreviewBlock[] {
-  const blocks: PreviewBlock[] = []
-  const paragraph: string[] = []
-  let listItems: string[] = []
-
-  function flushParagraph() {
-    if (paragraph.length === 0) return
-    blocks.push({ kind: 'paragraph', text: paragraph.join(' ') })
-    paragraph.length = 0
-  }
-
-  function flushList() {
-    if (listItems.length === 0) return
-    blocks.push({ kind: 'list', items: listItems })
-    listItems = []
-  }
-
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim()
-
-    if (!line) {
-      flushParagraph()
-      flushList()
-      continue
-    }
-
-    if (line.startsWith('### ')) {
-      flushParagraph()
-      flushList()
-      blocks.push({ kind: 'heading', level: 3, text: line.slice(4).trim() })
-      continue
-    }
-
-    if (line.startsWith('## ')) {
-      flushParagraph()
-      flushList()
-      blocks.push({ kind: 'heading', level: 2, text: line.slice(3).trim() })
-      continue
-    }
-
-    if (line.startsWith('- ')) {
-      flushParagraph()
-      listItems.push(line.slice(2).trim())
-      continue
-    }
-
-    flushList()
-    paragraph.push(line)
-  }
-
-  flushParagraph()
-  flushList()
-
-  return blocks
-}
-
 function canPublishBlogPost(post: BlogPostRecord) {
-  return Boolean(post.title.trim() && post.excerpt.trim() && post.content.trim())
+  return Boolean(post.title.trim() && post.excerpt.trim() && blogContentPlainText(post.content))
 }
 
 function sortBlogPosts(posts: BlogPostRecord[]) {
