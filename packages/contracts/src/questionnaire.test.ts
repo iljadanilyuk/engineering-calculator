@@ -11,6 +11,7 @@ import {
   technicalQuestionnaireDefinition,
   technicalQuestionnaireQuestionIds,
   technicalQuestionnaireQuestions,
+  type QuestionnaireStoredAnswer,
 } from './questionnaire'
 
 describe('technical questionnaire contracts', () => {
@@ -21,6 +22,8 @@ describe('technical questionnaire contracts', () => {
 
     return (question.options ?? []).map((option) => option.label)
   }
+  const activeStateFor = (answers: readonly QuestionnaireStoredAnswer[], questionId: string) =>
+    answers.find((answer) => answer.questionId === questionId)?.isActive
 
   test('publishes a sanitized question structure without filled XLSX answers', () => {
     const serialized = JSON.stringify(technicalQuestionnaireDefinition)
@@ -156,9 +159,9 @@ describe('technical questionnaire contracts', () => {
       { questionId: 'OBJ_WALL_INSULATION_MATERIAL', kind: 'option', optionId: 'STONE_WOOL', updatedAt, isActive: false },
     ])
 
-    expect(hidden.find((answer) => answer.questionId === 'OBJ_WALL_THICKNESS')?.isActive).toBe(false)
-    expect(hidden.find((answer) => answer.questionId === 'OBJ_WALL_INSULATION')?.isActive).toBe(false)
-    expect(hidden.find((answer) => answer.questionId === 'OBJ_WALL_INSULATION_MATERIAL')?.isActive).toBe(false)
+    expect(activeStateFor(hidden, 'OBJ_WALL_THICKNESS')).toBe(false)
+    expect(activeStateFor(hidden, 'OBJ_WALL_INSULATION')).toBe(false)
+    expect(activeStateFor(hidden, 'OBJ_WALL_INSULATION_MATERIAL')).toBe(false)
     expect(getQuestionnaireActiveQuestions(hidden).map((question) => question.id)).not.toContain(
       'OBJ_WALL_INSULATION_MATERIAL',
     )
@@ -171,8 +174,8 @@ describe('technical questionnaire contracts', () => {
       { questionId: 'OBJ_ROOF_TYPE', kind: 'option', optionId: 'COLD_ATTIC', updatedAt, isActive: true },
       { questionId: 'OBJ_ROOF_INSULATION_LOCATION', kind: 'option', optionId: 'CEILING', updatedAt, isActive: true },
     ])
-    expect(docsFull.find((answer) => answer.questionId === 'OBJ_ROOF_TYPE')?.isActive).toBe(false)
-    expect(docsFull.find((answer) => answer.questionId === 'OBJ_ROOF_INSULATION_LOCATION')?.isActive).toBe(false)
+    expect(activeStateFor(docsFull, 'OBJ_ROOF_TYPE')).toBe(false)
+    expect(activeStateFor(docsFull, 'OBJ_ROOF_INSULATION_LOCATION')).toBe(false)
     expect(getQuestionnaireActiveQuestions(docsFull).map((question) => question.id)).not.toContain(
       'OBJ_ROOF_INSULATION_LOCATION',
     )
