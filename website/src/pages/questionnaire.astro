@@ -87,7 +87,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
       rel="stylesheet"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1584,7 +1584,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     --shadow-sm: 0 8px 24px rgba(16, 32, 51, 0.06);
     --shell: 1260px;
     --font-body: Inter, "Segoe UI", Arial, sans-serif;
-    --font-heading: Inter, "Segoe UI", Arial, sans-serif;
+    --font-heading: Nunito, Inter, "Segoe UI", Arial, sans-serif;
   }
 
   * {
@@ -1634,6 +1634,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   fieldset,
   legend {
     margin: 0;
+  }
+
+  h1,
+  h2,
+  legend {
+    font-family: var(--font-heading);
   }
 
   [hidden] {
