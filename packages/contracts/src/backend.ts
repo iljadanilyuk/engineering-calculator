@@ -16,6 +16,8 @@ import {
 import {
   adminQuestionnaireDraftSchema,
   adminQuestionnaireSummarySchema,
+  questionnaireDefinitionPatchRequestSchema,
+  questionnaireDefinitionResponseSchema,
   questionnaireAnswersPatchRequestSchema,
   questionnaireSessionResponseSchema,
   questionnaireStartRequestSchema,
@@ -93,6 +95,12 @@ const proposalArtifactReferenceSchema = z.object({
 })
 const telegramDeliveryStatusSchema = z.enum(['disabled', 'pending_start', 'sent', 'failed'])
 const telegramDeliveryTargetTypeSchema = z.enum(['proposal', 'project_examples'])
+const telegramNotificationStatusSchema = z.enum(['pending', 'disabled', 'sent', 'failed'])
+const telegramNotificationEventTypeSchema = z.enum([
+  'lead_submitted',
+  'questionnaire_started',
+  'questionnaire_completed',
+])
 const telegramDeliveryRecordSchema = z.object({
   id: uuidSchema,
   targetType: telegramDeliveryTargetTypeSchema,
@@ -112,6 +120,16 @@ const telegramDeliveryRecordSchema = z.object({
 const publicTelegramDeliverySchema = z.object({
   status: telegramDeliveryStatusSchema,
   deepLinkUrl: z.string().url().nullable(),
+})
+const telegramNotificationRecordSchema = z.object({
+  id: uuidSchema,
+  eventType: telegramNotificationEventTypeSchema,
+  status: telegramNotificationStatusSchema,
+  statusMessage: z.string().nullable(),
+  attemptCount: z.number().int().nonnegative(),
+  sentAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 })
 
 export const serviceVisibilitySchema = z.object({
@@ -253,6 +271,7 @@ export const calculationRecordSchema = z.object({
   consentUserAgent: z.string().nullable(),
   proposalArtifacts: z.array(proposalArtifactReferenceSchema),
   telegramDeliveries: z.array(telegramDeliveryRecordSchema),
+  telegramNotifications: z.array(telegramNotificationRecordSchema),
   questionnaire: adminQuestionnaireDraftSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -316,6 +335,7 @@ export const calculationListItemSchema = calculationRecordSchema.pick({
   source: true,
   proposalArtifacts: true,
   telegramDeliveries: true,
+  telegramNotifications: true,
   questionnaire: true,
   createdAt: true,
   updatedAt: true,
@@ -554,6 +574,9 @@ export const publicQuestionnaireStartRequestSchema = questionnaireStartRequestSc
 export const publicQuestionnairePatchRequestSchema = questionnaireAnswersPatchRequestSchema
 export const publicQuestionnaireStartResponseSchema = questionnaireStartResponseSchema
 export const publicQuestionnaireSessionResponseSchema = questionnaireSessionResponseSchema
+export const questionnaireDefinitionEditRequestSchema = questionnaireDefinitionPatchRequestSchema
+export const publicQuestionnaireDefinitionResponseSchema = questionnaireDefinitionResponseSchema
+export const adminQuestionnaireDefinitionResponseSchema = questionnaireDefinitionResponseSchema
 
 export type ServiceCreateRequest = z.infer<typeof serviceCreateRequestSchema>
 export type ServiceUpdateRequest = z.infer<typeof serviceUpdateRequestSchema>
@@ -569,6 +592,9 @@ export type TelegramDeliveryStatus = z.infer<typeof telegramDeliveryStatusSchema
 export type TelegramDeliveryTargetType = z.infer<typeof telegramDeliveryTargetTypeSchema>
 export type TelegramDeliveryRecord = z.infer<typeof telegramDeliveryRecordSchema>
 export type PublicTelegramDelivery = z.infer<typeof publicTelegramDeliverySchema>
+export type TelegramNotificationStatus = z.infer<typeof telegramNotificationStatusSchema>
+export type TelegramNotificationEventType = z.infer<typeof telegramNotificationEventTypeSchema>
+export type TelegramNotificationRecord = z.infer<typeof telegramNotificationRecordSchema>
 export type CalculationSaveRequest = z.infer<typeof calculationSaveRequestSchema>
 export type CalculationRecord = z.infer<typeof calculationRecordSchema>
 export type CalculationListItem = z.infer<typeof calculationListItemSchema>
@@ -596,6 +622,9 @@ export type PublicQuestionnaireStartRequest = z.infer<typeof publicQuestionnaire
 export type PublicQuestionnairePatchRequest = z.infer<typeof publicQuestionnairePatchRequestSchema>
 export type PublicQuestionnaireStartResponse = z.infer<typeof publicQuestionnaireStartResponseSchema>
 export type PublicQuestionnaireSessionResponse = z.infer<typeof publicQuestionnaireSessionResponseSchema>
+export type QuestionnaireDefinitionEditRequest = z.infer<typeof questionnaireDefinitionEditRequestSchema>
+export type PublicQuestionnaireDefinitionResponse = z.infer<typeof publicQuestionnaireDefinitionResponseSchema>
+export type AdminQuestionnaireDefinitionResponse = z.infer<typeof adminQuestionnaireDefinitionResponseSchema>
 
 function isValidDateOnly(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)

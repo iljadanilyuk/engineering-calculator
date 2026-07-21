@@ -2,7 +2,7 @@
 import {
   QUESTIONNAIRE_VERSION,
   calculateEngineeringOffer,
-  technicalQuestionnaireSections,
+  technicalQuestionnaireDefinition,
   type CalculationResult,
 } from '@poznyak-engineering-calculator/contracts'
 import {
@@ -25,7 +25,7 @@ const initialCalculation = calculateEngineeringOffer({
 
 const questionnaireData = {
   version: QUESTIONNAIRE_VERSION,
-  sections: technicalQuestionnaireSections,
+  definition: technicalQuestionnaireDefinition,
   defaultAreaSqm,
   areaLimits,
   exchangeRate,
@@ -436,14 +436,15 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     getQuestionnaireActiveQuestions,
     getQuestionnaireActiveSections,
     publicCalculatorConfigResponseSchema,
+    publicQuestionnaireDefinitionResponseSchema,
     publicQuestionnaireSessionResponseSchema,
     publicQuestionnaireStartResponseSchema,
     type CalculationResult,
     type EngineeringService,
+    type QuestionnaireDefinition,
     type PublicQuestionnaireSession,
     type QuestionnaireAnswerInput,
     type QuestionnaireQuestion,
-    type QuestionnaireSection,
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
   import {
@@ -455,7 +456,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   type CalculatorService = EngineeringService & { isPublic?: boolean }
   type QuestionnaireData = {
     version: string
-    sections: QuestionnaireSection[]
+    definition: QuestionnaireDefinition
     defaultAreaSqm: string
     areaLimits: {
       min: number
@@ -479,7 +480,8 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   const dataElement = document.querySelector<HTMLScriptElement>('#questionnaire-data')
   const data = JSON.parse(dataElement?.textContent ?? '{}') as QuestionnaireData
-  const allQuestions = data.sections.flatMap((section) => section.questions)
+  let activeDefinition: QuestionnaireDefinition = data.definition
+  let allQuestions = questionnaireQuestions(activeDefinition)
   const configStatus = document.querySelector<HTMLElement>('[data-config-status]')
   const summaryAreas = document.querySelectorAll<HTMLElement>('[data-summary-area]')
   const summaryTypes = document.querySelectorAll<HTMLElement>('[data-summary-type]')
@@ -564,6 +566,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       setWizardStatus('На этом устройстве найден начатый опросник.', 'ready')
     }
 
+    await loadPublicQuestionnaireDefinition()
     await loadPublicConfig()
     render()
   }
@@ -764,6 +767,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       storeQuestionnaireResume(parsed.questionnaire.publicToken)
       pendingStoredResume = readStoredQuestionnaireResume()
       setWizardStatus('Открыт сохраненный опросник.', 'ready')
+      render()
     } catch {
       setWizardStatus('Не удалось восстановить сохраненный опросник.', 'error')
       clearStoredQuestionnaireResume()
@@ -817,6 +821,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     mode: 'first-unanswered' | 'preserve' = 'preserve',
   ) {
     session = nextSession
+    applyQuestionnaireDefinition(nextSession.definition)
     if (mode === 'preserve') {
       clampCurrentQuestionIndex()
       return
@@ -824,6 +829,11 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     const nextIndex = firstUnansweredQuestionIndex()
     currentQuestionIndex = nextIndex === -1 ? currentQuestionIndex : nextIndex
     clampCurrentQuestionIndex()
+  }
+
+  function applyQuestionnaireDefinition(definition: QuestionnaireDefinition) {
+    activeDefinition = definition
+    allQuestions = questionnaireQuestions(definition)
   }
 
   function renderStaticShell() {
@@ -1202,7 +1212,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   function currentSection() {
     return activeSections().find((section) =>
       section.questions.some((question) => question.id === currentQuestion().id),
-    ) ?? activeSections()[0] ?? data.sections[0]
+    ) ?? activeSections()[0] ?? currentDefinition().sections[0]
   }
 
   function firstUnansweredQuestionIndex() {
@@ -1212,17 +1222,25 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   function activeQuestions() {
-    return getQuestionnaireActiveQuestions(session?.answers ?? [])
+    return getQuestionnaireActiveQuestions(session?.answers ?? [], currentDefinition())
   }
 
   function activeSections() {
-    return getQuestionnaireActiveSections(session?.answers ?? [])
+    return getQuestionnaireActiveSections(session?.answers ?? [], currentDefinition())
   }
 
   function visibleQuestionOptions(question: QuestionnaireQuestion) {
-    return getQuestionnaireActiveOptions(question, session?.answers ?? []).filter(
+    return getQuestionnaireActiveOptions(question, session?.answers ?? [], currentDefinition()).filter(
       (option) => option.id !== 'UNKNOWN' && !/пока не/i.test(option.label),
     )
+  }
+
+  function currentDefinition() {
+    return session?.definition ?? activeDefinition
+  }
+
+  function questionnaireQuestions(definition: QuestionnaireDefinition) {
+    return definition.sections.flatMap((section) => section.questions)
   }
 
   function answersByQuestionId(options: { includeInactive?: boolean } = {}) {
@@ -1320,6 +1338,26 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     return { valid: true, canonical }
   }
 
+  async function loadPublicQuestionnaireDefinition() {
+    if (!apiBaseUrl) return
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/questionnaire-definition`, {
+        headers: { Accept: 'application/json' },
+      })
+
+      if (!response.ok) throw new Error(`Questionnaire definition request failed: ${response.status}`)
+
+      const payload = publicQuestionnaireDefinitionResponseSchema.parse(await response.json())
+      applyQuestionnaireDefinition(payload.questionnaireDefinition)
+      if (payload.questionnaireDefinition.status === 'static_fallback') {
+        setWizardStatus('Открыта резервная опубликованная версия опросника.', 'ready')
+      }
+    } catch {
+      setWizardStatus('Открыта резервная версия опросника. После старта ответы сохранятся в актуальной backend-версии.', 'ready')
+    }
+  }
+
   function questionnaireObjectName() {
     const comment = objectNameInput?.value.trim() ?? ''
     const base = `Подробный опросник. Тип проекта: ${projectTypeLabels[selectedProjectType]}`
@@ -1386,9 +1424,8 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
     const phone = validatePublicContactPhone(clientPhone).normalized
     const name = clientName.trim().toLowerCase()
-    if (stored.clientPhone && phone && stored.clientPhone === phone) return stored
-    if (stored.clientName && stored.clientName === name) return stored
-    return null
+    if (!stored.clientPhone || !stored.clientName || !phone) return null
+    return stored.clientPhone === phone && stored.clientName === name ? stored : null
   }
 
   function clearStoredQuestionnaireResume() {
@@ -1437,7 +1474,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     if (status === 400) return 'Проверьте поля формы.'
     if (status === 404) return 'Сохраненный опросник не найден.'
     if (status === 409 && isDuplicateQuestionnairePayload(payload)) {
-      return 'Похоже, опросник уже есть. Откройте ссылку из Telegram/предыдущего сообщения или запросите новую ссылку.'
+      return 'Похоже, опросник уже создан. Используйте старую ссылку, Telegram-сообщение или обратитесь к менеджеру.'
     }
     if (status === 409) return 'Выбранные разделы изменились. Вернитесь к калькулятору и повторите старт.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'

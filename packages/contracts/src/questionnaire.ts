@@ -28,6 +28,16 @@ export type QuestionnaireSection = {
   isLegacy?: boolean
 }
 
+export type QuestionnaireDefinition = {
+  version: string
+  sourceWorkbook: string
+  sourceWorksheet: string
+  sourceBrief: string
+  sourceUpdatedAt: string
+  sourcePolicy: string
+  sections: readonly QuestionnaireSection[]
+}
+
 export type QuestionnaireVisibilityRule =
   | {
       never: true
@@ -45,6 +55,8 @@ export type QuestionnaireVisibilityRule =
       any: readonly QuestionnaireVisibilityRule[]
     }
 
+export type QuestionnaireDefinitionStatus = 'published' | 'static_fallback'
+
 const yesNoOptions = [
   { id: 'yes', label: 'да' },
   { id: 'no', label: 'нет' },
@@ -55,6 +67,106 @@ const yesNoUnknownOptions = [
   { id: 'NO', label: 'Нет' },
   { id: 'UNKNOWN', label: 'Пока не знаю' },
 ] as const
+
+const questionnaireIdSchema = z.string().trim().min(1).max(120)
+const questionnaireTextSchema = (max: number) => z.string().trim().min(1).max(max)
+const optionalQuestionnaireHintSchema = z.union([questionnaireTextSchema(500), z.null()])
+
+export const questionnaireVisibilityRuleSchema: z.ZodType<QuestionnaireVisibilityRule> = z.lazy(() =>
+  z.union([
+    z.object({ never: z.literal(true) }).strict(),
+    z.object({
+      questionId: questionnaireIdSchema,
+      equals: z.array(z.string().trim().min(1).max(120)).optional(),
+      notEquals: z.array(z.string().trim().min(1).max(120)).optional(),
+      exists: z.literal(true).optional(),
+    }).strict(),
+    z.object({
+      all: z.array(questionnaireVisibilityRuleSchema).min(1),
+    }).strict(),
+    z.object({
+      any: z.array(questionnaireVisibilityRuleSchema).min(1),
+    }).strict(),
+  ]),
+)
+
+export const questionnaireOptionSchema = z.object({
+  id: questionnaireIdSchema,
+  label: questionnaireTextSchema(300),
+  hint: questionnaireTextSchema(500).optional(),
+  showIf: questionnaireVisibilityRuleSchema.optional(),
+}).strict()
+
+export const questionnaireQuestionSchema = z.object({
+  id: questionnaireIdSchema,
+  prompt: questionnaireTextSchema(700),
+  sourceRow: z.number().int().positive(),
+  options: z.array(questionnaireOptionSchema).optional(),
+  showIf: questionnaireVisibilityRuleSchema.optional(),
+  isLegacy: z.boolean().optional(),
+}).strict()
+
+export const questionnaireSectionSchema = z.object({
+  id: questionnaireIdSchema,
+  title: questionnaireTextSchema(200),
+  sourceRows: z.array(z.number().int().positive()),
+  questions: z.array(questionnaireQuestionSchema).min(1),
+  isLegacy: z.boolean().optional(),
+}).strict()
+
+export const questionnaireDefinitionSchema = z.object({
+  version: questionnaireTextSchema(120),
+  sourceWorkbook: questionnaireTextSchema(500),
+  sourceWorksheet: questionnaireTextSchema(300),
+  sourceBrief: questionnaireTextSchema(500),
+  sourceUpdatedAt: questionnaireTextSchema(40),
+  sourcePolicy: questionnaireTextSchema(1_000),
+  sections: z.array(questionnaireSectionSchema).min(1),
+}).strict()
+
+export const questionnaireDefinitionRecordSchema = questionnaireDefinitionSchema.extend({
+  status: z.enum(['published', 'static_fallback']),
+  definitionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  publishedAt: z.string().datetime().nullable(),
+  updatedAt: z.string().datetime(),
+}).strict()
+
+const questionnaireSectionTitleEditSchema = z.object({
+  target: z.literal('section'),
+  sectionId: questionnaireIdSchema,
+  title: questionnaireTextSchema(200),
+}).strict()
+
+const questionnaireQuestionPromptEditSchema = z.object({
+  target: z.literal('question'),
+  questionId: questionnaireIdSchema,
+  prompt: questionnaireTextSchema(700),
+}).strict()
+
+const questionnaireOptionTextEditSchema = z.object({
+  target: z.literal('option'),
+  questionId: questionnaireIdSchema,
+  optionId: questionnaireIdSchema,
+  label: questionnaireTextSchema(300).optional(),
+  hint: optionalQuestionnaireHintSchema.optional(),
+}).strict().refine(
+  (value) => value.label !== undefined || value.hint !== undefined,
+  'At least label or hint is required',
+)
+
+export const questionnaireDefinitionTextEditSchema = z.discriminatedUnion('target', [
+  questionnaireSectionTitleEditSchema,
+  questionnaireQuestionPromptEditSchema,
+  questionnaireOptionTextEditSchema,
+])
+
+export const questionnaireDefinitionPatchRequestSchema = z.object({
+  edits: z.array(questionnaireDefinitionTextEditSchema).min(1).max(50),
+}).strict()
+
+export const questionnaireDefinitionResponseSchema = z.object({
+  questionnaireDefinition: questionnaireDefinitionRecordSchema,
+})
 
 const hiddenLegacyQuestion = { never: true } as const
 const envelopeNeededRule = { questionId: 'OBJ_DOCS', equals: ['PARTIAL', 'NONE'] } as const
@@ -1057,15 +1169,7 @@ export const technicalQuestionnaireDefinition = {
       ],
     },
   ],
-} as const satisfies {
-  version: string
-  sourceWorkbook: string
-  sourceWorksheet: string
-  sourceBrief: string
-  sourceUpdatedAt: string
-  sourcePolicy: string
-  sections: readonly QuestionnaireSection[]
-}
+} as const satisfies QuestionnaireDefinition
 
 export const technicalQuestionnaireSections =
   technicalQuestionnaireDefinition.sections as readonly QuestionnaireSection[]
@@ -1078,7 +1182,6 @@ export const technicalQuestionnaireQuestionIds = technicalQuestionnaireQuestions
 )
 
 const questionById = new Map(technicalQuestionnaireQuestions.map((question) => [question.id, question]))
-const questionOrder = new Map(technicalQuestionnaireQuestions.map((question, index) => [question.id, index]))
 
 const optionalTrimmedTextSchema = (max: number) =>
   z.preprocess((value) => {
@@ -1199,7 +1302,9 @@ export const questionnaireProgressSchema = z.object({
 
 export const publicQuestionnaireSessionSchema = z.object({
   publicToken: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
-  questionnaireVersion: z.literal(QUESTIONNAIRE_VERSION),
+  questionnaireVersion: z.string().min(1),
+  definitionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  definition: questionnaireDefinitionRecordSchema,
   progress: questionnaireProgressSchema,
   calculation: z.object({
     areaSqm: z.string(),
@@ -1219,7 +1324,9 @@ const adminQuestionnaireAnswerSchema = questionnaireStoredAnswerSchema.extend({
 
 export const adminQuestionnaireDraftSchema = z.object({
   id: z.string().uuid(),
-  questionnaireVersion: z.literal(QUESTIONNAIRE_VERSION),
+  questionnaireVersion: z.string().min(1),
+  definitionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  resumeUrl: z.string().url().nullable(),
   source: z.string().nullable(),
   definitionSource: z.string(),
   definitionUpdatedAt: z.string(),
@@ -1250,7 +1357,8 @@ export const adminQuestionnaireDraftSchema = z.object({
 })
 
 export const adminQuestionnaireSummarySchema = z.object({
-  questionnaireVersion: z.literal(QUESTIONNAIRE_VERSION),
+  questionnaireVersion: z.string().min(1),
+  definitionHash: z.string().regex(/^[a-f0-9]{64}$/),
   answeredCount: z.number().int().nonnegative(),
   totalQuestions: z.number().int().positive(),
   completionPercent: z.number().int().min(0).max(100),
@@ -1273,30 +1381,45 @@ export type QuestionnaireStoredAnswer = z.infer<typeof questionnaireStoredAnswer
 export type QuestionnaireStartRequest = z.infer<typeof questionnaireStartRequestSchema>
 export type QuestionnaireAnswersPatchRequest = z.infer<typeof questionnaireAnswersPatchRequestSchema>
 export type QuestionnaireProgress = z.infer<typeof questionnaireProgressSchema>
+export type QuestionnaireDefinitionRecord = z.infer<typeof questionnaireDefinitionRecordSchema>
+export type QuestionnaireDefinitionTextEdit = z.infer<typeof questionnaireDefinitionTextEditSchema>
+export type QuestionnaireDefinitionPatchRequest = z.infer<typeof questionnaireDefinitionPatchRequestSchema>
+export type QuestionnaireDefinitionResponse = z.infer<typeof questionnaireDefinitionResponseSchema>
 export type PublicQuestionnaireSession = z.infer<typeof publicQuestionnaireSessionSchema>
 export type AdminQuestionnaireDraft = z.infer<typeof adminQuestionnaireDraftSchema>
 export type AdminQuestionnaireSummary = z.infer<typeof adminQuestionnaireSummarySchema>
 
-export function getQuestionnaireQuestion(questionId: string) {
-  return questionById.get(questionId) ?? null
+export function getQuestionnaireDefinitionQuestions(
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+) {
+  return definition.sections.flatMap((section) => section.questions)
+}
+
+export function getQuestionnaireQuestion(
+  questionId: string,
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+) {
+  return getQuestionnaireDefinitionQuestions(definition).find((question) => question.id === questionId) ?? null
 }
 
 export function getQuestionnaireActiveQuestions(
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ) {
-  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers)
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition)
 
-  return technicalQuestionnaireQuestions.filter((question) =>
+  return getQuestionnaireDefinitionQuestions(definition).filter((question) =>
     isQuestionnaireQuestionActive(question, answersByQuestionId),
   )
 }
 
 export function getQuestionnaireActiveSections(
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ) {
-  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers)
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition)
 
-  return technicalQuestionnaireSections
+  return definition.sections
     .map((section) => ({
       ...section,
       questions: section.questions.filter((question) =>
@@ -1309,8 +1432,9 @@ export function getQuestionnaireActiveSections(
 export function getQuestionnaireActiveOptions(
   question: QuestionnaireQuestion,
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ) {
-  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers)
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition)
 
   return (question.options ?? []).filter((option) =>
     isQuestionnaireVisibilityRuleActive(option.showIf, answersByQuestionId),
@@ -1319,23 +1443,26 @@ export function getQuestionnaireActiveOptions(
 
 export function markQuestionnaireAnswersActivity<T extends QuestionnaireStoredAnswer>(
   answers: readonly T[],
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ) {
-  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers).map((question) => question.id))
+  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers, definition).map((question) => question.id))
 
   return sortQuestionnaireAnswerRecords(
     answers.map((answer) => ({
       ...answer,
       isActive: activeQuestionIds.has(answer.questionId),
     })),
+    definition,
   )
 }
 
 export function calculateQuestionnaireProgress(
   answers: readonly QuestionnaireStoredAnswer[],
   updatedAtIso: string,
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ): QuestionnaireProgress {
-  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers).map((question) => question.id))
-  const activeAnswers = markQuestionnaireAnswersActivity(answers).filter(
+  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers, definition).map((question) => question.id))
+  const activeAnswers = markQuestionnaireAnswersActivity(answers, definition).filter(
     (answer) => answer.isActive && activeQuestionIds.has(answer.questionId),
   )
   const uniqueAnswers = new Map(activeAnswers.map((answer) => [answer.questionId, answer]))
@@ -1409,14 +1536,16 @@ function questionnaireAnswerMap(
 
 function questionnaireEffectiveAnswerMap(
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+  definition: QuestionnaireDefinition,
 ) {
   const sourceAnswersByQuestionId = questionnaireAnswerMap(answers)
   let effectiveAnswersByQuestionId = new Map<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>()
+  const questions = getQuestionnaireDefinitionQuestions(definition)
 
-  for (let pass = 0; pass <= technicalQuestionnaireQuestions.length; pass += 1) {
+  for (let pass = 0; pass <= questions.length; pass += 1) {
     const nextAnswersByQuestionId = new Map<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>()
 
-    for (const question of technicalQuestionnaireQuestions) {
+    for (const question of questions) {
       if (!isQuestionnaireQuestionActive(question, effectiveAnswersByQuestionId)) continue
 
       const answer = sourceAnswersByQuestionId.get(question.id)
@@ -1462,10 +1591,15 @@ function isQuestionnaireClarificationAnswer(answer: QuestionnaireStoredAnswer) {
 
 function sortQuestionnaireAnswerRecords<T extends Pick<QuestionnaireStoredAnswer, 'questionId'>>(
   answers: readonly T[],
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ) {
+  const order = new Map(
+    getQuestionnaireDefinitionQuestions(definition).map((question, index) => [question.id, index]),
+  )
+
   return [...answers].sort(
     (first, second) =>
-      (questionOrder.get(first.questionId) ?? Number.MAX_SAFE_INTEGER) -
-      (questionOrder.get(second.questionId) ?? Number.MAX_SAFE_INTEGER),
+      (order.get(first.questionId) ?? Number.MAX_SAFE_INTEGER) -
+      (order.get(second.questionId) ?? Number.MAX_SAFE_INTEGER),
   )
 }

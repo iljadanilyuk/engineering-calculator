@@ -7,6 +7,7 @@ import { AuthForm } from '@/components/AuthForm'
 import { BlogPostsManager } from '@/components/BlogPostsManager'
 import { LeadDetailView, LeadsManager } from '@/components/LeadsManager'
 import { ProjectCasesManager } from '@/components/ProjectCasesManager'
+import { QuestionnaireManager } from '@/components/QuestionnaireManager'
 import { ServicesManager } from '@/components/ServicesManager'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -36,6 +37,10 @@ export function ProjectCasesPage() {
 
 export function BlogPostsPage() {
   return <AdminEntry section="blog_posts" />
+}
+
+export function QuestionnairePage() {
+  return <AdminEntry section="questionnaire" />
 }
 
 export function LeadsPage() {
@@ -81,6 +86,7 @@ function AdminEntry({
       {section === 'services' && <ServicesManager />}
       {section === 'project_cases' && <ProjectCasesManager />}
       {section === 'blog_posts' && <BlogPostsManager />}
+      {section === 'questionnaire' && <QuestionnaireManager />}
       {section === 'record' && leadId && <LeadDetailView leadId={leadId} />}
     </AdminWorkspace>
   )

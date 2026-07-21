@@ -7,6 +7,7 @@ import {
   LeadDetailPage,
   LeadsPage,
   ProjectCasesPage,
+  QuestionnairePage,
   RootLayout,
   ServicesPage,
   TasksPage,
@@ -46,6 +47,12 @@ const blogPostsRoute = createRoute({
   component: BlogPostsPage,
 })
 
+const questionnaireRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/app/questionnaire',
+  component: QuestionnairePage,
+})
+
 const leadsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/leads',
@@ -70,6 +77,7 @@ const routeTree = rootRoute.addChildren([
   servicesRoute,
   projectCasesRoute,
   blogPostsRoute,
+  questionnaireRoute,
   leadsRoute,
   tasksRoute,
   leadDetailRoute,

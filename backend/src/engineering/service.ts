@@ -1,10 +1,10 @@
 import {
   EXCHANGE_RATE_SCALE,
-  QUESTIONNAIRE_VERSION,
   blogContentPlainText,
   type BlogPostCreateRequest,
   type BlogPostRecord,
   type BlogPostStatus,
+  type AdminQuestionnaireDraft,
   type BlogPostUpdateRequest,
   calculateEngineeringOffer,
   calculationResultSchema,
@@ -14,11 +14,13 @@ import {
   getQuestionnaireActiveQuestions,
   markQuestionnaireAnswersActivity,
   publicProjectExampleAssets,
+  questionnaireDefinitionPatchRequestSchema,
+  questionnaireDefinitionRecordSchema,
+  questionnaireDefinitionSchema,
   questionnaireAnswersPatchRequestSchema,
   questionnaireStartRequestSchema,
   questionnaireStoredAnswerSchema,
   technicalQuestionnaireDefinition,
-  technicalQuestionnaireSections,
   type CalculationListItem,
   type CalculationListQuery,
   type CalculationRecord,
@@ -43,8 +45,10 @@ import {
   type PublicProjectExampleRecord,
   type PublicProjectExampleRequestRecord,
   type PublicQuestionnaireSession,
+  type QuestionnaireDefinition,
+  type QuestionnaireDefinitionPatchRequest,
+  type QuestionnaireDefinitionRecord,
   type QuestionnaireAnswersPatchRequest,
-  type QuestionnaireQuestion,
   type QuestionnaireStartRequest,
   type QuestionnaireStoredAnswer,
   type ServiceCreateRequest,
@@ -52,6 +56,7 @@ import {
   type ServiceReorderRequest,
   type ServiceUpdateRequest,
   type TelegramDeliveryRecord,
+  type TelegramNotificationEventType,
 } from '@poznyak-engineering-calculator/contracts'
 import { createHash, randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
@@ -74,6 +79,7 @@ import {
 } from './proposal'
 
 const exchangeRateSettingKey = 'exchange_rate'
+const questionnaireDefinitionSettingKey = 'questionnaire_definition_published'
 const defaultLeadSource = 'public_calculator'
 const defaultProjectExampleRequestSource = 'example_request'
 const defaultQuestionnaireSource = 'public_questionnaire'
@@ -88,6 +94,7 @@ const projectExampleRequestConsentText =
 const questionnaireConsentVersion = 'pzk-questionnaire-consent-v1'
 const questionnaireConsentText =
   'Согласен на обработку имени, телефона, параметров расчета и ответов опросника для подготовки черновика технического задания и обратной связи.'
+const staticQuestionnaireDefinitionUpdatedAt = `${technicalQuestionnaireDefinition.sourceUpdatedAt}T00:00:00.000Z`
 const cyrillicSlugMap: Record<string, string> = {
   а: 'a',
   б: 'b',
@@ -143,9 +150,15 @@ const orderedTelegramDeliveryInclude = {
     createdAt: 'asc' as const,
   },
 }
+const orderedTelegramNotificationInclude = {
+  orderBy: {
+    createdAt: 'asc' as const,
+  },
+}
 const calculationDetailInclude = {
   proposals: orderedProposalInclude,
   telegramDeliveries: orderedTelegramDeliveryInclude,
+  telegramNotifications: orderedTelegramNotificationInclude,
   questionnaire: true,
 }
 const projectExampleRequestInclude = {
@@ -167,6 +180,7 @@ type ProjectExampleRow = Awaited<ReturnType<DbClient['projectExample']['findFirs
 type ProjectExampleRequestRow = Awaited<ReturnType<DbClient['projectExampleRequest']['findFirstOrThrow']>>
 type BlogPostRow = Awaited<ReturnType<DbClient['blogPost']['findFirstOrThrow']>>
 type TelegramDeliveryRow = Awaited<ReturnType<DbClient['telegramDelivery']['findFirstOrThrow']>>
+type TelegramNotificationRow = Awaited<ReturnType<DbClient['telegramNotification']['findFirstOrThrow']>>
 type ProposalRow = {
   id: string
   publicToken: string
@@ -184,6 +198,7 @@ type CalculationWithProposals = CalculationRow & { proposals: ProposalRow[] }
 type CalculationWithQuestionnaire = CalculationRow & {
   proposals: ProposalRow[]
   telegramDeliveries?: TelegramDeliveryRow[]
+  telegramNotifications?: TelegramNotificationRow[]
   questionnaire: CalculationQuestionnaireRow | null
 }
 type ProjectExampleRequestWithDeliveries = ProjectExampleRequestRow & {
@@ -215,18 +230,6 @@ type EngineeringDataServiceOptions = {
 }
 
 const projectExampleAssetBaseUrl = new URL('../../assets/project-examples/', import.meta.url)
-const questionnaireQuestions = technicalQuestionnaireSections.flatMap((section) =>
-  section.questions.map((question) => ({
-    ...question,
-    sectionId: section.id,
-  })),
-)
-const questionnaireQuestionOrder: ReadonlyMap<string, number> = new Map(
-  questionnaireQuestions.map((question, index) => [question.id, index]),
-)
-const questionnaireQuestionById: ReadonlyMap<string, QuestionnaireQuestion & { sectionId: string }> = new Map(
-  questionnaireQuestions.map((question) => [question.id, question]),
-)
 
 export class EngineeringDataService {
   constructor(
@@ -258,6 +261,33 @@ export class EngineeringDataService {
     })
 
     return services.map(serviceToRecord)
+  }
+
+  async getQuestionnaireDefinition() {
+    return this.activeQuestionnaireDefinition()
+  }
+
+  async updateQuestionnaireDefinition(input: QuestionnaireDefinitionPatchRequest) {
+    const parsedInput = questionnaireDefinitionPatchRequestSchema.parse(input)
+    const current = await this.activeQuestionnaireDefinition()
+    const nextDefinition = applyQuestionnaireDefinitionTextEdits(current, parsedInput)
+    const setting = await this.db.appSetting.upsert({
+      where: { key: questionnaireDefinitionSettingKey },
+      create: {
+        key: questionnaireDefinitionSettingKey,
+        value: toJson(nextDefinition),
+      },
+      update: {
+        value: toJson(nextDefinition),
+      },
+    })
+
+    return questionnaireDefinitionRecord(
+      questionnaireDefinitionFromJson(setting.value),
+      'published',
+      setting.updatedAt,
+      setting.createdAt,
+    )
   }
 
   async createService(input: ServiceCreateRequest) {
@@ -540,7 +570,7 @@ export class EngineeringDataService {
         },
         persisted.proposals,
       )
-      await this.notifyLeadSubmitted(savedCalculation)
+      await this.notifyOperationalTelegram('lead_submitted', savedCalculation)
 
       return {
         calculation: savedCalculation,
@@ -756,13 +786,18 @@ export class EngineeringDataService {
       throw new AppError(
         409,
         'CONFLICT',
-        'A questionnaire lead already exists for this phone and calculation. Use the original resume link or change the contact details.',
+        'Опросник уже создан для этого телефона и расчета. Используйте старую ссылку, Telegram-сообщение или обратитесь к менеджеру.',
       )
     }
 
+    const activeDefinition = await this.activeQuestionnaireDefinition()
     const publicToken = await this.createUniqueCalculationToken()
     const consentAcceptedAt = new Date()
-    const initialAnswers = storedQuestionnaireAnswers(parsedInput.initialAnswers ?? [], consentAcceptedAt)
+    const initialAnswers = storedQuestionnaireAnswers(
+      parsedInput.initialAnswers ?? [],
+      consentAcceptedAt,
+      activeDefinition,
+    )
 
     try {
       const persisted = await this.db.$transaction(async (tx) => {
@@ -805,7 +840,9 @@ export class EngineeringDataService {
             calculationId: row.id,
             idempotencyKey: parsedInput.idempotencyKey,
             requestFingerprintHash,
-            questionnaireVersion: QUESTIONNAIRE_VERSION,
+            questionnaireVersion: activeDefinition.version,
+            questionnaireDefinitionSnapshot: toJson(activeDefinition),
+            questionnaireDefinitionHash: activeDefinition.definitionHash,
             answersSnapshot: toJson(initialAnswers),
             source,
             referrer,
@@ -820,6 +857,18 @@ export class EngineeringDataService {
 
         return { row, questionnaire }
       })
+      const savedCalculation = calculationToRecord(
+        {
+          ...persisted.row,
+          proposals: [],
+          telegramDeliveries: [],
+          telegramNotifications: [],
+          questionnaire: persisted.questionnaire,
+        },
+        [],
+        this.options.publicWebsiteUrl,
+      )
+      await this.notifyOperationalTelegram('questionnaire_started', savedCalculation)
 
       return {
         questionnaire: questionnaireToPublicSession(persisted.row, persisted.questionnaire),
@@ -841,7 +890,7 @@ export class EngineeringDataService {
           throw new AppError(
             409,
             'CONFLICT',
-            'A questionnaire lead already exists for this phone and calculation. Use the original resume link or change the contact details.',
+            'Опросник уже создан для этого телефона и расчета. Используйте старую ссылку, Telegram-сообщение или обратитесь к менеджеру.',
           )
         }
       }
@@ -900,10 +949,21 @@ export class EngineeringDataService {
       throw new AppError(404, 'NOT_FOUND', 'Questionnaire session not found')
     }
 
+    const definition = questionnaireDefinitionForSession(calculation.questionnaire)
+    const existingAnswers = questionnaireAnswersFromJson(
+      calculation.questionnaire.answersSnapshot,
+      definition,
+    )
+    const previousProgress = calculateQuestionnaireProgress(
+      existingAnswers,
+      calculation.questionnaire.updatedAt.toISOString(),
+      definition,
+    )
     const answers = mergeStoredQuestionnaireAnswers(
-      questionnaireAnswersFromJson(calculation.questionnaire.answersSnapshot),
+      existingAnswers,
       parsedInput.answers,
       new Date(),
+      definition,
     )
     const questionnaire = await this.db.calculationQuestionnaire.update({
       where: { calculationId: calculation.id },
@@ -911,6 +971,19 @@ export class EngineeringDataService {
         answersSnapshot: toJson(answers),
       },
     })
+    const nextProgress = calculateQuestionnaireProgress(
+      questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition),
+      questionnaire.updatedAt.toISOString(),
+      definition,
+    )
+
+    if (!previousProgress.completedAt && nextProgress.completedAt) {
+      const refreshed = await this.findQuestionnaireCalculationByPublicToken(publicToken)
+      await this.notifyOperationalTelegram(
+        'questionnaire_completed',
+        calculationToRecord(refreshed, refreshed.proposals, this.options.publicWebsiteUrl),
+      )
+    }
 
     return questionnaireToPublicSession(calculation, questionnaire)
   }
@@ -1039,7 +1112,7 @@ export class EngineeringDataService {
         throw error
       })
 
-    return calculationToRecord(calculation, calculation.proposals)
+    return calculationToRecord(calculation, calculation.proposals, this.options.publicWebsiteUrl)
   }
 
   async listCalculations(input: CalculationListQuery) {
@@ -1067,7 +1140,7 @@ export class EngineeringDataService {
 
     return {
       calculations: calculations.map((calculation) =>
-        calculationToListItem(calculation, calculation.proposals),
+        calculationToListItem(calculation, calculation.proposals, this.options.publicWebsiteUrl),
       ),
       summary: {
         totalCount,
@@ -1106,7 +1179,7 @@ export class EngineeringDataService {
     }
 
     if (Object.keys(data).length === 0) {
-      return calculationToRecord(existing, existing.proposals)
+      return calculationToRecord(existing, existing.proposals, this.options.publicWebsiteUrl)
     }
 
     const calculation = await this.db.calculation.update({
@@ -1115,7 +1188,7 @@ export class EngineeringDataService {
       include: calculationDetailInclude,
     })
 
-    return calculationToRecord(calculation, calculation.proposals)
+    return calculationToRecord(calculation, calculation.proposals, this.options.publicWebsiteUrl)
   }
 
   async getPublicProposalHtml(publicToken: string) {
@@ -1582,6 +1655,28 @@ export class EngineeringDataService {
     return this.options.publicApiUrl ?? 'http://localhost:3000'
   }
 
+  private async activeQuestionnaireDefinition(): Promise<QuestionnaireDefinitionRecord> {
+    const setting = await this.db.appSetting.findUnique({
+      where: { key: questionnaireDefinitionSettingKey },
+    })
+
+    if (!setting) {
+      return questionnaireDefinitionRecord(
+        committedQuestionnaireDefinition(),
+        'static_fallback',
+        new Date(staticQuestionnaireDefinitionUpdatedAt),
+        null,
+      )
+    }
+
+    return questionnaireDefinitionRecord(
+      questionnaireDefinitionFromJson(setting.value),
+      'published',
+      setting.updatedAt,
+      setting.createdAt,
+    )
+  }
+
   private async createUniqueCalculationToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const token = randomToken()
@@ -1729,14 +1824,65 @@ export class EngineeringDataService {
     return Object.fromEntries(entries) as Record<CalculationStatus, number>
   }
 
-  private async notifyLeadSubmitted(calculation: CalculationRecord) {
+  private async notifyOperationalTelegram(
+    eventType: TelegramNotificationEventType,
+    calculation: CalculationRecord,
+  ) {
     if (!this.leadNotifier) return
 
+    const claim = await this.db.telegramNotification
+      .create({
+        data: {
+          calculationId: calculation.id,
+          eventType,
+          status: 'pending',
+          statusMessage: 'Telegram notification is being sent',
+          attemptCount: 1,
+        },
+      })
+      .catch((error: unknown) => {
+        if (isPrismaUniqueConstraint(error)) return null
+        throw error
+      })
+
+    if (!claim) return
+
     try {
-      await this.leadNotifier.notifyLeadSubmitted({ calculation })
+      const result = await this.sendOperationalTelegramEvent(eventType, calculation)
+      await this.db.telegramNotification.update({
+        where: { id: claim.id },
+        data: {
+          status: result.status,
+          statusMessage: result.status === 'sent'
+            ? 'Telegram notification sent'
+            : 'Telegram notification is not configured',
+          sentAt: result.status === 'sent' ? new Date() : null,
+        },
+      })
     } catch (error) {
-      console.error('Lead notification failed:', safeErrorMessage(error))
+      const statusMessage = safeTelegramDeliveryErrorMessage(error)
+      await this.db.telegramNotification.update({
+        where: { id: claim.id },
+        data: {
+          status: 'failed',
+          statusMessage,
+        },
+      }).catch(() => undefined)
+      console.error('Telegram notification failed:', statusMessage)
     }
+  }
+
+  private sendOperationalTelegramEvent(
+    eventType: TelegramNotificationEventType,
+    calculation: CalculationRecord,
+  ) {
+    if (eventType === 'questionnaire_started') {
+      return this.leadNotifier!.notifyQuestionnaireStarted({ calculation })
+    }
+    if (eventType === 'questionnaire_completed') {
+      return this.leadNotifier!.notifyQuestionnaireCompleted({ calculation })
+    }
+    return this.leadNotifier!.notifyLeadSubmitted({ calculation })
   }
 }
 
@@ -1887,9 +2033,11 @@ function calculationToRecord(
   calculation: CalculationRow & {
     proposals?: ProposalRow[]
     telegramDeliveries?: TelegramDeliveryRow[]
+    telegramNotifications?: TelegramNotificationRow[]
     questionnaire?: CalculationQuestionnaireRow | null
   },
   proposals: ProposalRow[],
+  publicWebsiteUrl?: string,
 ): CalculationRecord {
   const calculationSnapshot = calculationResultSchema.parse(calculation.calculationSnapshot)
   const exchangeRate = calculationSnapshot.exchangeRate
@@ -1931,8 +2079,13 @@ function calculationToRecord(
     consentUserAgent: calculation.consentUserAgent,
     proposalArtifacts: proposals.map(proposalToArtifactReference),
     telegramDeliveries: (calculation.telegramDeliveries ?? []).map(telegramDeliveryToRecord),
+    telegramNotifications: (calculation.telegramNotifications ?? []).map(telegramNotificationToRecord),
     questionnaire: calculation.questionnaire
-      ? questionnaireToAdminDraft(calculation.questionnaire)
+      ? questionnaireToAdminDraft(
+          calculation.questionnaire,
+          calculation.publicToken,
+          publicWebsiteUrl,
+        )
       : null,
     createdAt: calculation.createdAt.toISOString(),
     updatedAt: calculation.updatedAt.toISOString(),
@@ -1942,11 +2095,14 @@ function calculationToRecord(
 function calculationToListItem(
   calculation: CalculationRow & {
     proposals?: ProposalRow[]
+    telegramDeliveries?: TelegramDeliveryRow[]
+    telegramNotifications?: TelegramNotificationRow[]
     questionnaire?: CalculationQuestionnaireRow | null
   },
   proposals: ProposalRow[],
+  publicWebsiteUrl?: string,
 ): CalculationListItem {
-  const record = calculationToRecord(calculation, proposals)
+  const record = calculationToRecord(calculation, proposals, publicWebsiteUrl)
 
   return {
     id: record.id,
@@ -1964,6 +2120,7 @@ function calculationToListItem(
     source: record.source,
     proposalArtifacts: record.proposalArtifacts,
     telegramDeliveries: record.telegramDeliveries,
+    telegramNotifications: record.telegramNotifications,
     questionnaire: record.questionnaire
       ? questionnaireToAdminSummary(calculation.questionnaire ?? null)
       : null,
@@ -2164,6 +2321,21 @@ function telegramDeliveryToRecord(delivery: TelegramDeliveryRow): TelegramDelive
   }
 }
 
+function telegramNotificationToRecord(
+  notification: TelegramNotificationRow,
+): CalculationRecord['telegramNotifications'][number] {
+  return {
+    id: notification.id,
+    eventType: notification.eventType,
+    status: notification.status,
+    statusMessage: notification.statusMessage,
+    attemptCount: notification.attemptCount,
+    sentAt: notification.sentAt?.toISOString() ?? null,
+    createdAt: notification.createdAt.toISOString(),
+    updatedAt: notification.updatedAt.toISOString(),
+  }
+}
+
 function publicTelegramDelivery(
   deliveries: readonly TelegramDeliveryRow[] | undefined,
   telegramBotUsername?: string,
@@ -2253,12 +2425,15 @@ function questionnaireToPublicSession(
   questionnaire: CalculationQuestionnaireRow,
 ): PublicQuestionnaireSession {
   const calculationSnapshot = calculationResultSchema.parse(calculation.calculationSnapshot)
-  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
+  const definition = questionnaireDefinitionForSession(questionnaire)
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition)
 
   return {
     publicToken: calculation.publicToken,
-    questionnaireVersion: QUESTIONNAIRE_VERSION,
-    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString()),
+    questionnaireVersion: questionnaire.questionnaireVersion,
+    definitionHash: definition.definitionHash,
+    definition,
+    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString(), definition),
     calculation: {
       areaSqm: calculationSnapshot.areaSqm,
       selectedServiceIds: calculationSnapshot.selectedServiceIds,
@@ -2272,25 +2447,34 @@ function questionnaireToPublicSession(
   }
 }
 
-function questionnaireToAdminDraft(questionnaire: CalculationQuestionnaireRow): CalculationRecord['questionnaire'] {
-  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
+function questionnaireToAdminDraft(
+  questionnaire: CalculationQuestionnaireRow,
+  publicToken: string,
+  publicWebsiteUrl?: string,
+): AdminQuestionnaireDraft {
+  const definition = questionnaireDefinitionForSession(questionnaire)
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition)
   const answersByQuestionId = new Map(answers.map((answer) => [answer.questionId, answer]))
-  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers).map((question) => question.id))
+  const activeQuestionIds = new Set(
+    getQuestionnaireActiveQuestions(answers, definition).map((question) => question.id),
+  )
 
   return {
     id: questionnaire.id,
-    questionnaireVersion: QUESTIONNAIRE_VERSION,
+    questionnaireVersion: questionnaire.questionnaireVersion,
+    definitionHash: definition.definitionHash,
+    resumeUrl: questionnaireResumeUrl(publicToken, publicWebsiteUrl),
     source: questionnaire.source,
-    definitionSource: technicalQuestionnaireDefinition.sourceBrief,
-    definitionUpdatedAt: technicalQuestionnaireDefinition.sourceUpdatedAt,
-    sourcePolicy: technicalQuestionnaireDefinition.sourcePolicy,
-    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString()),
+    definitionSource: definition.sourceBrief,
+    definitionUpdatedAt: definition.sourceUpdatedAt,
+    sourcePolicy: definition.sourcePolicy,
+    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString(), definition),
     consentAcceptedAt: questionnaire.consentAcceptedAt?.toISOString() ?? null,
     consentVersion: questionnaire.consentVersion,
     consentText: questionnaire.consentText,
     createdAt: questionnaire.createdAt.toISOString(),
     updatedAt: questionnaire.updatedAt.toISOString(),
-    sections: technicalQuestionnaireSections.map((section) => ({
+    sections: definition.sections.map((section) => ({
       id: section.id,
       title: section.title,
       questions: section.questions.map((question) => {
@@ -2303,11 +2487,11 @@ function questionnaireToAdminDraft(questionnaire: CalculationQuestionnaireRow): 
           sourceRow: question.sourceRow,
           isActive,
           isLegacy: question.isLegacy ?? section.isLegacy ?? false,
-          options: [...getQuestionnaireActiveOptions(question, answers)],
+          options: [...getQuestionnaireActiveOptions(question, answers, definition)],
           answer: answer
             ? {
                 ...answer,
-                label: questionnaireAnswerLabel(question.id, answer),
+                label: questionnaireAnswerLabel(question.id, answer, definition),
               }
             : null,
         }
@@ -2321,11 +2505,13 @@ function questionnaireToAdminSummary(
 ): CalculationListItem['questionnaire'] {
   if (!questionnaire) return null
 
-  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
-  const progress = calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString())
+  const definition = questionnaireDefinitionForSession(questionnaire)
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition)
+  const progress = calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString(), definition)
 
   return {
-    questionnaireVersion: QUESTIONNAIRE_VERSION,
+    questionnaireVersion: questionnaire.questionnaireVersion,
+    definitionHash: definition.definitionHash,
     answeredCount: progress.answeredCount,
     totalQuestions: progress.totalQuestions,
     completionPercent: progress.completionPercent,
@@ -2335,13 +2521,17 @@ function questionnaireToAdminSummary(
   }
 }
 
-function questionnaireAnswersFromJson(value: Prisma.JsonValue): QuestionnaireStoredAnswer[] {
-  return markQuestionnaireAnswersActivity(questionnaireStoredAnswerSchema.array().parse(value))
+function questionnaireAnswersFromJson(
+  value: Prisma.JsonValue,
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+): QuestionnaireStoredAnswer[] {
+  return markQuestionnaireAnswersActivity(questionnaireStoredAnswerSchema.array().parse(value), definition)
 }
 
 function storedQuestionnaireAnswers(
   answers: NonNullable<QuestionnaireStartRequest['initialAnswers']>,
   updatedAt: Date,
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ): QuestionnaireStoredAnswer[] {
   return markQuestionnaireAnswersActivity(sortQuestionnaireAnswers(
     answers.map((answer) => ({
@@ -2349,13 +2539,15 @@ function storedQuestionnaireAnswers(
       updatedAt: updatedAt.toISOString(),
       isActive: true,
     })),
-  ))
+    definition,
+  ), definition)
 }
 
 function mergeStoredQuestionnaireAnswers(
   existingAnswers: readonly QuestionnaireStoredAnswer[],
   nextAnswers: QuestionnaireAnswersPatchRequest['answers'],
   updatedAt: Date,
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ) {
   const answersByQuestionId = new Map(existingAnswers.map((answer) => [answer.questionId, answer]))
 
@@ -2367,23 +2559,162 @@ function mergeStoredQuestionnaireAnswers(
     })
   }
 
-  return markQuestionnaireAnswersActivity(sortQuestionnaireAnswers([...answersByQuestionId.values()]))
-}
-
-function sortQuestionnaireAnswers(answers: QuestionnaireStoredAnswer[]) {
-  return [...answers].sort(
-    (first, second) =>
-      (questionnaireQuestionOrder.get(first.questionId) ?? Number.MAX_SAFE_INTEGER) -
-      (questionnaireQuestionOrder.get(second.questionId) ?? Number.MAX_SAFE_INTEGER),
+  return markQuestionnaireAnswersActivity(
+    sortQuestionnaireAnswers([...answersByQuestionId.values()], definition),
+    definition,
   )
 }
 
-function questionnaireAnswerLabel(questionId: string, answer: QuestionnaireStoredAnswer) {
+function sortQuestionnaireAnswers(
+  answers: QuestionnaireStoredAnswer[],
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+) {
+  const order = new Map(
+    definition.sections
+      .flatMap((section) => section.questions)
+      .map((question, index) => [question.id, index]),
+  )
+
+  return [...answers].sort(
+    (first, second) =>
+      (order.get(first.questionId) ?? Number.MAX_SAFE_INTEGER) -
+      (order.get(second.questionId) ?? Number.MAX_SAFE_INTEGER),
+  )
+}
+
+function questionnaireAnswerLabel(
+  questionId: string,
+  answer: QuestionnaireStoredAnswer,
+  definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+) {
   if (answer.kind === 'custom') return answer.customText ?? null
   if (answer.kind !== 'option') return null
 
-  const question = questionnaireQuestionById.get(questionId)
+  const question = questionnaireQuestionByIdForDefinition(definition).get(questionId)
   return question?.options?.find((option) => option.id === answer.optionId)?.label ?? null
+}
+
+function questionnaireDefinitionForSession(questionnaire: CalculationQuestionnaireRow) {
+  const snapshot = questionnaire.questionnaireDefinitionSnapshot
+  if (snapshot) {
+    const parsedSnapshot = questionnaireDefinitionRecordSchema.safeParse(snapshot)
+    if (parsedSnapshot.success) return parsedSnapshot.data
+
+    const parsedDefinition = questionnaireDefinitionSchema.safeParse(snapshot)
+    if (parsedDefinition.success) {
+      return questionnaireDefinitionRecord(
+        parsedDefinition.data,
+        'published',
+        questionnaire.updatedAt,
+        questionnaire.createdAt,
+      )
+    }
+  }
+
+  return questionnaireDefinitionRecord(
+    committedQuestionnaireDefinition(),
+    'static_fallback',
+    new Date(staticQuestionnaireDefinitionUpdatedAt),
+    null,
+    questionnaire.questionnaireDefinitionHash ?? undefined,
+  )
+}
+
+function questionnaireDefinitionFromJson(value: Prisma.JsonValue) {
+  return questionnaireDefinitionSchema.parse(value)
+}
+
+function questionnaireDefinitionRecord(
+  definition: QuestionnaireDefinition,
+  status: QuestionnaireDefinitionRecord['status'],
+  updatedAt: Date,
+  publishedAt: Date | null,
+  hash = questionnaireDefinitionHash(definition),
+): QuestionnaireDefinitionRecord {
+  return questionnaireDefinitionRecordSchema.parse({
+    ...definition,
+    status,
+    definitionHash: hash,
+    publishedAt: publishedAt?.toISOString() ?? null,
+    updatedAt: updatedAt.toISOString(),
+  })
+}
+
+function committedQuestionnaireDefinition(): QuestionnaireDefinition {
+  return questionnaireDefinitionSchema.parse(technicalQuestionnaireDefinition)
+}
+
+function questionnaireDefinitionHash(definition: QuestionnaireDefinition) {
+  return createHash('sha256')
+    .update(JSON.stringify(questionnaireDefinitionSchema.parse(definition)))
+    .digest('hex')
+}
+
+function applyQuestionnaireDefinitionTextEdits(
+  current: QuestionnaireDefinitionRecord,
+  input: QuestionnaireDefinitionPatchRequest,
+): QuestionnaireDefinition {
+  const next = questionnaireDefinitionSchema.parse(questionnaireDefinitionContent(current))
+
+  for (const edit of input.edits) {
+    if (edit.target === 'section') {
+      const section = next.sections.find((item) => item.id === edit.sectionId)
+      if (!section) throw new AppError(404, 'NOT_FOUND', 'Questionnaire section not found')
+      section.title = edit.title
+      continue
+    }
+
+    if (edit.target === 'question') {
+      const question = next.sections.flatMap((section) => section.questions)
+        .find((item) => item.id === edit.questionId)
+      if (!question) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
+      question.prompt = edit.prompt
+      continue
+    }
+
+    const question = next.sections.flatMap((section) => section.questions)
+      .find((item) => item.id === edit.questionId)
+    const option = question?.options?.find((item) => item.id === edit.optionId)
+    if (!question || !option) {
+      throw new AppError(404, 'NOT_FOUND', 'Questionnaire option not found')
+    }
+    if (edit.label !== undefined) option.label = edit.label
+    if (edit.hint !== undefined) {
+      if (edit.hint === null) {
+        delete option.hint
+      } else {
+        option.hint = edit.hint
+      }
+    }
+  }
+
+  return questionnaireDefinitionSchema.parse(next)
+}
+
+function questionnaireDefinitionContent(record: QuestionnaireDefinitionRecord): QuestionnaireDefinition {
+  return {
+    version: record.version,
+    sourceWorkbook: record.sourceWorkbook,
+    sourceWorksheet: record.sourceWorksheet,
+    sourceBrief: record.sourceBrief,
+    sourceUpdatedAt: record.sourceUpdatedAt,
+    sourcePolicy: record.sourcePolicy,
+    sections: record.sections,
+  }
+}
+
+function questionnaireQuestionByIdForDefinition(definition: QuestionnaireDefinition) {
+  return new Map(
+    definition.sections
+      .flatMap((section) => section.questions)
+      .map((question) => [question.id, question]),
+  )
+}
+
+function questionnaireResumeUrl(publicToken: string, publicWebsiteUrl?: string) {
+  const base = publicWebsiteUrl?.trim()
+  if (!base) return null
+  return absoluteUrl(base, `/questionnaire/?token=${encodeURIComponent(publicToken)}`)
 }
 
 function snapshotExchangeRate(input: ExchangeRateInput): ExchangeRateSnapshot {

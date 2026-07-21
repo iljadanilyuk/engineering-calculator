@@ -1937,6 +1937,109 @@ Review log:
 - 2026-07-21 pre-task reviewer Carson, `gpt-5.5 xhigh`: flagged immutable snapshot preservation, screen-only share/PDF controls, BYN-only client output from V2 brief, legacy `commercial-proposal-v1`/HTML-only compatibility, no public IDs/storage/checksums, existing admin/Telegram URL contracts, questionnaire CTA scope risk, mobile 390px risk, and Chromium A4/page-break/BYN rendering checks. Recommendations incorporated into the implementation plan.
 - 2026-07-21 post-task reviewer Raman, `gpt-5.5 xhigh`: 9.6/10; no blockers. Non-blocking notes: ensure the hero asset is committed, consider future CI coverage for real Chromium PDF rendering, and watch very long service descriptions against the fixed two-page layout. Gate cleared.
 
+### PZK-030 - Questionnaire Admin Editor And Operational Notifications
+
+Status: Complete
+
+Goal:
+
+- Turn the public questionnaire from a mostly code-defined wizard into an operational module that can be managed from the V2 admin cabinet.
+- Make the lead flow reliable for real users who leave and return, without weakening the token/privacy boundary added in PZK-019/PZK-028.
+- Ensure both fast КП submissions and full questionnaire submissions create useful internal Telegram notifications for the approved manager group.
+
+Source / context:
+
+- PZK-019 introduced token-protected detailed questionnaire sessions and admin draft-ТЗ visibility.
+- PZK-020 introduced Telegram document delivery and existing internal lead notification for fast КП.
+- PZK-021 introduced the V2 admin shell with a disabled `Конструктор опросника` nav item.
+- PZK-028 updated the public questionnaire UX, phone mask, safe same-device resume, and heating branching logic.
+- PZK-029 made the HTML КП the primary proposal surface.
+- PZK-026 Telegram group listener remains separate and must not be mixed into this task.
+
+Required behavior:
+
+- Activate the V2 admin route for `Конструктор опросника`.
+- Admin page must show the current published questionnaire structure grouped by sections:
+  - section title;
+  - question prompt;
+  - available options and hints;
+  - branching/visibility summary;
+  - active/legacy/hidden state where applicable;
+  - version/source/update metadata.
+- Admin edits must affect the public questionnaire through a real backend-backed mechanism, not only local admin UI state.
+- For the MVP, keep question IDs, option IDs, and branching semantics stable unless a full versioned-definition migration is implemented in the same task. Text edits are allowed only when backend validation, public rendering, and existing saved answers remain compatible.
+- Public `/questionnaire/` must load the active published questionnaire definition from backend when available and safely fall back to the committed definition if the API is unavailable.
+- Saved questionnaire sessions must remain immutable enough for audit:
+  - old answers should continue to display with the definition version used when the session was created;
+  - admin draft-ТЗ should not mislabel old answers after later wording edits.
+- Continue/resume behavior:
+  - same-device local token resume remains supported;
+  - if the same name/phone is entered and a matching local token exists, continue the stored session;
+  - phone-only cross-device duplicates must not reveal tokens, answers, or the lead ID;
+  - provide client-facing Russian copy telling the user to use the original link/Telegram message or contact the manager.
+- Telegram internal notifications:
+  - fast preliminary КП submissions continue to notify the approved internal chat;
+  - new detailed questionnaire starts also notify the internal chat;
+  - questionnaire completion should notify once, with progress summary and admin lead link;
+  - Telegram failures must never block lead/questionnaire/proposal creation or answer saving;
+  - no bot tokens, bind tokens, public tokens, or personal data beyond the approved concise message should leak to frontend/admin API/logs.
+- Admin lead detail should make questionnaire state operational:
+  - visible resume/public link action for manager use, without exposing it in list rows unnecessarily;
+  - progress, skipped questions, inactive hidden-branch answers, and last updated date remain clear;
+  - Telegram notification/delivery status should be understandable.
+
+Out of scope:
+
+- PZK-026 Telegram group listener, voice/files, daily AI summaries, agreement cards, and automatic ТЗ updates from chats.
+- Full no-code branching builder if it cannot be done safely within this task.
+- Contract generation.
+- DigitalOcean/cloud/env/secret changes.
+- Codex plugin/profile changes.
+- Weak phone-only account recovery or exposing questionnaire tokens from duplicate detection.
+
+Completion notes:
+
+- Added backend-backed published questionnaire definitions with strict text-only admin edits for section titles, question prompts, option labels, and option hints. IDs, option IDs, and branching rules remain immutable in the MVP path.
+- Public `/questionnaire/` now loads the active backend definition, safely falls back to the committed static definition, and stores definition version/hash/snapshot on new questionnaire sessions.
+- Public resume keeps same-device localStorage token recovery and resumes only when the entered name/phone matches the stored local token. Cross-device duplicate-phone handling uses Russian guidance and does not return questionnaire tokens, answers, or lead IDs.
+- Internal Telegram operational notifications now cover quick КП leads, questionnaire start, and questionnaire completion once. They include concise manager-facing facts and admin lead links, do not include raw answers or public/bind/bot tokens, and record disabled/sent/failed status without blocking lead/questionnaire/proposal persistence.
+- Admin V2 now exposes `/app/questionnaire` and enables `Конструктор опросника`. Lead detail now shows questionnaire progress, skipped/missing questions, hidden-branch inactive answers, snapshot metadata, copy-resume-link action only in detail, and Telegram delivery/internal notification statuses.
+- Quick КП HTML V2 generation and detail-page `Поделиться/Сохранить PDF` actions remain intact; Telegram delivery stays optional with web-link fallback.
+
+Verification target:
+
+- `bun run typecheck`
+- `bun run test:contracts`
+- `bun run test:backend:unit`
+- `bun run test:backend:integration`
+- `bun run test:webapp`
+- `bun run build:website`
+- `bun run build:webapp`
+- Browser smoke:
+  - admin `/app/questionnaire` desktop/mobile has no horizontal overflow and can edit/publish allowed questionnaire text;
+  - public `/questionnaire/` receives the published wording and can still start/resume/save/skip;
+  - duplicate phone without local token does not expose a questionnaire;
+  - internal Telegram notification fires for fast КП, questionnaire start, and questionnaire completion when env is configured, and skips safely when env is missing.
+- `git diff --check`
+
+Verification notes:
+
+- 2026-07-21 `bun run typecheck` - passed across backend, contracts, webapp, and website.
+- 2026-07-21 `bun run test:contracts` - passed, 35 tests / 902 expects.
+- 2026-07-21 `bun run test:backend:unit` - passed, 41 tests / 178 expects.
+- 2026-07-21 `bun run test:backend:integration` - passed, 43 tests / 647 expects; includes definition snapshot preservation, duplicate privacy, fake Telegram missing-env skip, questionnaire start notification, completion-once notification, and Telegram failure non-blocking coverage.
+- 2026-07-21 `bun run test:webapp` - passed, 46 tests / 135 expects.
+- 2026-07-21 `bun run build:website` - passed; existing environment warning about `NODE_TLS_REJECT_UNAUTHORIZED=0` remained outside this task.
+- 2026-07-21 `bun run build:webapp` - passed; Vite reported existing large chunk-size warnings only.
+- 2026-07-21 browser smoke - passed for `/app/questionnaire` desktop/mobile, public `/questionnaire/` published wording, same-device resume, duplicate-phone no-token-leak response, and backend-down static fallback. Smoke used Node + system Chrome because Bun + Playwright launch hung in this Windows environment; `agent-browser` CLI was unavailable.
+- 2026-07-21 `git diff --check` - passed with Windows LF/CRLF warnings only.
+
+Review log:
+
+- 2026-07-21 pre-task reviewer Kant, `gpt-5.5 xhigh`: highlighted Boole criteria for text-only MVP, stable IDs/branching, immutable definition snapshots, no phone-only recovery, and completion notification once. Recommendations incorporated.
+- 2026-07-21 post-task reviewer Newton, `gpt-5.5 xhigh`: 9.2/10; blocker found in internal Telegram quick-КП notification because it still included a tokenized public proposal/PDF link. Fixed by removing public proposal URLs from internal operational notifications and adding unit/integration assertions that internal Telegram text does not contain `/api/public/proposals/` or proposal public tokens.
+- 2026-07-21 post-fix reviewer Herschel, `gpt-5.5 xhigh`: 9.6/10; no remaining blocking findings, completion approved. Non-blocking future note: queue operational Telegram sends if bounded inline latency becomes a product issue.
+
 ### PZK-024 - Public Documentation Screenshot Lightbox
 
 Status: Pending

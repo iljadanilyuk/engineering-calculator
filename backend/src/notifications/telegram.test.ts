@@ -31,7 +31,7 @@ describe('createTelegramLeadNotifierFromEnv', () => {
     ])
   })
 
-  test('sends a concise lead message with admin and PDF links when configured', async () => {
+  test('sends a concise lead message with admin link when configured', async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = []
     const env = baseEnv({
       TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
@@ -57,16 +57,17 @@ describe('createTelegramLeadNotifierFromEnv', () => {
     expect(requests[0].body.chat_id).toBe('-100123456')
     expect(requests[0].body.disable_web_page_preview).toBe(true)
     expect(requests[0].body.text).toContain('Новая заявка: Иван Клиент')
+    expect(requests[0].body.text).toContain('Тип: Быстрое КП')
     expect(requests[0].body.text).toContain('Тел: +375291112233')
     expect(requests[0].body.text).toContain('Площадь: 42.50 м2')
     expect(requests[0].body.text).toContain('Итого: 425 Br (~142 $)')
+    expect(requests[0].body.text).toContain('Прогресс: КП готово')
     expect(requests[0].body.text).toContain('Разделы: Отопление, Котельная')
     expect(requests[0].body.text).toContain(
       'Админка: https://admin.example.com/app/leads/00000000-0000-7000-8000-000000000010',
     )
-    expect(requests[0].body.text).toContain(
-      'КП/PDF: https://api.example.com/api/public/proposals/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/pdf',
-    )
+    expect(requests[0].body.text).not.toContain('/api/public/proposals/')
+    expect(requests[0].body.text).not.toContain('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     expect(requests[0].body.text).not.toContain('telegram-secret-token')
     expect(requests[0].body.text).not.toContain('utm')
     expect(requests[0].body.text).not.toContain('203.0.113.10')
@@ -307,6 +308,7 @@ function calculationRecord(): CalculationRecord {
       },
     ],
     telegramDeliveries: [],
+    telegramNotifications: [],
     questionnaire: null,
     createdAt: '2026-07-10T00:00:00.000Z',
     updatedAt: '2026-07-10T00:00:00.000Z',

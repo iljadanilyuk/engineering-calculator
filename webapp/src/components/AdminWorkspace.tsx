@@ -29,6 +29,7 @@ export type AdminWorkspaceSection =
   | 'services'
   | 'project_cases'
   | 'blog_posts'
+  | 'questionnaire'
   | 'record'
 
 type NavItem = {
@@ -95,8 +96,9 @@ const productNav: NavItem[] = [
   },
   {
     label: 'Конструктор опросника',
+    href: '/app/questionnaire',
     icon: Task01Icon,
-    disabled: true,
+    section: 'questionnaire',
   },
 ]
 

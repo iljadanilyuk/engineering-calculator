@@ -10,6 +10,7 @@ import {
   calculationSaveResponseSchema,
   calculationUpdateRequestSchema,
   exchangeRateSettingResponseSchema,
+  adminQuestionnaireDefinitionResponseSchema,
   loginRequestSchema,
   logoutRequestSchema,
   meResponseSchema,
@@ -20,6 +21,7 @@ import {
   projectExampleRequestListResponseSchema,
   projectExampleResponseSchema,
   projectExampleUpdateRequestSchema,
+  questionnaireDefinitionEditRequestSchema,
   refreshRequestSchema,
   refreshResponseSchema,
   serviceCreateRequestSchema,
@@ -36,6 +38,7 @@ import {
   type CalculationListResponse,
   type CalculationUpdateRequest,
   type CalculationRecord,
+  type AdminQuestionnaireDefinitionResponse,
   type ExchangeRateSettingResponse,
   type LoginRequest,
   type LogoutRequest,
@@ -47,6 +50,7 @@ import {
   type ProjectExampleRequestListResponse,
   type ProjectExampleResponse,
   type ProjectExampleUpdateRequest,
+  type QuestionnaireDefinitionEditRequest,
   type RefreshRequest,
   type RefreshResponse,
   type ServiceCreateRequest,
@@ -156,6 +160,23 @@ export class ApiClient {
 
   getExchangeRate(): Promise<ExchangeRateSettingResponse> {
     return this.request('/api/admin/settings/exchange-rate', exchangeRateSettingResponseSchema, {
+      auth: true,
+    })
+  }
+
+  getQuestionnaireDefinition(): Promise<AdminQuestionnaireDefinitionResponse> {
+    return this.request('/api/admin/questionnaire-definition', adminQuestionnaireDefinitionResponseSchema, {
+      auth: true,
+    })
+  }
+
+  updateQuestionnaireDefinition(
+    input: QuestionnaireDefinitionEditRequest,
+  ): Promise<AdminQuestionnaireDefinitionResponse> {
+    const payload = questionnaireDefinitionEditRequestSchema.parse(input)
+    return this.request('/api/admin/questionnaire-definition', adminQuestionnaireDefinitionResponseSchema, {
+      method: 'PATCH',
+      body: payload,
       auth: true,
     })
   }

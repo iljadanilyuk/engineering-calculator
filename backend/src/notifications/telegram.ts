@@ -6,12 +6,19 @@ export type LeadNotificationInput = {
   calculation: CalculationRecord
 }
 
+export type TelegramOperationalEventType =
+  | 'lead_submitted'
+  | 'questionnaire_started'
+  | 'questionnaire_completed'
+
 export type LeadNotificationResult =
   | { status: 'sent' }
   | { status: 'disabled' }
 
 export type LeadNotifier = {
   notifyLeadSubmitted(input: LeadNotificationInput): Promise<LeadNotificationResult>
+  notifyQuestionnaireStarted(input: LeadNotificationInput): Promise<LeadNotificationResult>
+  notifyQuestionnaireCompleted(input: LeadNotificationInput): Promise<LeadNotificationResult>
 }
 
 export type TelegramDocumentDeliveryInput = {
@@ -50,7 +57,6 @@ type TelegramDocumentSenderConfig = {
 
 type LeadNotificationLinks = {
   adminUrl: string
-  proposalUrl?: string
 }
 
 export type TelegramProposalDeliveryLinks = {
@@ -84,25 +90,44 @@ export function createTelegramLeadNotifierFromEnv(
 
   return {
     async notifyLeadSubmitted({ calculation }) {
-      if (!isTelegramConfigured(config)) {
-        if (!didLogDisabled) {
-          logger.info('Telegram lead notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not configured')
-          didLogDisabled = true
-        }
-        return { status: 'disabled' }
-      }
-
-      const message = formatTelegramLeadMessage(calculation, buildLeadNotificationLinks(calculation, config))
-      await sendTelegramMessage({
-        botToken: config.botToken,
-        chatId: config.chatId,
-        text: message,
-        fetchTelegram,
-        timeoutMs: config.timeoutMs,
-      })
-
-      return { status: 'sent' }
+      return sendOperationalNotification('lead_submitted', calculation)
     },
+
+    async notifyQuestionnaireStarted({ calculation }) {
+      return sendOperationalNotification('questionnaire_started', calculation)
+    },
+
+    async notifyQuestionnaireCompleted({ calculation }) {
+      return sendOperationalNotification('questionnaire_completed', calculation)
+    },
+  }
+
+  async function sendOperationalNotification(
+    eventType: TelegramOperationalEventType,
+    calculation: CalculationRecord,
+  ): Promise<LeadNotificationResult> {
+    if (!isTelegramConfigured(config)) {
+      if (!didLogDisabled) {
+        logger.info('Telegram lead notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not configured')
+        didLogDisabled = true
+      }
+      return { status: 'disabled' }
+    }
+
+    const message = formatTelegramOperationalMessage(
+      calculation,
+      buildLeadNotificationLinks(calculation, config),
+      eventType,
+    )
+    await sendTelegramMessage({
+      botToken: config.botToken,
+      chatId: config.chatId,
+      text: message,
+      fetchTelegram,
+      timeoutMs: config.timeoutMs,
+    })
+
+    return { status: 'sent' }
   }
 }
 
@@ -149,18 +174,25 @@ export function formatTelegramLeadMessage(
   calculation: CalculationRecord,
   links: LeadNotificationLinks,
 ) {
+  return formatTelegramOperationalMessage(calculation, links, 'lead_submitted')
+}
+
+export function formatTelegramOperationalMessage(
+  calculation: CalculationRecord,
+  links: LeadNotificationLinks,
+  eventType: TelegramOperationalEventType,
+) {
+  const progress = questionnaireProgressLine(calculation, eventType)
   const lines = [
-    `Новая заявка: ${compactText(calculation.clientName, 80)}`,
+    `${operationalHeadline(eventType)}: ${compactText(calculation.clientName, 80)}`,
+    `Тип: ${operationalRequestType(eventType)}`,
     `Тел: ${compactText(calculation.clientPhone, 40)}`,
     `Площадь: ${compactText(calculation.areaSqm, 24)} м2`,
     `Итого: ${formatInteger(calculation.totalBynRoundedRubles)} Br (${formatUsd(calculation.totalUsdCents)})`,
+    `Прогресс: ${progress}`,
     `Разделы: ${servicesSummary(calculation.serviceSnapshots.map((service) => service.title))}`,
     `Админка: ${links.adminUrl}`,
   ]
-
-  if (links.proposalUrl) {
-    lines.push(`КП/PDF: ${links.proposalUrl}`)
-  }
 
   return lines.join('\n')
 }
@@ -206,23 +238,11 @@ export function telegramDeepLink(botUsername: string | undefined, bindToken: str
 
 function buildLeadNotificationLinks(
   calculation: CalculationRecord,
-  config: Pick<TelegramNotifierConfig, 'apiBaseUrl' | 'webappBaseUrl'>,
+  config: Pick<TelegramNotifierConfig, 'webappBaseUrl'>,
 ): LeadNotificationLinks {
-  const proposal = calculation.proposalArtifacts[0]
-
   return {
     adminUrl: absoluteUrl(config.webappBaseUrl, `/app/leads/${calculation.id}`),
-    proposalUrl: proposal ? proposalUrl(proposal, config.apiBaseUrl) : undefined,
   }
-}
-
-function proposalUrl(
-  proposal: CalculationRecord['proposalArtifacts'][number],
-  apiBaseUrl: string,
-) {
-  if (proposal.pdfUrlPath) return absoluteUrl(apiBaseUrl, proposal.pdfUrlPath)
-  if (proposal.pdfUrl) return proposal.pdfUrl
-  return absoluteUrl(apiBaseUrl, proposal.urlPath)
 }
 
 async function sendTelegramMessage(input: {
@@ -312,6 +332,35 @@ function servicesSummary(titles: string[]) {
   const suffix = titles.length > visible.length ? ` +${titles.length - visible.length}` : ''
 
   return `${visible.join(', ')}${suffix}`
+}
+
+function operationalHeadline(eventType: TelegramOperationalEventType) {
+  if (eventType === 'questionnaire_started') return 'Старт полного опросника'
+  if (eventType === 'questionnaire_completed') return 'Полный опросник завершен'
+  return 'Новая заявка'
+}
+
+function operationalRequestType(eventType: TelegramOperationalEventType) {
+  if (eventType === 'questionnaire_started') return 'Полный опросник'
+  if (eventType === 'questionnaire_completed') return 'Полный опросник'
+  return 'Быстрое КП'
+}
+
+function questionnaireProgressLine(
+  calculation: CalculationRecord,
+  eventType: TelegramOperationalEventType,
+) {
+  const progress = calculation.questionnaire?.progress
+
+  if (!progress) {
+    return eventType === 'lead_submitted' ? 'КП готово' : 'опросник создан, ответов пока нет'
+  }
+
+  const clarificationCount = progress.unknownCount + progress.skippedCount
+  const suffix = clarificationCount > 0 ? `, уточнить ${formatInteger(clarificationCount)}` : ''
+  const completion = eventType === 'questionnaire_completed' ? ', завершен' : ''
+
+  return `${formatInteger(progress.answeredCount)}/${formatInteger(progress.totalQuestions)} (${progress.completionPercent}%)${suffix}${completion}`
 }
 
 function absoluteUrl(baseUrl: string, path: string) {

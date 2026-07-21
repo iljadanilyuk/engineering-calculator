@@ -20,7 +20,10 @@ import {
   projectExampleRequestSaveResponseSchema,
   projectExampleResponseSchema,
   projectExampleUpdateRequestSchema,
+  questionnaireDefinitionEditRequestSchema,
+  adminQuestionnaireDefinitionResponseSchema,
   publicQuestionnairePatchRequestSchema,
+  publicQuestionnaireDefinitionResponseSchema,
   publicQuestionnaireSessionResponseSchema,
   publicQuestionnaireStartRequestSchema,
   publicQuestionnaireStartResponseSchema,
@@ -110,6 +113,21 @@ const publicCalculatorConfigRoute = createRoute({
     409: {
       content: errorResponseContent,
       description: 'Exchange rate is not configured',
+    },
+  },
+})
+
+const publicQuestionnaireDefinitionRoute = createRoute({
+  method: 'get',
+  path: '/public/questionnaire-definition',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: publicQuestionnaireDefinitionResponseSchema,
+        },
+      },
+      description: 'Active published questionnaire definition for the public wizard',
     },
   },
 })
@@ -486,6 +504,57 @@ const adminServicesRoute = createRoute({
     409: {
       content: errorResponseContent,
       description: 'Project example slug conflict',
+    },
+  },
+})
+
+const adminQuestionnaireDefinitionRoute = createRoute({
+  method: 'get',
+  path: '/admin/questionnaire-definition',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: adminQuestionnaireDefinitionResponseSchema,
+        },
+      },
+      description: 'Published questionnaire definition and metadata',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+  },
+})
+
+const updateQuestionnaireDefinitionRoute = createRoute({
+  method: 'patch',
+  path: '/admin/questionnaire-definition',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: questionnaireDefinitionEditRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: adminQuestionnaireDefinitionResponseSchema,
+        },
+      },
+      description: 'Updated allowed questionnaire text while preserving stable ids and branching',
+    },
+    400: {
+      content: errorResponseContent,
+      description: 'Invalid payload',
+    },
+    401: unauthorizedResponse,
+    403: forbiddenResponse,
+    404: {
+      content: errorResponseContent,
+      description: 'Questionnaire edit target not found',
     },
   },
 })
@@ -985,6 +1054,12 @@ export function createEngineeringRoutes() {
     )
   })
 
+  routes.openapi(publicQuestionnaireDefinitionRoute, async (c) => {
+    c.header('Cache-Control', 'public, max-age=0, must-revalidate')
+    const engineering = c.get('engineeringDataService')
+    return c.json({ questionnaireDefinition: await engineering.getQuestionnaireDefinition() }, 200)
+  })
+
   routes.openapi(publicProjectExamplesRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
     return c.json({ examples: await engineering.listPublicProjectExampleSummaries() }, 200)
@@ -1143,6 +1218,19 @@ export function createEngineeringRoutes() {
   protectedRoutes.openapi(adminServicesRoute, async (c) => {
     const engineering = c.get('engineeringDataService')
     return c.json({ services: await engineering.listAdminServices() }, 200)
+  })
+
+  protectedRoutes.openapi(adminQuestionnaireDefinitionRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    return c.json({ questionnaireDefinition: await engineering.getQuestionnaireDefinition() }, 200)
+  })
+
+  protectedRoutes.openapi(updateQuestionnaireDefinitionRoute, async (c) => {
+    const engineering = c.get('engineeringDataService')
+    return c.json(
+      { questionnaireDefinition: await engineering.updateQuestionnaireDefinition(c.req.valid('json')) },
+      200,
+    )
   })
 
   protectedRoutes.openapi(createServiceRoute, async (c) => {

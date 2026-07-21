@@ -38,6 +38,23 @@ enum TelegramDeliveryStatus {
   @@map("telegram_delivery_status")
 }
 
+enum TelegramNotificationEventType {
+  lead_submitted
+  questionnaire_started
+  questionnaire_completed
+
+  @@map("telegram_notification_event_type")
+}
+
+enum TelegramNotificationStatus {
+  pending
+  disabled
+  sent
+  failed
+
+  @@map("telegram_notification_status")
+}
+
 enum BlogPostStatus {
   draft
   published
@@ -116,6 +133,7 @@ model Calculation {
   proposals              Proposal[]
   questionnaire          CalculationQuestionnaire?
   telegramDeliveries     TelegramDelivery[]
+  telegramNotifications  TelegramNotification[]
 
   @@index([createdAt], map: "calculations_created_at_idx")
   @@index([status, createdAt], map: "calculations_status_created_at_idx")
@@ -131,6 +149,8 @@ model CalculationQuestionnaire {
   idempotencyKey         String      @unique(map: "calculation_questionnaires_idempotency_key_key") @map("idempotency_key")
   requestFingerprintHash String      @map("request_fingerprint_hash")
   questionnaireVersion   String      @map("questionnaire_version")
+  questionnaireDefinitionSnapshot Json? @map("questionnaire_definition_snapshot")
+  questionnaireDefinitionHash String? @map("questionnaire_definition_hash")
   answersSnapshot        Json        @map("answers_snapshot")
   source                 String?
   referrer               String?
@@ -147,6 +167,23 @@ model CalculationQuestionnaire {
   @@index([createdAt], map: "calculation_questionnaires_created_at_idx")
   @@index([updatedAt], map: "calculation_questionnaires_updated_at_idx")
   @@map("calculation_questionnaires")
+}
+
+model TelegramNotification {
+  id            String                        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  eventType     TelegramNotificationEventType @map("event_type")
+  status        TelegramNotificationStatus
+  statusMessage String?                       @map("status_message")
+  calculationId String                        @db.Uuid @map("calculation_id")
+  attemptCount  Int                           @default(0) @map("attempt_count")
+  sentAt        DateTime?                     @map("sent_at")
+  createdAt     DateTime                      @default(now()) @map("created_at")
+  updatedAt     DateTime                      @updatedAt @map("updated_at")
+  calculation   Calculation                   @relation(fields: [calculationId], references: [id], onDelete: Restrict, map: "telegram_notifications_calculation_id_fkey")
+
+  @@unique([calculationId, eventType], map: "telegram_notifications_calculation_id_event_type_key")
+  @@index([status, createdAt], map: "telegram_notifications_status_created_at_idx")
+  @@map("telegram_notifications")
 }
 
 model Proposal {

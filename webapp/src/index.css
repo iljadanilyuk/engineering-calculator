@@ -1103,8 +1103,29 @@
     gap: 5px;
   }
 
+  .admin-telegram-summary-stack {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+
   .admin-telegram-summary.compact {
     justify-items: start;
+  }
+
+  .admin-questionnaire-actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+  }
+
+  .admin-questionnaire-attention-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
   }
 
   .admin-history-item {
@@ -1500,6 +1521,132 @@
     font-size: 14px;
     line-height: 1.55;
   }
+
+  .admin-questionnaire-page {
+    gap: 16px;
+  }
+
+  .admin-definition-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .admin-definition-meta {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+    border: 1px solid var(--pzk-line);
+    border-radius: 8px;
+    background: var(--pzk-surface-2);
+    padding: 10px 12px;
+  }
+
+  .admin-code-line {
+    min-width: 0;
+    overflow: hidden;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-questionnaire-section-grid {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.38fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .admin-editor-card {
+    display: grid;
+    min-width: 0;
+    gap: 12px;
+    border: 1px solid var(--pzk-line);
+    border-radius: 8px;
+    background: var(--pzk-surface-2);
+    padding: 14px;
+  }
+
+  .admin-editor-card.has-branch {
+    border-color: #d9d2fa;
+  }
+
+  .admin-editor-card-head,
+  .admin-questionnaire-option-footer,
+  .admin-questionnaire-option-meta,
+  .admin-questionnaire-badges,
+  .admin-questionnaire-rule {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .admin-editor-card-head {
+    justify-content: space-between;
+  }
+
+  .admin-questionnaire-question-title,
+  .admin-questionnaire-text-form,
+  .admin-questionnaire-options,
+  .admin-questionnaire-option {
+    display: grid;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .admin-questionnaire-badges {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .admin-questionnaire-text-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .admin-questionnaire-text-form textarea[data-slot="textarea"] {
+    min-height: 74px;
+  }
+
+  .admin-questionnaire-rule {
+    min-height: 32px;
+    border-radius: 8px;
+    background: var(--pzk-surface);
+    padding: 7px 9px;
+  }
+
+  .admin-questionnaire-rule svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    color: var(--pzk-violet);
+  }
+
+  .admin-questionnaire-options {
+    gap: 8px;
+  }
+
+  .admin-questionnaire-option {
+    border-top: 1px solid var(--pzk-line);
+    padding-top: 10px;
+  }
+
+  .admin-questionnaire-option.has-branch {
+    border-top-color: #d9d2fa;
+  }
+
+  .admin-questionnaire-option-fields[data-slot="field-group"] {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.44fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .admin-questionnaire-option-footer {
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 1180px) {
@@ -1578,6 +1725,11 @@
   .admin-requirement-grid,
   .admin-process-grid,
   .admin-filter-grid,
+  .admin-definition-meta-grid,
+  .admin-questionnaire-attention-grid,
+  .admin-questionnaire-section-grid,
+  .admin-questionnaire-text-form,
+  .admin-questionnaire-option-fields[data-slot="field-group"],
   .admin-blog-meta-grid,
   .admin-editor-layout[data-slot="field-group"],
   .admin-drawer-grid.two,
@@ -1638,6 +1790,17 @@
   .admin-telegram-meta,
   .admin-compact-meta {
     justify-items: start;
+  }
+
+  .admin-editor-card-head,
+  .admin-questionnaire-actions,
+  .admin-questionnaire-option-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-questionnaire-badges {
+    justify-content: flex-start;
   }
 
   .admin-login-layout {

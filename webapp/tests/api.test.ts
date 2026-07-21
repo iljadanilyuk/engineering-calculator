@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import { technicalQuestionnaireDefinition } from '@poznyak-engineering-calculator/contracts'
 
 import { ApiClient } from '../src/lib/api'
 import { bootstrapAuthSession } from '../src/lib/bootstrap-auth'
@@ -471,6 +472,85 @@ test('ApiClient sends authenticated blog post management requests', async () => 
   })
 })
 
+test('ApiClient sends authenticated questionnaire definition requests', async () => {
+  const calls: Array<{
+    path: string
+    method: string | undefined
+    authorization: string | null
+    body: unknown
+  }> = []
+  const questionnaireDefinition = {
+    ...technicalQuestionnaireDefinition,
+    status: 'static_fallback',
+    definitionHash: 'a'.repeat(64),
+    publishedAt: null,
+    updatedAt: '2026-07-21T00:00:00.000Z',
+  }
+
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname
+    const headers = new Headers(init?.headers)
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {}
+    calls.push({
+      path,
+      method: init?.method,
+      authorization: headers.get('Authorization'),
+      body: init?.body ? body : null,
+    })
+
+    if (path === '/api/admin/questionnaire-definition' && init?.method === 'GET') {
+      return json({ questionnaireDefinition }, 200)
+    }
+
+    if (path === '/api/admin/questionnaire-definition' && init?.method === 'PATCH') {
+      return json({
+        questionnaireDefinition: {
+          ...questionnaireDefinition,
+          status: 'published',
+          definitionHash: 'b'.repeat(64),
+          publishedAt: '2026-07-21T00:00:00.000Z',
+          updatedAt: '2026-07-21T01:00:00.000Z',
+        },
+      }, 200)
+    }
+
+    return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
+  }
+
+  const client = new ApiClient({
+    getAccessToken: () => 'admin-access-token',
+    setAccessToken: () => undefined,
+  })
+
+  const loaded = await client.getQuestionnaireDefinition()
+  const updated = await client.updateQuestionnaireDefinition({
+    edits: [
+      {
+        target: 'question',
+        questionId: 'OBJ_DOCS',
+        prompt: 'Какие материалы по дому уже есть?',
+      },
+    ],
+  })
+
+  expect(loaded.questionnaireDefinition.status).toBe('static_fallback')
+  expect(updated.questionnaireDefinition.status).toBe('published')
+  expect(calls.map((call) => [call.path, call.method ?? 'GET'])).toEqual([
+    ['/api/admin/questionnaire-definition', 'GET'],
+    ['/api/admin/questionnaire-definition', 'PATCH'],
+  ])
+  expect(calls.every((call) => call.authorization === 'Bearer admin-access-token')).toBe(true)
+  expect(calls[1]?.body).toEqual({
+    edits: [
+      {
+        target: 'question',
+        questionId: 'OBJ_DOCS',
+        prompt: 'Какие материалы по дому уже есть?',
+      },
+    ],
+  })
+})
+
 test('ApiClient sends authenticated lead CRM requests', async () => {
   const calls: Array<{
     path: string
@@ -786,6 +866,7 @@ function calculationListItem(record: Record<string, unknown>) {
     source: record.source,
     proposalArtifacts: record.proposalArtifacts,
     telegramDeliveries: record.telegramDeliveries,
+    telegramNotifications: record.telegramNotifications,
     questionnaire: record.questionnaire ?? null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -891,6 +972,7 @@ function calculationRecord(overrides: Record<string, unknown>) {
       createdAt: '2026-07-09T00:00:00.000Z',
     }],
     telegramDeliveries: [],
+    telegramNotifications: [],
     questionnaire: null,
     createdAt: '2026-07-09T00:00:00.000Z',
     updatedAt: '2026-07-09T00:00:00.000Z',

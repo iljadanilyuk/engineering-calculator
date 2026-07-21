@@ -793,7 +793,7 @@ const structuredData = {
       const proposal = calculation.proposal
       const proposalStateText =
         proposal?.status === 'ready'
-          ? `КП ${escapeHtml(proposal.offerNumber)} и PDF готовы.`
+          ? `КП ${escapeHtml(proposal.offerNumber)} готово по web-ссылке.`
           : proposal?.status === 'html_only'
             ? `КП ${escapeHtml(proposal.offerNumber)} доступно как страница.`
             : 'КП сохранено.'
@@ -807,11 +807,6 @@ const structuredData = {
           proposal
             ? `<div class="proposal-actions">
                 <a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.urlPath)}" target="_blank" rel="noopener">Открыть КП</a>
-                ${
-                  proposal.status === 'ready'
-                    ? `<a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.pdfUrlPath)}" target="_blank" rel="noopener">Скачать PDF</a>`
-                    : ''
-                }
                 ${
                   calculation.telegramDelivery?.deepLinkUrl
                     ? `<a class="proposal-link" href="${escapeHtml(calculation.telegramDelivery.deepLinkUrl)}" target="_blank" rel="noopener">Получить в Telegram</a>`
@@ -829,7 +824,7 @@ const structuredData = {
         : calculation.telegramDelivery?.deepLinkUrl
           ? 'Заявка принята. КП готово по ссылке, Telegram доступен как дополнительный способ получения.'
           : calculation.proposal?.status === 'ready'
-          ? 'Заявка принята. Коммерческое предложение и PDF готовы по ссылке.'
+          ? 'Заявка принята. Коммерческое предложение готово по web-ссылке.'
           : 'Заявка принята. Коммерческое предложение сохранено по ссылке.',
       'ready',
     )

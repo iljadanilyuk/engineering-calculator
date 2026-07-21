@@ -3,6 +3,7 @@ import type {
   CalculationRecord,
   CalculationStatus,
   TelegramDeliveryRecord,
+  TelegramNotificationRecord,
 } from '@poznyak-engineering-calculator/contracts'
 
 export type ProjectRecordLike = CalculationListItem | CalculationRecord
@@ -76,6 +77,19 @@ export const telegramStatusLabels: Record<TelegramDeliveryRecord['status'], stri
   failed: 'Ошибка',
 }
 
+export const telegramNotificationStatusLabels: Record<TelegramNotificationRecord['status'], string> = {
+  pending: 'Отправляется',
+  disabled: 'Отключено',
+  sent: 'Отправлено',
+  failed: 'Ошибка',
+}
+
+export const telegramNotificationEventLabels: Record<TelegramNotificationRecord['eventType'], string> = {
+  lead_submitted: 'Быстрое КП / заявка',
+  questionnaire_started: 'Старт полного опросника',
+  questionnaire_completed: 'Полный опросник завершен',
+}
+
 export const numberFormatter = new Intl.NumberFormat('ru-RU')
 export const dateTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -124,6 +138,7 @@ export function projectRiskTone(project: ProjectRecordLike): Tone {
   if (project.status === 'lost' || project.status === 'spam_test') return 'gray'
   if (!project.objectName || !project.questionnaire) return 'amber'
   if (latestTelegramDelivery(project.telegramDeliveries)?.status === 'failed') return 'red'
+  if (latestTelegramNotification(project.telegramNotifications)?.status === 'failed') return 'red'
   if (project.status === 'won') return 'violet'
   return 'blue'
 }
@@ -178,6 +193,7 @@ export function blockers(projects: readonly ProjectRecordLike[]) {
     if (!project.questionnaire) return true
     if ((questionnaireProgress(project)?.completionPercent ?? 0) < 50) return true
     return latestTelegramDelivery(project.telegramDeliveries)?.status === 'failed'
+      || latestTelegramNotification(project.telegramNotifications)?.status === 'failed'
   })
 }
 
@@ -217,6 +233,10 @@ export function servicesSummary(services: ProjectRecordLike['serviceSnapshots'])
 
 export function latestTelegramDelivery(deliveries: readonly TelegramDeliveryRecord[]) {
   return deliveries.length > 0 ? deliveries[deliveries.length - 1] : null
+}
+
+export function latestTelegramNotification(notifications: readonly TelegramNotificationRecord[]) {
+  return notifications.length > 0 ? notifications[notifications.length - 1] : null
 }
 
 export function telegramDeliveryTargetLabel(targetType: TelegramDeliveryRecord['targetType']) {

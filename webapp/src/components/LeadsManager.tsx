@@ -5,7 +5,10 @@ import type {
   CalculationStatus,
   ProjectExampleRequestRecord,
   TelegramDeliveryRecord,
+  TelegramNotificationRecord,
 } from '@poznyak-engineering-calculator/contracts'
+import { CopyLinkIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from '@tanstack/react-router'
 import { type FormEvent, useMemo, useState } from 'react'
 
@@ -53,6 +56,7 @@ import {
   formatDateTime,
   formatUsd,
   latestTelegramDelivery,
+  latestTelegramNotification,
   leadSourceLabel,
   numberFormatter,
   pricingTypeLabel,
@@ -63,6 +67,8 @@ import {
   statusLabels,
   statusOptions,
   telegramDeliveryTargetLabel,
+  telegramNotificationEventLabels,
+  telegramNotificationStatusLabels,
   telegramStatusLabels,
 } from '@/lib/admin-derived'
 import { ApiRequestError, buildApiUrl } from '@/lib/api'
@@ -453,8 +459,11 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             />
           </AdminPanel>
 
-          <AdminPanel title="Telegram-доставка">
-            <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
+          <AdminPanel title="Telegram" description="Клиентская доставка и внутренние уведомления.">
+            <div className="admin-stack">
+              <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
+              <TelegramNotificationLog notifications={lead.telegramNotifications} />
+            </div>
           </AdminPanel>
         </aside>
       </div>
@@ -634,7 +643,11 @@ function ProjectTable({
                     <ProposalLink lead={lead} />
                   </TableCell>
                   <TableCell>
-                    <TelegramDeliverySummary deliveries={lead.telegramDeliveries} compact />
+                    <TelegramOperationsSummary
+                      deliveries={lead.telegramDeliveries}
+                      notifications={lead.telegramNotifications}
+                      compact
+                    />
                   </TableCell>
                   <TableCell className="text-right">
                     <Button asChild type="button" variant="outline" size="sm">
@@ -689,7 +702,11 @@ function LeadMobileCard({
         <DetailItem label="Действие" value={`${task.title} · ${task.dueLabel}`} />
         <div className="admin-detail-item">
           <Typography variant="caption" tone="muted">Telegram</Typography>
-          <TelegramDeliverySummary deliveries={lead.telegramDeliveries} compact />
+          <TelegramOperationsSummary
+            deliveries={lead.telegramDeliveries}
+            notifications={lead.telegramNotifications}
+            compact
+          />
         </div>
       </div>
       <div className="admin-mobile-card-actions">
@@ -813,6 +830,7 @@ function CommunicationTab({ lead }: { lead: CalculationRecord }) {
     <AdminPanel title="Коммуникация" description="Показывает выдачу документов в Telegram и менеджерские заметки.">
       <div className="admin-stack">
         <TelegramDeliveryLog deliveries={lead.telegramDeliveries} />
+        <TelegramNotificationLog notifications={lead.telegramNotifications} />
         <div className="admin-notice">
           <Typography variant="bodySmMedium">Заметки менеджера</Typography>
           <Typography variant="bodySm" tone="muted">{lead.notes || 'Заметок пока нет.'}</Typography>
@@ -865,6 +883,8 @@ function QuestionnaireDraftCard({
 }: {
   questionnaire: CalculationRecord['questionnaire']
 }) {
+  const [copyMessage, setCopyMessage] = useState<string | null>(null)
+
   if (!questionnaire) {
     return (
       <AdminPanel title="Черновик ТЗ" description="Подробный опросник для этой заявки еще не заполнен.">
@@ -873,31 +893,146 @@ function QuestionnaireDraftCard({
     )
   }
 
+  const allQuestions = questionnaire.sections.flatMap((section) => section.questions)
+  const hiddenAnsweredQuestions = allQuestions.filter((question) => question.answer && !question.answer.isActive)
+  const skippedQuestions = allQuestions.filter((question) =>
+    question.answer?.isActive
+    && (question.answer.kind === 'skipped' || question.answer.kind === 'unknown' || question.answer.optionId === 'UNKNOWN'),
+  )
+  const missingQuestions = allQuestions.filter((question) => question.isActive && !question.answer)
+
+  async function copyResumeLink() {
+    if (!questionnaire?.resumeUrl) return
+
+    try {
+      await navigator.clipboard.writeText(questionnaire.resumeUrl)
+      setCopyMessage('Ссылка продолжения скопирована')
+    } catch {
+      setCopyMessage('Не удалось скопировать ссылку')
+    }
+  }
+
   return (
     <AdminPanel
       title="Черновик ТЗ"
-      description={`${questionnaire.progress.answeredCount} из ${questionnaire.progress.totalQuestions} активных вопросов · источник обновлен ${questionnaire.definitionUpdatedAt} · карточка обновлена ${formatDateTime(questionnaire.updatedAt)}`}
-      action={<StatusPill tone="amber">{`${questionnaire.progress.completionPercent}%`}</StatusPill>}
+      description={`${questionnaire.progress.answeredCount} из ${questionnaire.progress.totalQuestions} активных вопросов · карточка обновлена ${formatDateTime(questionnaire.updatedAt)}`}
+      action={<StatusPill tone={questionnaire.progress.completedAt ? 'green' : 'amber'}>{`${questionnaire.progress.completionPercent}%`}</StatusPill>}
     >
       <div className="admin-requirement-grid">
         <MetricTile label="Заполнено" value={`${questionnaire.progress.answeredCount}/${questionnaire.progress.totalQuestions}`} tone="blue" />
         <MetricTile label="Свои ответы" value={questionnaire.progress.customCount} tone="green" />
         <MetricTile label="Нужно уточнить" value={questionnaire.progress.unknownCount + questionnaire.progress.skippedCount} tone="amber" />
-        <MetricTile
-          label="Скрытые ветки"
-          value={questionnaire.sections.flatMap((section) => section.questions).filter((question) => question.answer && !question.answer.isActive).length}
-          tone="gray"
-        />
+        <MetricTile label="Скрытые ветки" value={hiddenAnsweredQuestions.length} tone="gray" />
       </div>
-      <Typography variant="caption" tone="muted">
-        Источник логики: {questionnaire.definitionSource}. {questionnaire.sourcePolicy}
-      </Typography>
+      <div className="admin-property-grid">
+        <DetailItem label="Версия ТЗ" value={questionnaire.questionnaireVersion} />
+        <DetailItem label="Hash версии" value={questionnaire.definitionHash.slice(0, 12)} />
+        <DetailItem label="Источник" value={questionnaire.definitionSource} />
+        <DetailItem label="Источник обновлен" value={questionnaire.definitionUpdatedAt} />
+        <DetailItem label="Начато" value={formatDateTime(questionnaire.createdAt)} />
+        <DetailItem label="Завершено" value={questionnaire.progress.completedAt ? formatDateTime(questionnaire.progress.completedAt) : 'Нет'} />
+      </div>
+      <div className="admin-questionnaire-actions">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!questionnaire.resumeUrl}
+          onClick={() => void copyResumeLink()}
+        >
+          <HugeiconsIcon icon={CopyLinkIcon} strokeWidth={2} data-icon="inline-start" />
+          Скопировать ссылку продолжения
+        </Button>
+        {copyMessage && <Typography variant="caption" tone="muted">{copyMessage}</Typography>}
+      </div>
+      <div className="admin-notice">
+        <Typography variant="bodySmMedium">Политика источника</Typography>
+        <Typography variant="bodySm" tone="muted">{questionnaire.sourcePolicy}</Typography>
+      </div>
+      <QuestionnaireAttentionLists
+        missingQuestions={missingQuestions}
+        skippedQuestions={skippedQuestions}
+        hiddenAnsweredQuestions={hiddenAnsweredQuestions}
+      />
       <div className="admin-stack">
         {questionnaire.sections.map((section) => (
           <QuestionnaireSectionDraft key={section.id} section={section} />
         ))}
       </div>
     </AdminPanel>
+  )
+}
+
+function QuestionnaireAttentionLists({
+  missingQuestions,
+  skippedQuestions,
+  hiddenAnsweredQuestions,
+}: {
+  missingQuestions: readonly QuestionnaireDraftQuestion[]
+  skippedQuestions: readonly QuestionnaireDraftQuestion[]
+  hiddenAnsweredQuestions: readonly QuestionnaireDraftQuestion[]
+}) {
+  return (
+    <div className="admin-questionnaire-attention-grid">
+      <QuestionnaireAttentionList
+        title="Пропущенные активные вопросы"
+        emptyLabel="Нет пропусков"
+        questions={missingQuestions}
+      />
+      <QuestionnaireAttentionList
+        title="Требуют уточнения"
+        emptyLabel="Нет ответов к уточнению"
+        questions={skippedQuestions}
+      />
+      <QuestionnaireAttentionList
+        title="Ответы скрытых веток"
+        emptyLabel="Нет сохраненных ответов в скрытых ветках"
+        questions={hiddenAnsweredQuestions}
+      />
+    </div>
+  )
+}
+
+function QuestionnaireAttentionList({
+  title,
+  emptyLabel,
+  questions,
+}: {
+  title: string
+  emptyLabel: string
+  questions: readonly QuestionnaireDraftQuestion[]
+}) {
+  const visibleQuestions = questions.slice(0, 6)
+
+  return (
+    <div className="admin-subpanel">
+      <div className="admin-subpanel-head">
+        <Typography variant="bodySmMedium">{title}</Typography>
+        <StatusPill tone={questions.length > 0 ? 'amber' : 'green'}>{questions.length}</StatusPill>
+      </div>
+      {visibleQuestions.length === 0 ? (
+        <Typography variant="bodySm" tone="muted">{emptyLabel}</Typography>
+      ) : (
+        <div className="admin-compact-list">
+          {visibleQuestions.map((question) => (
+            <div key={question.id} className="admin-compact-row">
+              <div className="admin-line-main">
+                <Typography variant="bodySmMedium">{question.prompt}</Typography>
+                <Typography className="admin-code-line" variant="caption" tone="muted">
+                  {question.id}
+                </Typography>
+              </div>
+              {question.answer && <QuestionnaireAnswerBadge answer={question.answer} />}
+            </div>
+          ))}
+        </div>
+      )}
+      {questions.length > visibleQuestions.length && (
+        <Typography variant="caption" tone="muted">
+          Еще {numberFormatter.format(questions.length - visibleQuestions.length)}
+        </Typography>
+      )}
+    </div>
   )
 }
 
@@ -1212,6 +1347,38 @@ function ProposalLink({
   )
 }
 
+function TelegramOperationsSummary({
+  deliveries,
+  notifications,
+  compact = false,
+}: {
+  deliveries: readonly TelegramDeliveryRecord[]
+  notifications: readonly TelegramNotificationRecord[]
+  compact?: boolean
+}) {
+  const latestNotification = latestTelegramNotification(notifications)
+
+  return (
+    <div className="admin-telegram-summary-stack">
+      <TelegramDeliverySummary deliveries={deliveries} compact={compact} />
+      {latestNotification ? (
+        <div className={cn('admin-telegram-summary', compact && 'compact')}>
+          <StatusPill tone={telegramTone(latestNotification.status)}>
+            {telegramNotificationStatusLabels[latestNotification.status]}
+          </StatusPill>
+          {!compact && (
+            <Typography variant="caption" tone="muted">
+              {telegramNotificationEventLabels[latestNotification.eventType]}
+            </Typography>
+          )}
+        </div>
+      ) : (
+        <Typography variant="bodySm" tone="muted">Нет уведомлений</Typography>
+      )}
+    </div>
+  )
+}
+
 function TelegramDeliverySummary({
   deliveries,
   compact = false,
@@ -1249,6 +1416,40 @@ function TelegramDeliveryLog({ deliveries }: { deliveries: readonly TelegramDeli
           <div className="admin-telegram-meta">
             <StatusPill tone={telegramTone(delivery.status)}>{telegramStatusLabels[delivery.status]}</StatusPill>
             <Typography variant="caption" tone="muted">{telegramDeliveryMeta(delivery)}</Typography>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TelegramNotificationLog({
+  notifications,
+}: {
+  notifications: readonly TelegramNotificationRecord[]
+}) {
+  if (notifications.length === 0) {
+    return <Typography variant="bodySm" tone="muted">Внутренних Telegram-уведомлений пока нет.</Typography>
+  }
+
+  return (
+    <div className="admin-telegram-log">
+      {notifications.map((notification) => (
+        <div key={notification.id} className="admin-telegram-row">
+          <div className="admin-telegram-main">
+            <Typography variant="bodySmMedium">
+              {telegramNotificationEventLabels[notification.eventType]}
+            </Typography>
+            <Typography variant="caption" tone="muted">{telegramNotificationStatusDetail(notification)}</Typography>
+            {notification.statusMessage && (
+              <Typography variant="caption" tone="muted">{notification.statusMessage}</Typography>
+            )}
+          </div>
+          <div className="admin-telegram-meta">
+            <StatusPill tone={telegramTone(notification.status)}>
+              {telegramNotificationStatusLabels[notification.status]}
+            </StatusPill>
+            <Typography variant="caption" tone="muted">{telegramNotificationMeta(notification)}</Typography>
           </div>
         </div>
       ))}
@@ -1380,10 +1581,10 @@ function proposalArtifactStatusLabel(artifact: CalculationRecord['proposalArtifa
   return artifact.status === 'ready' ? 'Готово' : 'В обработке'
 }
 
-function telegramTone(status: TelegramDeliveryRecord['status']) {
+function telegramTone(status: TelegramDeliveryRecord['status'] | TelegramNotificationRecord['status']) {
   if (status === 'sent') return 'green'
   if (status === 'failed') return 'red'
-  if (status === 'pending_start') return 'amber'
+  if (status === 'pending_start' || status === 'pending') return 'amber'
   return 'gray'
 }
 
@@ -1408,6 +1609,22 @@ function telegramDeliveryStatusDetail(delivery: TelegramDeliveryRecord) {
   if (delivery.status === 'sent') return 'Документы отправлены.'
   if (delivery.status === 'failed') return 'Автоматическая отправка не прошла, проверьте канал доставки.'
   return null
+}
+
+function telegramNotificationMeta(notification: TelegramNotificationRecord) {
+  const attempts = notification.attemptCount > 0
+    ? `попыток: ${numberFormatter.format(notification.attemptCount)}`
+    : 'попыток нет'
+  const timestamp = notification.sentAt ?? notification.updatedAt
+  return `${attempts} · обновлено ${formatDateTime(timestamp)}`
+}
+
+function telegramNotificationStatusDetail(notification: TelegramNotificationRecord) {
+  if (notification.status === 'disabled') return 'Служебные уведомления не настроены.'
+  if (notification.status === 'pending') return 'Уведомление поставлено на отправку.'
+  if (notification.status === 'sent') return 'Уведомление ушло в рабочую группу.'
+  if (notification.status === 'failed') return 'Отправка в рабочую группу не прошла.'
+  return ''
 }
 
 function calculationStatus(value: string): CalculationStatus {

@@ -7,6 +7,8 @@ import {
   getQuestionnaireActiveQuestions,
   markQuestionnaireAnswersActivity,
   questionnaireAnswersPatchRequestSchema,
+  questionnaireDefinitionPatchRequestSchema,
+  questionnaireDefinitionRecordSchema,
   questionnaireStartRequestSchema,
   technicalQuestionnaireDefinition,
   technicalQuestionnaireQuestionIds,
@@ -47,6 +49,65 @@ describe('technical questionnaire contracts', () => {
         }
       }
     }
+  })
+
+  test('validates published definition records and allows only text edits', () => {
+    const record = questionnaireDefinitionRecordSchema.parse({
+      ...technicalQuestionnaireDefinition,
+      status: 'static_fallback',
+      definitionHash: 'a'.repeat(64),
+      publishedAt: null,
+      updatedAt: '2026-07-21T00:00:00.000Z',
+    })
+    const edit = questionnaireDefinitionPatchRequestSchema.parse({
+      edits: [
+        {
+          target: 'section',
+          sectionId: record.sections[0].id,
+          title: 'Обновленное название раздела',
+        },
+        {
+          target: 'question',
+          questionId: 'OBJ_DOCS',
+          prompt: 'Какие материалы по дому уже есть?',
+        },
+        {
+          target: 'option',
+          questionId: 'OBJ_DOCS',
+          optionId: 'PARTIAL',
+          label: 'Есть часть материалов',
+          hint: null,
+        },
+      ],
+    })
+
+    expect(record.status).toBe('static_fallback')
+    expect(edit.edits).toHaveLength(3)
+    expect(() =>
+      questionnaireDefinitionPatchRequestSchema.parse({
+        edits: [
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            prompt: 'Text',
+            showIf: { never: true },
+          },
+        ],
+      }),
+    ).toThrow()
+    expect(() =>
+      questionnaireDefinitionPatchRequestSchema.parse({
+        edits: [
+          {
+            target: 'option',
+            questionId: 'OBJ_DOCS',
+            optionId: 'PARTIAL',
+            id: 'NEW_ID',
+            label: 'New label',
+          },
+        ],
+      }),
+    ).toThrow()
   })
 
   test('publishes the updated heating envelope branches while keeping legacy ids hidden', () => {

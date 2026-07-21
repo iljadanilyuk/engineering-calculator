@@ -1,5 +1,10 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import {
+  getQuestionnaireActiveQuestions,
+  type QuestionnaireDefinitionRecord,
+  type QuestionnaireStoredAnswer,
+} from '@poznyak-engineering-calculator/contracts'
 
 import { createApp } from '../app'
 import { hashPassword } from '../auth/passwords'
@@ -41,6 +46,7 @@ maybeDescribe('engineering API integration', () => {
   let idempotencySequence = 0
 
   beforeEach(async () => {
+    await prisma.telegramNotification.deleteMany()
     await prisma.telegramDelivery.deleteMany()
     await prisma.proposal.deleteMany()
     await prisma.calculationQuestionnaire.deleteMany()
@@ -531,18 +537,32 @@ maybeDescribe('engineering API integration', () => {
     expect(telegramRequests[0].chat_id).toBe('-100123456')
     expect(telegramRequests[0].disable_web_page_preview).toBe(true)
     expect(message).toContain('Новая заявка: Telegram Client')
+    expect(message).toContain('Тип: Быстрое КП')
     expect(message).toContain('Тел: +375291112233')
     expect(message).toContain('Площадь: 25 м2')
     expect(message).toContain('Итого: 188 Br (~63 $)')
+    expect(message).toContain('Прогресс: КП готово')
     expect(message).toContain('Разделы: Telegram heating drawings')
     expect(message).toContain(`Админка: https://admin.example.com/app/leads/${saved.id}`)
-    expect(message).toContain(
-      `КП/PDF: https://api.example.com/api/public/proposals/${saved.proposals[0].publicToken}/pdf`,
-    )
+    expect(message).not.toContain('/api/public/proposals/')
+    expect(message).not.toContain(saved.proposals[0].publicToken)
     expect(message).not.toContain('Should stay out of Telegram')
     expect(message).not.toContain('should-not-leak')
     expect(JSON.stringify(body)).not.toContain('telegram-secret-token')
     expect(JSON.stringify(body)).not.toContain('-100123456')
+    const notification = await prisma.telegramNotification.findUniqueOrThrow({
+      where: {
+        calculationId_eventType: {
+          calculationId: saved.id,
+          eventType: 'lead_submitted',
+        },
+      },
+    })
+    expect(notification).toMatchObject({
+      status: 'sent',
+      attemptCount: 1,
+      statusMessage: 'Telegram notification sent',
+    })
   })
 
   test('skips missing Telegram env and keeps saving the lead safely', async () => {
@@ -577,12 +597,23 @@ maybeDescribe('engineering API integration', () => {
       consentAccepted: true,
     })
     const body = await response.json()
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: body.calculation.publicToken },
+      include: { telegramNotifications: true },
+    })
 
     expect(response.status).toBe(201)
     expect(body.calculation.proposal.status).toBe('ready')
     expect(telegramRequests).toEqual([])
     expect(await prisma.calculation.count()).toBe(1)
     expect(await prisma.proposal.count()).toBe(1)
+    expect(saved.telegramNotifications).toHaveLength(1)
+    expect(saved.telegramNotifications[0]).toMatchObject({
+      eventType: 'lead_submitted',
+      status: 'disabled',
+      attemptCount: 1,
+      statusMessage: 'Telegram notification is not configured',
+    })
   })
 
   test('does not break lead creation when Telegram delivery fails', async () => {
@@ -622,12 +653,21 @@ maybeDescribe('engineering API integration', () => {
     const body = await response.json()
     const saved = await prisma.calculation.findUniqueOrThrow({
       where: { publicToken: body.calculation.publicToken },
-      include: { proposals: true },
+      include: { proposals: true, telegramNotifications: true },
     })
 
     expect(response.status).toBe(201)
     expect(saved.clientName).toBe('Failure Telegram Client')
     expect(saved.proposals).toHaveLength(1)
+    expect(saved.telegramNotifications).toHaveLength(1)
+    expect(saved.telegramNotifications[0]).toMatchObject({
+      eventType: 'lead_submitted',
+      status: 'failed',
+      attemptCount: 1,
+    })
+    expect(saved.telegramNotifications[0].statusMessage).toBe(
+      'Telegram sendMessage failed with HTTP 500',
+    )
     expect(body.calculation.proposal.status).toBe('ready')
     expect(JSON.stringify(body)).not.toContain('telegram-secret-token')
   })
@@ -1073,6 +1113,7 @@ maybeDescribe('engineering API integration', () => {
     const response = await app.request('/api/admin/services')
     const body = await response.json()
     const calculations = await app.request('/api/admin/calculations')
+    const questionnaireDefinition = await app.request('/api/admin/questionnaire-definition')
     const updateCalculation = await app.request('/api/admin/calculations/00000000-0000-7000-8000-000000000001', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -1082,6 +1123,7 @@ maybeDescribe('engineering API integration', () => {
     expect(response.status).toBe(401)
     expect(body.error.code).toBe('UNAUTHORIZED')
     expect(calculations.status).toBe(401)
+    expect(questionnaireDefinition.status).toBe(401)
     expect(updateCalculation.status).toBe(401)
   })
 
@@ -2093,6 +2135,323 @@ maybeDescribe('engineering API integration', () => {
     expect(pdfAfterBytes).toEqual(pdfBeforeBytes)
   })
 
+  test('publishes editable questionnaire text and keeps started sessions on their snapshot', async () => {
+    const accessToken = await loginAdmin('questionnaire-definition@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Snapshot service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const publicFallback = await app.request('/api/public/questionnaire-definition')
+    const publicFallbackBody = await publicFallback.json()
+    const adminFallback = await app.request('/api/admin/questionnaire-definition', {
+      headers: authHeaders(accessToken),
+    })
+    const adminFallbackBody = await adminFallback.json()
+    const editedSectionTitle = 'Вводные данные для проекта'
+    const editedQuestionPrompt = 'Какие материалы по дому уже есть у клиента?'
+    const editedOptionLabel = 'Часть материалов уже готова'
+    const editedOptionHint = 'Планы, архитектура или старые проектные листы'
+    const patch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        edits: [
+          {
+            target: 'section',
+            sectionId: 'object_source',
+            title: editedSectionTitle,
+          },
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            prompt: editedQuestionPrompt,
+          },
+          {
+            target: 'option',
+            questionId: 'OBJ_DOCS',
+            optionId: 'PARTIAL',
+            label: editedOptionLabel,
+            hint: editedOptionHint,
+          },
+        ],
+      }),
+    })
+    const patchBody = await patch.json()
+    const blockedBranchPatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        edits: [
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            prompt: 'Question text',
+            showIf: { never: true },
+          },
+        ],
+      }),
+    })
+    const missingEdit = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        edits: [
+          {
+            target: 'section',
+            sectionId: 'missing_section',
+            title: 'Missing',
+          },
+        ],
+      }),
+    })
+    const publicPublished = await app.request('/api/public/questionnaire-definition')
+    const publicPublishedBody = await publicPublished.json()
+    const start = await app.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotencyKey: nextIdempotencyKey(),
+        clientName: 'Snapshot Client',
+        clientPhone: '+375291113333',
+        calculation: {
+          areaSqm: '10',
+          selectedServiceIds: [service.id],
+        },
+        consentAccepted: true,
+        initialAnswers: [
+          {
+            questionId: 'OBJ_DOCS',
+            kind: 'option',
+            optionId: 'PARTIAL',
+          },
+        ],
+      }),
+    })
+    const startBody = await start.json()
+    const token = startBody.questionnaire.publicToken
+    const snapshotHash = startBody.questionnaire.definitionHash
+    const secondPrompt = 'Какие исходные материалы уже готовы сейчас?'
+    const secondPatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        edits: [
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            prompt: secondPrompt,
+          },
+        ],
+      }),
+    })
+    const resume = await app.request(`/api/public/questionnaires/${token}`)
+    const resumeBody = await resume.json()
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: token },
+      include: { questionnaire: true },
+    })
+    const adminDetail = await app.request(`/api/admin/calculations/${saved.id}`, {
+      headers: authHeaders(accessToken),
+    })
+    const adminDetailBody = await adminDetail.json()
+
+    expect(publicFallback.status).toBe(200)
+    expect(publicFallbackBody.questionnaireDefinition.status).toBe('static_fallback')
+    expect(adminFallback.status).toBe(200)
+    expect(adminFallbackBody.questionnaireDefinition.status).toBe('static_fallback')
+    expect(patch.status).toBe(200)
+    expect(patchBody.questionnaireDefinition.status).toBe('published')
+    expect(definitionSectionTitle(patchBody.questionnaireDefinition, 'object_source')).toBe(editedSectionTitle)
+    expect(definitionQuestionPrompt(patchBody.questionnaireDefinition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
+    expect(definitionOption(patchBody.questionnaireDefinition, 'OBJ_DOCS', 'PARTIAL')).toMatchObject({
+      label: editedOptionLabel,
+      hint: editedOptionHint,
+    })
+    expect(blockedBranchPatch.status).toBe(400)
+    expect(missingEdit.status).toBe(404)
+    expect(publicPublished.status).toBe(200)
+    expect(publicPublishedBody.questionnaireDefinition.status).toBe('published')
+    expect(definitionQuestionPrompt(publicPublishedBody.questionnaireDefinition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
+    expect(start.status).toBe(201)
+    expect(startBody.questionnaire.questionnaireVersion).toBe(patchBody.questionnaireDefinition.version)
+    expect(startBody.questionnaire.definitionHash).toBe(patchBody.questionnaireDefinition.definitionHash)
+    expect(definitionQuestionPrompt(startBody.questionnaire.definition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
+    expect(secondPatch.status).toBe(200)
+    expect(definitionQuestionPrompt((await secondPatch.json()).questionnaireDefinition, 'OBJ_DOCS')).toBe(secondPrompt)
+    expect(resume.status).toBe(200)
+    expect(resumeBody.questionnaire.definitionHash).toBe(snapshotHash)
+    expect(definitionQuestionPrompt(resumeBody.questionnaire.definition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
+    expect(definitionQuestionPrompt(resumeBody.questionnaire.definition, 'OBJ_DOCS')).not.toBe(secondPrompt)
+    expect(saved.questionnaire?.questionnaireDefinitionSnapshot).toBeTruthy()
+    expect(saved.questionnaire?.questionnaireDefinitionHash).toBe(snapshotHash)
+    expect(adminDetail.status).toBe(200)
+    expect(adminDetailBody.calculation.questionnaire.definitionHash).toBe(snapshotHash)
+    expect(
+      adminDetailBody.calculation.questionnaire.sections
+        .flatMap((section: { questions: Array<{ id: string; prompt: string }> }) => section.questions)
+        .find((question: { id: string }) => question.id === 'OBJ_DOCS')?.prompt,
+    ).toBe(editedQuestionPrompt)
+  })
+
+  test('sends questionnaire start and completion Telegram notifications once', async () => {
+    const accessToken = await loginAdmin('questionnaire-telegram@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Questionnaire Telegram service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const telegramRequests: Array<Record<string, unknown>> = []
+    const telegramEnv: AppEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+      TELEGRAM_CHAT_ID: '-100123456',
+      PUBLIC_WEBAPP_URL: 'https://admin.example.com',
+    }
+    const telegramApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      leadNotifier: createTelegramLeadNotifierFromEnv(telegramEnv, {
+        fetch: async (_url, init) => {
+          telegramRequests.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+          return new Response(JSON.stringify({ ok: true }), { status: 200 })
+        },
+        logger: { info: () => undefined },
+      }),
+    })
+    const start = await telegramApp.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'pzk-questionnaire-telegram',
+        'X-Forwarded-For': '203.0.113.22',
+      },
+      body: JSON.stringify({
+        idempotencyKey: nextIdempotencyKey(),
+        clientName: 'Questionnaire Telegram Client',
+        clientPhone: '+375291114444',
+        calculation: {
+          areaSqm: '12',
+          selectedServiceIds: [service.id],
+        },
+        consentAccepted: true,
+        utm: {
+          source: 'questionnaire-utm-should-not-leak',
+        },
+      }),
+    })
+    const startBody = await start.json()
+    const token = startBody.questionnaire.publicToken
+    const completedBody = await completeQuestionnaireWithSkippedAnswers(
+      telegramApp,
+      token,
+      startBody.questionnaire.definition,
+      startBody.questionnaire.answers,
+    )
+    const repeatedCompletionSave = await telegramApp.request(`/api/public/questionnaires/${token}/answers`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: [
+          {
+            questionId: 'OBJ_DOCS',
+            kind: 'skipped',
+          },
+        ],
+      }),
+    })
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: token },
+      include: { telegramNotifications: true },
+    })
+    const startMessage = String(telegramRequests[0].text)
+    const completionMessage = String(telegramRequests[1].text)
+
+    expect(start.status).toBe(201)
+    expect(completedBody.questionnaire.progress.completedAt).toBeTruthy()
+    expect(repeatedCompletionSave.status).toBe(200)
+    expect(telegramRequests).toHaveLength(2)
+    expect(startMessage).toContain('Старт полного опросника: Questionnaire Telegram Client')
+    expect(startMessage).toContain('Тип: Полный опросник')
+    expect(startMessage).toContain('Тел: +375291114444')
+    expect(startMessage).toContain('Площадь: 12 м2')
+    expect(startMessage).toContain(`Админка: https://admin.example.com/app/leads/${saved.id}`)
+    expect(completionMessage).toContain('Полный опросник завершен: Questionnaire Telegram Client')
+    expect(completionMessage).toContain('(100%)')
+    expect(completionMessage).toContain('завершен')
+    expect(startMessage).not.toContain(token)
+    expect(completionMessage).not.toContain(token)
+    expect(startMessage).not.toContain('OBJ_DOCS')
+    expect(completionMessage).not.toContain('OBJ_DOCS')
+    expect(startMessage).not.toContain('questionnaire-utm-should-not-leak')
+    expect(JSON.stringify(telegramRequests)).not.toContain('telegram-secret-token')
+    expect(saved.telegramNotifications).toHaveLength(2)
+    expect(saved.telegramNotifications.map((notification) => notification.eventType).sort()).toEqual([
+      'questionnaire_completed',
+      'questionnaire_started',
+    ])
+    expect(saved.telegramNotifications.every((notification) => notification.status === 'sent')).toBe(true)
+  })
+
+  test('does not break questionnaire creation when Telegram notification fails', async () => {
+    const accessToken = await loginAdmin('questionnaire-telegram-failure@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Questionnaire Telegram failure service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const telegramEnv: AppEnv = {
+      ...env,
+      TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+      TELEGRAM_CHAT_ID: '-100123456',
+      PUBLIC_WEBAPP_URL: 'https://admin.example.com',
+    }
+    const failureApp = createApp({
+      env: telegramEnv,
+      prisma,
+      proposalGenerator: createTestProposalGenerator(),
+      leadNotifier: createTelegramLeadNotifierFromEnv(telegramEnv, {
+        fetch: async () => new Response(JSON.stringify({ ok: false }), { status: 500 }),
+        logger: { info: () => undefined },
+      }),
+    })
+
+    const response = await failureApp.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotencyKey: nextIdempotencyKey(),
+        clientName: 'Questionnaire Failure Client',
+        clientPhone: '+375291115555',
+        calculation: {
+          areaSqm: '12',
+          selectedServiceIds: [service.id],
+        },
+        consentAccepted: true,
+      }),
+    })
+    const body = await response.json()
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: body.questionnaire.publicToken },
+      include: { questionnaire: true, telegramNotifications: true },
+    })
+
+    expect(response.status).toBe(201)
+    expect(saved.questionnaire).toBeTruthy()
+    expect(saved.telegramNotifications).toHaveLength(1)
+    expect(saved.telegramNotifications[0]).toMatchObject({
+      eventType: 'questionnaire_started',
+      status: 'failed',
+      attemptCount: 1,
+      statusMessage: 'Telegram sendMessage failed with HTTP 500',
+    })
+    expect(JSON.stringify(body)).not.toContain('telegram-secret-token')
+  })
+
   test('creates detailed questionnaire leads, saves answers incrementally, and exposes admin draft TZ', async () => {
     const accessToken = await loginAdmin('questionnaire@example.com')
     await setExchangeRate(accessToken, '3.0000')
@@ -2239,6 +2598,9 @@ maybeDescribe('engineering API integration', () => {
     expect(start.headers.get('cache-control')).toBe('private, max-age=0, no-store')
     expect(start.headers.get('x-robots-tag')).toBe('noindex, nofollow')
     expect(startBody.questionnaire.publicToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/)
+    expect(startBody.questionnaire.questionnaireVersion).toBe(startBody.questionnaire.definition.version)
+    expect(startBody.questionnaire.definitionHash).toBe(startBody.questionnaire.definition.definitionHash)
+    expect(startBody.questionnaire.definition.status).toMatch(/^(published|static_fallback)$/)
     expect(startBody.questionnaire.clientName).toBeUndefined()
     expect(startBody.questionnaire.clientPhone).toBeUndefined()
     expect(startBody.questionnaire.calculation.serviceTitles).toEqual([
@@ -2285,9 +2647,15 @@ maybeDescribe('engineering API integration', () => {
     expect(saved.consentVersion).toBe('pzk-questionnaire-consent-v1')
     expect(saved.proposals).toHaveLength(0)
     expect(saved.questionnaire?.answersSnapshot).toBeTruthy()
+    expect(saved.questionnaire?.questionnaireDefinitionSnapshot).toBeTruthy()
+    expect(saved.questionnaire?.questionnaireDefinitionHash).toBe(startBody.questionnaire.definitionHash)
     expect(await prisma.proposal.count()).toBe(0)
     expect(adminDetail.status).toBe(200)
     expect(adminDetailBody.calculation.proposalArtifacts).toEqual([])
+    expect(adminDetailBody.calculation.questionnaire.resumeUrl).toBe(
+      `https://website.example.com/questionnaire/?token=${token}`,
+    )
+    expect(adminDetailBody.calculation.questionnaire.definitionHash).toBe(startBody.questionnaire.definitionHash)
     expect(adminDetailBody.calculation.questionnaire.progress).toMatchObject({
       answeredCount: hideWallBranchBody.questionnaire.progress.answeredCount,
       unknownCount: 1,
@@ -2549,6 +2917,52 @@ maybeDescribe('engineering API integration', () => {
     })
   }
 
+  async function completeQuestionnaireWithSkippedAnswers(
+    targetApp: typeof app,
+    publicToken: string,
+    definition: QuestionnaireDefinitionRecord,
+    initialAnswers: readonly QuestionnaireStoredAnswer[],
+  ) {
+    type QuestionnaireCompletionBody = {
+      questionnaire: {
+        answers: QuestionnaireStoredAnswer[]
+        progress: { completedAt: string | null }
+      }
+    }
+    let answers = [...initialAnswers]
+    let latestBody: QuestionnaireCompletionBody | null = null
+
+    for (let guard = 0; guard < 20; guard += 1) {
+      const missingQuestions = getQuestionnaireActiveQuestions(answers, definition)
+        .filter((question) => !answers.some((answer) => answer.questionId === question.id && answer.isActive))
+        .slice(0, 25)
+
+      if (missingQuestions.length === 0) break
+
+      const response = await targetApp.request(`/api/public/questionnaires/${publicToken}/answers`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answers: missingQuestions.map((question) => ({
+            questionId: question.id,
+            kind: 'skipped',
+          })),
+        }),
+      })
+      const parsedBody = await response.json() as QuestionnaireCompletionBody
+      expect(response.status).toBe(200)
+      latestBody = parsedBody
+      answers = parsedBody.questionnaire.answers
+    }
+
+    if (!latestBody) {
+      throw new Error('Questionnaire was already complete before helper ran')
+    }
+
+    const result = latestBody
+    return result
+  }
+
   function nextIdempotencyKey() {
     idempotencySequence += 1
     return `test-idempotency-${Date.now().toString(36)}-${idempotencySequence}`
@@ -2618,6 +3032,27 @@ function jsonAuthHeaders(accessToken: string) {
 
 function sha256Hex(value: Uint8Array) {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function definitionSectionTitle(definition: QuestionnaireDefinitionRecord, sectionId: string) {
+  return definition.sections.find((section) => section.id === sectionId)?.title ?? null
+}
+
+function definitionQuestionPrompt(definition: QuestionnaireDefinitionRecord, questionId: string) {
+  return definition.sections
+    .flatMap((section) => section.questions)
+    .find((question) => question.id === questionId)?.prompt ?? null
+}
+
+function definitionOption(
+  definition: QuestionnaireDefinitionRecord,
+  questionId: string,
+  optionId: string,
+) {
+  return definition.sections
+    .flatMap((section) => section.questions)
+    .find((question) => question.id === questionId)
+    ?.options?.find((option) => option.id === optionId) ?? null
 }
 
 function createTestProposalGenerator(): ProposalGenerator {
