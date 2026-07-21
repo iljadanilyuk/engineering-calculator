@@ -87,7 +87,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -144,11 +144,11 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       <section class="hero" aria-labelledby="questionnaire-title">
         <div class="shell hero-grid">
           <div class="hero-copy">
-            <div class="eyebrow">Подробный сценарий</div>
+            <div class="eyebrow">Опросный лист</div>
             <h1 id="questionnaire-title">Опросник для подготовки ТЗ</h1>
             <p>
-              Ответы сохраняются по шагам и попадают в карточку заявки. Если данных пока нет,
-              отметьте это явно: менеджер увидит открытые вопросы.
+              Сохраняйте ответы по шагам. Если данных пока нет, пропустите вопрос:
+              менеджер увидит, что нужно уточнить.
             </p>
             <p class="state-status" data-config-status role="status">
               Загружаем актуальные тарифы и выбранные разделы проекта.
@@ -231,7 +231,17 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
                 </label>
                 <label for="questionnaire-phone">
                   <span>Телефон</span>
-                  <input id="questionnaire-phone" data-client-phone type="tel" inputmode="tel" autocomplete="tel" />
+                  <input
+                    id="questionnaire-phone"
+                    data-client-phone
+                    type="tel"
+                    inputmode="tel"
+                    autocomplete="tel"
+                    placeholder="+375 29 123-45-67"
+                  />
+                  <small class="field-error" data-phone-error hidden>
+                    Введите телефон в формате +375 ... или +7 ...
+                  </small>
                 </label>
               </div>
               <label for="questionnaire-object">
@@ -253,6 +263,22 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
               </button>
             </form>
 
+            <section class="stored-resume-panel" data-stored-resume-panel hidden aria-label="Продолжить опросник">
+              <div>
+                <div class="section-kicker">На этом устройстве</div>
+                <h2>Есть начатый опросник</h2>
+                <p>Можно продолжить с места остановки или начать новый сценарий после проверки контакта.</p>
+              </div>
+              <div class="resume-actions">
+                <button class="button primary" type="button" data-stored-resume-continue>
+                  Продолжить
+                </button>
+                <button class="button ghost" type="button" data-stored-resume-clear>
+                  Заполнить заново
+                </button>
+              </div>
+            </section>
+
             <section class="resume-panel" data-resume-panel hidden aria-label="Ссылка для продолжения">
               <div>
                 <div class="section-kicker">Сохранено</div>
@@ -269,20 +295,14 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
                 <span>Свой вариант</span>
                 <textarea id="custom-answer" data-custom-answer rows="4" maxlength="2000"></textarea>
               </label>
-              <div class="question-actions">
-                <button class="button secondary" type="button" data-save-custom>
-                  Сохранить свой ответ
-                </button>
-                <button class="button ghost" type="button" data-answer-unknown>
-                  Пока не знаю
-                </button>
-                <button class="button ghost" type="button" data-answer-skipped>
-                  Пропустить
-                </button>
-              </div>
               <div class="pager">
                 <button class="button secondary" type="button" data-prev-question>Назад</button>
-                <button class="button primary" type="button" data-next-question>Далее</button>
+                <span class="pager-forward">
+                  <button class="button ghost" type="button" data-answer-skipped>
+                    Пропустить
+                  </button>
+                  <button class="button primary" type="button" data-next-question>Далее</button>
+                </span>
               </div>
             </fieldset>
 
@@ -299,6 +319,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 <script>
   import {
     calculateEngineeringOffer,
+    getQuestionnaireActiveOptions,
+    getQuestionnaireActiveQuestions,
+    getQuestionnaireActiveSections,
     publicCalculatorConfigResponseSchema,
     publicQuestionnaireSessionResponseSchema,
     publicQuestionnaireStartResponseSchema,
@@ -306,23 +329,13 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     type EngineeringService,
     type PublicQuestionnaireSession,
     type QuestionnaireAnswerInput,
+    type QuestionnaireQuestion,
+    type QuestionnaireSection,
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
 
   type ProjectType = 'private' | 'commercial'
   type CalculatorService = EngineeringService & { isPublic?: boolean }
-  type QuestionnaireOption = { id: string; label: string }
-  type QuestionnaireQuestion = {
-    id: string
-    prompt: string
-    sourceRow: number
-    options?: QuestionnaireOption[]
-  }
-  type QuestionnaireSection = {
-    id: string
-    title: string
-    questions: QuestionnaireQuestion[]
-  }
   type QuestionnaireData = {
     version: string
     sections: QuestionnaireSection[]
@@ -350,7 +363,6 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const dataElement = document.querySelector<HTMLScriptElement>('#questionnaire-data')
   const data = JSON.parse(dataElement?.textContent ?? '{}') as QuestionnaireData
   const allQuestions = data.sections.flatMap((section) => section.questions)
-  const questionOrder = new Map(allQuestions.map((question, index) => [question.id, index]))
   const configStatus = document.querySelector<HTMLElement>('[data-config-status]')
   const summaryArea = document.querySelector<HTMLElement>('[data-summary-area]')
   const summaryType = document.querySelector<HTMLElement>('[data-summary-type]')
@@ -363,9 +375,13 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const contactForm = document.querySelector<HTMLFormElement>('[data-contact-form]')
   const clientNameInput = document.querySelector<HTMLInputElement>('[data-client-name]')
   const clientPhoneInput = document.querySelector<HTMLInputElement>('[data-client-phone]')
+  const phoneError = document.querySelector<HTMLElement>('[data-phone-error]')
   const objectNameInput = document.querySelector<HTMLTextAreaElement>('[data-object-name]')
   const consentInput = document.querySelector<HTMLInputElement>('[data-consent]')
   const startTrigger = document.querySelector<HTMLButtonElement>('[data-start-trigger]')
+  const storedResumePanel = document.querySelector<HTMLElement>('[data-stored-resume-panel]')
+  const storedResumeContinue = document.querySelector<HTMLButtonElement>('[data-stored-resume-continue]')
+  const storedResumeClear = document.querySelector<HTMLButtonElement>('[data-stored-resume-clear]')
   const resumePanel = document.querySelector<HTMLElement>('[data-resume-panel]')
   const resumeLink = document.querySelector<HTMLAnchorElement>('[data-resume-link]')
   const questionCard = document.querySelector<HTMLFieldSetElement>('[data-question-card]')
@@ -373,8 +389,6 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const questionMeta = document.querySelector<HTMLElement>('[data-question-meta]')
   const optionList = document.querySelector<HTMLElement>('[data-option-list]')
   const customAnswer = document.querySelector<HTMLTextAreaElement>('[data-custom-answer]')
-  const saveCustom = document.querySelector<HTMLButtonElement>('[data-save-custom]')
-  const answerUnknown = document.querySelector<HTMLButtonElement>('[data-answer-unknown]')
   const answerSkipped = document.querySelector<HTMLButtonElement>('[data-answer-skipped]')
   const prevQuestion = document.querySelector<HTMLButtonElement>('[data-prev-question]')
   const nextQuestion = document.querySelector<HTMLButtonElement>('[data-next-question]')
@@ -388,7 +402,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
   const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
   const offerStateStorageKey = 'pzk-offer-choice-state-v1'
-  const questionnaireSessionStorageKey = 'pzk-questionnaire-session-v1'
+  const questionnaireSessionStorageKey = 'pzk-questionnaire-resume-v2'
 
   const initialChoiceState = readOfferChoiceState()
   const hasExplicitServiceSelection = Array.isArray(initialChoiceState.selectedServiceIds)
@@ -407,16 +421,20 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   let startIdempotencyKey = createIdempotencyKey()
   let session: PublicQuestionnaireSession | null = null
   let currentQuestionIndex = 0
+  let pendingStoredResume = readStoredQuestionnaireResume()
+  const draftOptionByQuestionId = new Map<string, string>()
 
   attachHandlers()
   renderStaticShell()
   void bootstrap()
 
   async function bootstrap() {
-    const resumeToken = resumeTokenFromUrl() ?? readStoredQuestionnaireToken()
+    const resumeToken = resumeTokenFromUrl()
 
     if (resumeToken) {
       await resumeQuestionnaire(resumeToken)
+    } else if (pendingStoredResume && !hasOfferChoiceQuery()) {
+      setWizardStatus('На этом устройстве найден начатый опросник.', 'ready')
     }
 
     await loadPublicConfig()
@@ -430,37 +448,18 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     })
 
     clientNameInput?.addEventListener('input', resetStartKey)
-    clientPhoneInput?.addEventListener('input', resetStartKey)
+    clientPhoneInput?.addEventListener('input', () => {
+      maskPhoneInput()
+      resetStartKey()
+    })
     objectNameInput?.addEventListener('input', resetStartKey)
     consentInput?.addEventListener('change', resetStartKey)
-
-    saveCustom?.addEventListener('click', () => {
-      const text = customAnswer?.value.trim() ?? ''
-      if (!text) {
-        setWizardStatus('Введите свой ответ или выберите другой вариант.', 'error')
-        customAnswer?.setAttribute('aria-invalid', 'true')
-        return
-      }
-      customAnswer?.removeAttribute('aria-invalid')
-      void saveAnswer({
-        questionId: currentQuestion().id,
-        kind: 'custom',
-        customText: text,
-      })
-    })
-
-    answerUnknown?.addEventListener('click', () => {
-      void saveAnswer({
-        questionId: currentQuestion().id,
-        kind: 'unknown',
-      })
-    })
 
     answerSkipped?.addEventListener('click', () => {
       void saveAnswer({
         questionId: currentQuestion().id,
         kind: 'skipped',
-      })
+      }, { advance: true })
     })
 
     prevQuestion?.addEventListener('click', () => {
@@ -469,7 +468,24 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     })
 
     nextQuestion?.addEventListener('click', () => {
-      currentQuestionIndex = Math.min(allQuestions.length - 1, currentQuestionIndex + 1)
+      void saveCurrentQuestionAndAdvance()
+    })
+
+    customAnswer?.addEventListener('input', () => {
+      const question = currentQuestion()
+      if (customAnswer.value.trim()) draftOptionByQuestionId.delete(question.id)
+      updateQuestionControls()
+    })
+
+    storedResumeContinue?.addEventListener('click', () => {
+      if (!pendingStoredResume) return
+      void resumeQuestionnaire(pendingStoredResume.token)
+    })
+
+    storedResumeClear?.addEventListener('click', () => {
+      clearStoredQuestionnaireResume()
+      pendingStoredResume = null
+      setWizardStatus('Можно начать новый опросник.', 'ready')
       render()
     })
   }
@@ -523,6 +539,13 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       return
     }
 
+    const matchingResume = matchingStoredQuestionnaireResume(validation.clientName, validation.clientPhone)
+    if (matchingResume) {
+      setWizardStatus('Нашли сохраненный опросник на этом устройстве. Открываю продолжение...', 'loading')
+      await resumeQuestionnaire(matchingResume.token)
+      return
+    }
+
     isStarting = true
     updateStartState()
     setWizardStatus('Сохраняю заявку и открываю опросник...', 'loading')
@@ -554,8 +577,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       if (!response.ok) throw new Error(publicQuestionnaireErrorMessage(response.status, payload))
 
       const parsed = publicQuestionnaireStartResponseSchema.parse(payload)
-      applyQuestionnaireSession(parsed.questionnaire)
-      storeQuestionnaireToken(parsed.questionnaire.publicToken)
+      applyQuestionnaireSession(parsed.questionnaire, 'first-unanswered')
+      storeQuestionnaireResume(parsed.questionnaire.publicToken, validation.clientName, validation.clientPhone)
+      pendingStoredResume = readStoredQuestionnaireResume()
       setWizardStatus(
         response.status === 200
           ? 'Опросник уже был создан ранее. Продолжаем заполнение.'
@@ -581,17 +605,26 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       const response = await fetch(`${apiBaseUrl}/api/public/questionnaires/${encodeURIComponent(token)}`, {
         headers: { Accept: 'application/json' },
       })
-      if (!response.ok) return
+      if (!response.ok) {
+        clearStoredQuestionnaireResume()
+        pendingStoredResume = null
+        setWizardStatus('Сохраненный опросник не найден. Можно начать новый.', 'error')
+        render()
+        return
+      }
       const parsed = publicQuestionnaireSessionResponseSchema.parse(await response.json())
-      applyQuestionnaireSession(parsed.questionnaire)
-      storeQuestionnaireToken(parsed.questionnaire.publicToken)
+      applyQuestionnaireSession(parsed.questionnaire, 'first-unanswered')
+      storeQuestionnaireResume(parsed.questionnaire.publicToken)
+      pendingStoredResume = readStoredQuestionnaireResume()
       setWizardStatus('Открыт сохраненный опросник.', 'ready')
     } catch {
       setWizardStatus('Не удалось восстановить сохраненный опросник.', 'error')
+      clearStoredQuestionnaireResume()
+      pendingStoredResume = null
     }
   }
 
-  async function saveAnswer(answer: QuestionnaireAnswerInput) {
+  async function saveAnswer(answer: QuestionnaireAnswerInput, options: { advance?: boolean } = {}) {
     if (!session || isSaving) return
 
     isSaving = true
@@ -617,7 +650,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       if (!response.ok) throw new Error(publicQuestionnaireErrorMessage(response.status, payload))
 
       const parsed = publicQuestionnaireSessionResponseSchema.parse(payload)
-      applyQuestionnaireSession(parsed.questionnaire)
+      applyQuestionnaireSession(parsed.questionnaire, 'preserve')
+      draftOptionByQuestionId.delete(answer.questionId)
+      if (options.advance) moveAfterQuestion(answer.questionId)
       setWizardStatus('Ответ сохранен.', 'ready')
     } catch (error) {
       setWizardStatus(
@@ -630,19 +665,27 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
   }
 
-  function applyQuestionnaireSession(nextSession: PublicQuestionnaireSession) {
+  function applyQuestionnaireSession(
+    nextSession: PublicQuestionnaireSession,
+    mode: 'first-unanswered' | 'preserve' = 'preserve',
+  ) {
     session = nextSession
+    if (mode === 'preserve') {
+      clampCurrentQuestionIndex()
+      return
+    }
     const nextIndex = firstUnansweredQuestionIndex()
     currentQuestionIndex = nextIndex === -1 ? currentQuestionIndex : nextIndex
+    clampCurrentQuestionIndex()
   }
 
   function renderStaticShell() {
-    renderSectionNav()
     render()
   }
 
   function render() {
     renderCalculationSummary()
+    renderSectionNav()
     renderProgress()
     renderQuestion()
     renderSessionPanels()
@@ -712,10 +755,11 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   function renderProgress() {
+    const activeQuestionList = activeQuestions()
     const progress = session?.progress ?? {
       completionPercent: 0,
       answeredCount: 0,
-      totalQuestions: allQuestions.length,
+      totalQuestions: activeQuestionList.length,
       unknownCount: 0,
       skippedCount: 0,
     }
@@ -727,12 +771,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       progressBar.setAttribute('aria-valuenow', String(progress.completionPercent))
     }
     if (progressText) {
-      progressText.textContent = `${progress.answeredCount} из ${progress.totalQuestions} вопросов. Пока не знаю: ${progress.unknownCount}; пропущено: ${progress.skippedCount}.`
+      progressText.textContent = `${progress.answeredCount} из ${progress.totalQuestions} активных вопросов. Нужно уточнить: ${progress.unknownCount + progress.skippedCount}.`
     }
 
     sectionNav?.querySelectorAll<HTMLButtonElement>('button[data-section-id]').forEach((button) => {
-      const sectionIndex = Number(button.dataset.sectionIndex ?? '0')
-      const section = data.sections[sectionIndex]
+      const section = activeSections().find((item) => item.id === button.dataset.sectionId)
+      if (!section) return
       const isCurrent = section.questions.some((question) => question.id === currentQuestion().id)
       const answeredInSection = section.questions.filter((question) => answersByQuestionId().has(question.id)).length
       button.classList.toggle('is-active', isCurrent)
@@ -742,10 +786,11 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   function renderSectionNav() {
     if (!sectionNav) return
-    sectionNav.innerHTML = data.sections
+    const sections = activeSections()
+    sectionNav.innerHTML = sections
       .map(
-        (section, index) => `
-          <button type="button" data-section-id="${escapeHtml(section.id)}" data-section-index="${index}">
+        (section) => `
+          <button type="button" data-section-id="${escapeHtml(section.id)}">
             <span>${escapeHtml(section.title)}</span>
             <span>0/${section.questions.length}</span>
           </button>
@@ -753,11 +798,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       )
       .join('')
 
-    sectionNav.querySelectorAll<HTMLButtonElement>('button[data-section-index]').forEach((button) => {
+    sectionNav.querySelectorAll<HTMLButtonElement>('button[data-section-id]').forEach((button) => {
       button.addEventListener('click', () => {
-        const section = data.sections[Number(button.dataset.sectionIndex ?? '0')]
+        const section = activeSections().find((item) => item.id === button.dataset.sectionId)
+        if (!section) return
         const firstQuestion = section.questions[0]
-        currentQuestionIndex = Math.max(0, questionOrder.get(firstQuestion.id) ?? 0)
+        currentQuestionIndex = Math.max(0, activeQuestions().findIndex((question) => question.id === firstQuestion.id))
         render()
       })
     })
@@ -772,10 +818,11 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     const question = currentQuestion()
     const section = currentSection()
     const answer = answersByQuestionId().get(question.id)
+    const draftOptionId = draftOptionByQuestionId.get(question.id)
     questionCard.hidden = false
     if (questionTitle) questionTitle.textContent = question.prompt
     if (questionMeta) {
-      questionMeta.textContent = `${section.title} · вопрос ${currentQuestionIndex + 1} из ${allQuestions.length}`
+      questionMeta.textContent = `${section.title} · вопрос ${currentQuestionIndex + 1} из ${activeQuestions().length}`
     }
     if (customAnswer) {
       customAnswer.value = answer?.kind === 'custom' ? answer.customText ?? '' : ''
@@ -783,17 +830,19 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     if (optionList) {
-      optionList.innerHTML = question.options?.length
-        ? question.options
+      const options = visibleQuestionOptions(question)
+      optionList.innerHTML = options.length
+        ? options
           .map(
             (option) => `
               <button
-                class="answer-option${answer?.kind === 'option' && answer.optionId === option.id ? ' is-selected' : ''}"
+                class="answer-option${(draftOptionId ?? answer?.optionId) === option.id ? ' is-selected' : ''}"
                 type="button"
                 data-option-id="${escapeHtml(option.id)}"
-                aria-pressed="${answer?.kind === 'option' && answer.optionId === option.id ? 'true' : 'false'}"
+                aria-pressed="${(draftOptionId ?? answer?.optionId) === option.id ? 'true' : 'false'}"
               >
-                ${escapeHtml(option.label)}
+                <span>${escapeHtml(option.label)}</span>
+                ${option.hint ? `<small>${escapeHtml(option.hint)}</small>` : ''}
               </button>
             `,
           )
@@ -802,11 +851,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
       optionList.querySelectorAll<HTMLButtonElement>('button[data-option-id]').forEach((button) => {
         button.addEventListener('click', () => {
-          void saveAnswer({
-            questionId: question.id,
-            kind: 'option',
-            optionId: button.dataset.optionId ?? '',
-          })
+          draftOptionByQuestionId.set(question.id, button.dataset.optionId ?? '')
+          if (customAnswer) customAnswer.value = ''
+          renderQuestion()
         })
       })
     }
@@ -815,6 +862,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   function renderSessionPanels() {
     const hasSession = Boolean(session)
     if (contactForm) contactForm.hidden = hasSession
+    if (storedResumePanel) storedResumePanel.hidden = hasSession || !pendingStoredResume || hasOfferChoiceQuery()
     if (resumePanel) resumePanel.hidden = !hasSession
 
     if (session && resumeLink) {
@@ -840,34 +888,96 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   function updateQuestionControls() {
     const disabled = isSaving || !session
-    for (const button of [saveCustom, answerUnknown, answerSkipped, prevQuestion, nextQuestion]) {
+    for (const button of [answerSkipped, prevQuestion, nextQuestion]) {
       if (button) button.disabled = disabled
     }
     if (prevQuestion) prevQuestion.disabled = disabled || currentQuestionIndex === 0
-    if (nextQuestion) nextQuestion.disabled = disabled || currentQuestionIndex >= allQuestions.length - 1
+    if (nextQuestion) nextQuestion.disabled = disabled || activeQuestions().length === 0
   }
 
   function validateContact() {
     const clientName = clientNameInput?.value.trim() ?? ''
     const clientPhone = clientPhoneInput?.value.trim() ?? ''
-    const phoneDigits = clientPhone.replace(/\D/g, '')
+    const phone = validateQuestionnairePhone(clientPhone)
     const nameValid = clientName.length >= 2 && clientName.length <= 120
-    const phoneValid =
-      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
-      phoneDigits.length >= 8 &&
-      phoneDigits.length <= 15 &&
-      !/^(\d)\1+$/.test(phoneDigits)
+    const phoneValid = phone.valid
     const consentValid = consentInput?.checked === true
 
     setInputValidity(clientNameInput, nameValid)
     setInputValidity(clientPhoneInput, phoneValid)
     setInputValidity(consentInput, consentValid)
+    if (phoneError) phoneError.hidden = phoneValid
 
     return {
       valid: nameValid && phoneValid && consentValid,
       clientName,
-      clientPhone,
+      clientPhone: phone.normalized ?? clientPhone,
     }
+  }
+
+  function validateQuestionnairePhone(rawPhone: string) {
+    const trimmed = rawPhone.trim()
+    if (!/^[+\d\s().-]{5,40}$/.test(trimmed)) return { valid: false }
+
+    const digits = trimmed.replace(/\D/g, '')
+    const normalizedDigits = normalizedPhoneDigits(digits)
+    if (!normalizedDigits) return { valid: false }
+    if (!/^(375\d{9}|7\d{10})$/.test(normalizedDigits)) return { valid: false }
+    if (/^(\d)\1+$/.test(normalizedDigits) || hasLongRepeatedDigitRun(normalizedDigits)) {
+      return { valid: false }
+    }
+
+    return { valid: true, normalized: `+${normalizedDigits}` }
+  }
+
+  function normalizedPhoneDigits(digits: string) {
+    if (digits.startsWith('00375') && digits.length === 14) return digits.slice(2)
+    if (digits.startsWith('007') && digits.length === 13) return digits.slice(2)
+    if (digits.startsWith('375') && digits.length === 12) return digits
+    if (digits.startsWith('7') && digits.length === 11) return digits
+    if (/^80\d{9}$/.test(digits)) return `375${digits.slice(2)}`
+    if (/^0\d{9}$/.test(digits)) return `375${digits.slice(1)}`
+    if (/^(25|29|33|44)\d{7}$/.test(digits)) return `375${digits}`
+    return null
+  }
+
+  function hasLongRepeatedDigitRun(value: string) {
+    return /(\d)\1{5,}/.test(value)
+  }
+
+  function maskPhoneInput() {
+    if (!clientPhoneInput) return
+    const raw = clientPhoneInput.value
+    const digits = raw.replace(/\D/g, '')
+
+    if (raw.trim().startsWith('+375') || digits.startsWith('375')) {
+      clientPhoneInput.value = formatBelarusPhone(digits.startsWith('375') ? digits : `375${digits.slice(0, 9)}`)
+      return
+    }
+
+    if (raw.trim().startsWith('+7') || digits.startsWith('7')) {
+      clientPhoneInput.value = formatRussianPhone(digits.startsWith('7') ? digits : `7${digits.slice(0, 10)}`)
+    }
+  }
+
+  function formatBelarusPhone(digits: string) {
+    const local = digits.replace(/^375/, '').slice(0, 9)
+    let formatted = '+375'
+    if (local.length > 0) formatted += ` ${local.slice(0, 2)}`
+    if (local.length > 2) formatted += ` ${local.slice(2, 5)}`
+    if (local.length > 5) formatted += `-${local.slice(5, 7)}`
+    if (local.length > 7) formatted += `-${local.slice(7, 9)}`
+    return formatted
+  }
+
+  function formatRussianPhone(digits: string) {
+    const local = digits.replace(/^7/, '').slice(0, 10)
+    let formatted = '+7'
+    if (local.length > 0) formatted += ` ${local.slice(0, 3)}`
+    if (local.length > 3) formatted += ` ${local.slice(3, 6)}`
+    if (local.length > 6) formatted += `-${local.slice(6, 8)}`
+    if (local.length > 8) formatted += `-${local.slice(8, 10)}`
+    return formatted
   }
 
   function setInputValidity(input: HTMLInputElement | null, isValid: boolean) {
@@ -879,24 +989,90 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
   }
 
+  async function saveCurrentQuestionAndAdvance() {
+    if (!session) return
+
+    const question = currentQuestion()
+    const draftOptionId = draftOptionByQuestionId.get(question.id)
+    const text = customAnswer?.value.trim() ?? ''
+    const existingAnswer = answersByQuestionId().get(question.id)
+
+    if (draftOptionId) {
+      await saveAnswer({
+        questionId: question.id,
+        kind: 'option',
+        optionId: draftOptionId,
+      }, { advance: true })
+      return
+    }
+
+    if (text) {
+      customAnswer?.removeAttribute('aria-invalid')
+      await saveAnswer({
+        questionId: question.id,
+        kind: 'custom',
+        customText: text,
+      }, { advance: true })
+      return
+    }
+
+    if (existingAnswer) {
+      moveAfterQuestion(question.id)
+      render()
+      return
+    }
+
+    setWizardStatus('Выберите вариант, введите свой ответ или нажмите «Пропустить».', 'error')
+    customAnswer?.setAttribute('aria-invalid', 'true')
+  }
+
+  function moveAfterQuestion(questionId: string) {
+    const questions = activeQuestions()
+    const index = questions.findIndex((question) => question.id === questionId)
+    if (index === -1) {
+      currentQuestionIndex = Math.min(currentQuestionIndex, Math.max(0, questions.length - 1))
+      return
+    }
+    currentQuestionIndex = Math.min(index + 1, Math.max(0, questions.length - 1))
+  }
+
+  function clampCurrentQuestionIndex() {
+    currentQuestionIndex = Math.min(currentQuestionIndex, Math.max(0, activeQuestions().length - 1))
+  }
+
   function currentQuestion() {
-    return allQuestions[currentQuestionIndex] ?? allQuestions[0]
+    return activeQuestions()[currentQuestionIndex] ?? activeQuestions()[0] ?? allQuestions[0]
   }
 
   function currentSection() {
-    return data.sections.find((section) =>
+    return activeSections().find((section) =>
       section.questions.some((question) => question.id === currentQuestion().id),
-    ) ?? data.sections[0]
+    ) ?? activeSections()[0] ?? data.sections[0]
   }
 
   function firstUnansweredQuestionIndex() {
     const answers = answersByQuestionId()
-    const index = allQuestions.findIndex((question) => !answers.has(question.id))
+    const index = activeQuestions().findIndex((question) => !answers.has(question.id))
     return index
   }
 
-  function answersByQuestionId() {
-    return new Map((session?.answers ?? []).map((answer) => [answer.questionId, answer]))
+  function activeQuestions() {
+    return getQuestionnaireActiveQuestions(session?.answers ?? [])
+  }
+
+  function activeSections() {
+    return getQuestionnaireActiveSections(session?.answers ?? [])
+  }
+
+  function visibleQuestionOptions(question: QuestionnaireQuestion) {
+    return getQuestionnaireActiveOptions(question, session?.answers ?? []).filter(
+      (option) => option.id !== 'UNKNOWN' && !/пока не/i.test(option.label),
+    )
+  }
+
+  function answersByQuestionId(options: { includeInactive?: boolean } = {}) {
+    const answers = (session?.answers ?? []).filter((answer) => options.includeInactive || answer.isActive)
+    return new Map(answers.map((answer) => [answer.questionId, answer]))
   }
 
   function readOfferChoiceState(): OfferChoiceState {
@@ -1013,25 +1189,64 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     return new URLSearchParams(window.location.search).get('token')?.trim() || null
   }
 
-  function storeQuestionnaireToken(token: string) {
+  function storeQuestionnaireResume(token: string, clientName?: string, clientPhone?: string) {
     try {
-      sessionStorage.setItem(questionnaireSessionStorageKey, JSON.stringify({ token }))
+      const existing = readStoredQuestionnaireResume()
+      const phone = clientPhone ? validateQuestionnairePhone(clientPhone).normalized : existing?.clientPhone
+      const name = clientName?.trim().toLowerCase() || existing?.clientName
+      localStorage.setItem(questionnaireSessionStorageKey, JSON.stringify({
+        token,
+        clientName: name,
+        clientPhone: phone,
+        updatedAt: new Date().toISOString(),
+      }))
     } catch {
-      // Resume links still work even if session storage is unavailable.
+      // Explicit resume links still work even if local storage is unavailable.
     }
   }
 
-  function readStoredQuestionnaireToken() {
-    if (new URLSearchParams(window.location.search).has('area')) return null
-
+  function readStoredQuestionnaireResume() {
     try {
-      const parsed = JSON.parse(sessionStorage.getItem(questionnaireSessionStorageKey) ?? '{}') as {
+      const parsed = JSON.parse(localStorage.getItem(questionnaireSessionStorageKey) ?? '{}') as {
         token?: unknown
+        clientName?: unknown
+        clientPhone?: unknown
       }
-      return typeof parsed.token === 'string' ? parsed.token : null
+      if (typeof parsed.token !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(parsed.token)) {
+        return null
+      }
+      return {
+        token: parsed.token,
+        clientName: typeof parsed.clientName === 'string' ? parsed.clientName : undefined,
+        clientPhone: typeof parsed.clientPhone === 'string' ? parsed.clientPhone : undefined,
+      }
     } catch {
       return null
     }
+  }
+
+  function matchingStoredQuestionnaireResume(clientName: string, clientPhone: string) {
+    const stored = readStoredQuestionnaireResume()
+    if (!stored) return null
+
+    const phone = validateQuestionnairePhone(clientPhone).normalized
+    const name = clientName.trim().toLowerCase()
+    if (stored.clientPhone && phone && stored.clientPhone === phone) return stored
+    if (stored.clientName && stored.clientName === name) return stored
+    return null
+  }
+
+  function clearStoredQuestionnaireResume() {
+    try {
+      localStorage.removeItem(questionnaireSessionStorageKey)
+    } catch {
+      // Nothing to clear.
+    }
+  }
+
+  function hasOfferChoiceQuery() {
+    const searchParams = new URLSearchParams(window.location.search)
+    return searchParams.has('area') || searchParams.has('services') || searchParams.has('type')
   }
 
   function resetStartKey() {
@@ -1061,13 +1276,24 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   function publicQuestionnaireErrorMessage(status: number, payload: unknown) {
-    void payload
-
     if (status === 400) return 'Проверьте поля формы.'
     if (status === 404) return 'Сохраненный опросник не найден.'
+    if (status === 409 && isDuplicateQuestionnairePayload(payload)) {
+      return 'Похоже, опросник уже есть. Откройте ссылку из Telegram/предыдущего сообщения или запросите новую ссылку.'
+    }
     if (status === 409) return 'Выбранные разделы изменились. Вернитесь к калькулятору и повторите старт.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
     return 'Не удалось выполнить действие. Попробуйте еще раз.'
+  }
+
+  function isDuplicateQuestionnairePayload(payload: unknown) {
+    if (!payload || typeof payload !== 'object') return false
+    const record = payload as Record<string, unknown>
+    const error = record.error && typeof record.error === 'object'
+      ? record.error as Record<string, unknown>
+      : null
+    const message = typeof error?.message === 'string' ? error.message : ''
+    return /questionnaire lead already exists|опросник уже/i.test(message)
   }
 
   function allocateDisplayBynRubles(calculation: CalculationResult) {
@@ -1116,9 +1342,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   :root {
     color-scheme: light;
     --navy: #081a2f;
-    --blue: #0b5fb5;
-    --blue-2: #084d93;
-    --blue-soft: #edf5fc;
+    --blue: #0a5ea8;
+    --blue-2: #084777;
+    --blue-soft: #eaf4fb;
     --ink: #102033;
     --body: #4d5b6a;
     --muted: #7a8794;
@@ -1130,8 +1356,8 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     --success: #0b5f46;
     --shadow: 0 18px 50px rgba(16, 32, 51, 0.1);
     --shell: 1160px;
-    --font-body: Inter, "Segoe UI", Arial, sans-serif;
-    --font-heading: Nunito, Inter, "Segoe UI", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+    --font-heading: "IBM Plex Mono", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
   }
 
   * {
@@ -1294,19 +1520,51 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   .hero {
-    border-bottom: 1px solid var(--line);
-    background:
-      linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.8)),
-      url("/landing-v4/project-preview-spec-10.jpg") center / cover;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+    background-color: #0a4f93;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+      linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+    color: #ffffff;
+  }
+
+  .hero::before,
+  .hero::after {
+    position: absolute;
+    pointer-events: none;
+    content: "";
+    border: 1px solid rgba(255, 255, 255, 0.36);
+  }
+
+  .hero::before {
+    width: 360px;
+    height: 170px;
+    right: 9vw;
+    top: 38px;
+  }
+
+  .hero::after {
+    width: 230px;
+    height: 230px;
+    right: 18vw;
+    bottom: -116px;
+    border-radius: 50%;
   }
 
   .hero-grid {
-    min-height: 420px;
+    position: relative;
+    z-index: 1;
+    min-height: 300px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 390px;
-    gap: 56px;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 40px;
     align-items: center;
-    padding: 56px 0;
+    padding: 38px 0 42px;
   }
 
   .eyebrow,
@@ -1319,18 +1577,22 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   h1 {
-    max-width: 680px;
+    max-width: 620px;
     margin-top: 14px;
-    font-size: clamp(34px, 3.45vw, 52px);
+    font-size: clamp(32px, 3vw, 46px);
     line-height: 1.06;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   .hero-copy p {
-    max-width: 660px;
-    margin-top: 20px;
-    color: var(--body);
-    font-size: 18px;
+    max-width: 560px;
+    margin-top: 16px;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 17px;
+  }
+
+  .hero .eyebrow {
+    color: rgba(255, 255, 255, 0.88);
   }
 
   .state-status,
@@ -1351,6 +1613,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     color: var(--danger) !important;
   }
 
+  .hero .state-status {
+    border-color: rgba(255, 255, 255, 0.26);
+    background: rgba(7, 40, 76, 0.58);
+    color: #ffffff !important;
+  }
+
   .wizard-status.is-ready {
     border-color: rgba(11, 95, 70, 0.22);
     color: var(--success) !important;
@@ -1360,6 +1628,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   .progress-panel,
   .main-panel,
   .contact-gate,
+  .stored-resume-panel,
   .resume-panel,
   .question-card {
     border: 1px solid var(--line);
@@ -1369,7 +1638,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   .summary-card {
-    padding: 26px;
+    padding: 18px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 16px 40px rgba(3, 27, 54, 0.18);
   }
 
   .summary-head,
@@ -1453,9 +1724,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     grid-template-columns: 1fr auto;
     align-items: end;
     margin-top: 24px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #f7f9fc, #eef3f8);
-    padding: 22px;
+    border-radius: 8px;
+    background: #eef5fb;
+    padding: 16px;
   }
 
   .summary-total span {
@@ -1469,7 +1740,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     align-items: baseline;
     gap: 7px;
     font-family: var(--font-heading);
-    font-size: 28px;
+    font-size: 24px;
     line-height: 1;
     font-weight: 800;
   }
@@ -1564,12 +1835,33 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   .contact-gate,
+  .stored-resume-panel,
   .resume-panel,
   .question-card {
     display: grid;
     gap: 18px;
     padding: 22px;
     box-shadow: none;
+  }
+
+  .stored-resume-panel {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    background: #f0f7fc;
+  }
+
+  .stored-resume-panel p {
+    margin-top: 6px;
+    color: var(--body);
+    font-size: 13px;
+  }
+
+  .resume-actions,
+  .pager-forward {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
   }
 
   .contact-grid {
@@ -1587,6 +1879,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     color: var(--muted);
     font-size: 12px;
     font-weight: 800;
+  }
+
+  .field-error {
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 700;
   }
 
   input:not([type="checkbox"]),
@@ -1674,14 +1972,28 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   .answer-option {
-    min-height: 44px;
+    min-height: 48px;
+    display: grid;
+    gap: 3px;
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: #ffffff;
-    padding: 0 14px;
+    padding: 9px 14px;
     color: var(--ink);
     font-size: 13px;
     font-weight: 750;
+    text-align: left;
+  }
+
+  .answer-option span {
+    font-weight: 800;
+  }
+
+  .answer-option small {
+    color: var(--body);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
   }
 
   .answer-option:hover,
@@ -1812,6 +2124,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     .progress-panel,
     .main-panel,
     .contact-gate,
+    .stored-resume-panel,
     .resume-panel,
     .question-card {
       padding: 18px;
@@ -1820,6 +2133,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     .summary-metrics,
     .summary-total,
     .contact-grid,
+    .stored-resume-panel,
     .resume-panel {
       grid-template-columns: 1fr;
     }

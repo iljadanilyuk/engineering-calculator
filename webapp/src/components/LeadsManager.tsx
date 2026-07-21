@@ -876,15 +876,22 @@ function QuestionnaireDraftCard({
   return (
     <AdminPanel
       title="Черновик ТЗ"
-      description={`${questionnaire.progress.answeredCount} из ${questionnaire.progress.totalQuestions} вопросов · обновлено ${formatDateTime(questionnaire.updatedAt)}`}
+      description={`${questionnaire.progress.answeredCount} из ${questionnaire.progress.totalQuestions} активных вопросов · источник обновлен ${questionnaire.definitionUpdatedAt} · карточка обновлена ${formatDateTime(questionnaire.updatedAt)}`}
       action={<StatusPill tone="amber">{`${questionnaire.progress.completionPercent}%`}</StatusPill>}
     >
       <div className="admin-requirement-grid">
         <MetricTile label="Заполнено" value={`${questionnaire.progress.answeredCount}/${questionnaire.progress.totalQuestions}`} tone="blue" />
         <MetricTile label="Свои ответы" value={questionnaire.progress.customCount} tone="green" />
-        <MetricTile label="Пока не знаю" value={questionnaire.progress.unknownCount} tone="amber" />
-        <MetricTile label="Пропущено" value={questionnaire.progress.skippedCount} tone="gray" />
+        <MetricTile label="Нужно уточнить" value={questionnaire.progress.unknownCount + questionnaire.progress.skippedCount} tone="amber" />
+        <MetricTile
+          label="Скрытые ветки"
+          value={questionnaire.sections.flatMap((section) => section.questions).filter((question) => question.answer && !question.answer.isActive).length}
+          tone="gray"
+        />
       </div>
+      <Typography variant="caption" tone="muted">
+        Источник логики: {questionnaire.definitionSource}. {questionnaire.sourcePolicy}
+      </Typography>
       <div className="admin-stack">
         {questionnaire.sections.map((section) => (
           <QuestionnaireSectionDraft key={section.id} section={section} />
@@ -900,12 +907,16 @@ function QuestionnaireSectionDraft({
   section: NonNullable<CalculationRecord['questionnaire']>['sections'][number]
 }) {
   const answeredQuestions = section.questions.filter(hasQuestionnaireAnswer)
+  const activeQuestionCount = section.questions.filter((question) => question.isActive).length
+  const activeAnsweredQuestionCount = section.questions.filter(
+    (question) => question.isActive && question.answer?.isActive,
+  ).length
 
   return (
     <section className="admin-subpanel" aria-label={section.title}>
       <div className="admin-subpanel-head">
         <Typography variant="bodySmMedium">{section.title}</Typography>
-        <Typography variant="caption" tone="muted">{answeredQuestions.length}/{section.questions.length}</Typography>
+        <Typography variant="caption" tone="muted">{activeAnsweredQuestionCount}/{activeQuestionCount} активных</Typography>
       </div>
       {answeredQuestions.length === 0 ? (
         <Typography variant="bodySm" tone="muted">В этом разделе пока нет ответов.</Typography>
@@ -948,9 +959,11 @@ function QuestionnaireAnswerBadge({
     NonNullable<CalculationRecord['questionnaire']>['sections'][number]['questions'][number]['answer']
   >
 }) {
+  if (!answer.isActive) return <StatusPill tone="gray">Скрытая ветка</StatusPill>
   if (answer.kind === 'unknown') return <StatusPill tone="amber">Пока не знаю</StatusPill>
-  if (answer.kind === 'skipped') return <StatusPill tone="gray">Пропущено</StatusPill>
+  if (answer.kind === 'skipped') return <StatusPill tone="amber">Нужно уточнить</StatusPill>
   if (answer.kind === 'custom') return <StatusPill tone="blue">Свой ответ</StatusPill>
+  if (answer.optionId === 'UNKNOWN') return <StatusPill tone="amber">Нужно уточнить</StatusPill>
   return <StatusPill tone="green">Вариант</StatusPill>
 }
 
@@ -959,8 +972,12 @@ function questionnaireAnswerText(
     NonNullable<CalculationRecord['questionnaire']>['sections'][number]['questions'][number]['answer']
   >,
 ) {
-  if (answer.kind === 'unknown') return 'Требует уточнения'
-  if (answer.kind === 'skipped') return 'Пользователь пропустил вопрос'
+  if (!answer.isActive) {
+    const value = answer.label ?? answer.customText ?? answer.optionId ?? 'ответ сохранен'
+    return `Сохранено из скрытой сейчас ветки: ${value}`
+  }
+  if (answer.kind === 'unknown' || answer.optionId === 'UNKNOWN') return 'Нужно уточнить до финального расчета'
+  if (answer.kind === 'skipped') return 'Клиент пропустил вопрос, требуется уточнение'
   return answer.label ?? answer.customText ?? answer.optionId ?? 'Ответ сохранен'
 }
 

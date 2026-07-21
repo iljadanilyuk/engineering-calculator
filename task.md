@@ -1785,6 +1785,73 @@ Review log:
   - Reviewer Carver: 9.4/10; required replacing the stale Astro `favicon.ico` so browser tabs use the unified mark. Changes incorporated.
   - Reviewer Kuhn: 9.6/10; no blocking findings, confirmed unified public/admin brand, cleaned visible product copy, responsive 390/768/1024/1280/1440 smoke, and ready-to-close tracker state. Non-blocking wording suggestion around `предварительное КП` was also applied. Gate cleared.
 
+### PZK-028 - Questionnaire Resume, Heating Branching, And UX Polish
+
+Status: Complete
+
+Goal:
+
+- Stabilize and update the public `/questionnaire/` flow before continuing pending feature work.
+- Migrate the heating questionnaire logic from the updated local prototype sources without exposing sample/filled XLSX answers.
+- Make same-device resume understandable and safe while preserving the PZK-019 duplicate-phone protection.
+
+Source materials:
+
+- `прототип/опросник/ТЗ_агенту_ветвление_опросника_отопление_обновлено.md`
+- `прототип/опросник/Опросник_отопление_клиентская_логика_обновлен.xlsx`
+
+Required behavior:
+
+- Replace the old broad wall/floor/roof construction prompt with separate active branches for exterior walls, first-floor floor, and roof/upper envelope.
+- Use the updated heating branching brief as the source of truth for `OBJ_WALL_*`, `OBJ_FLOOR_*`, and `OBJ_ROOF_*` questions.
+- Hidden branches are excluded from public progress and from the active draft TZ, but their previous answers remain stored as inactive and become active again if the parent answer makes the branch visible.
+- Keep question wording client-friendly; do not ask for engineering coefficients, material brands, pump/boiler model choices, hydraulic schemes, or roof covering types unless a later approved scope requires it.
+- Store the public resume token in `localStorage` after questionnaire start.
+- On the same device, offer to continue a saved questionnaire; if the same name/phone is entered and a matching local token exists, continue that questionnaire.
+- Do not reveal a token or answers from phone-only duplicate detection. Cross-device duplicate attempts must show a safe message telling the client to use the previous Telegram/message link or request a new link.
+- Add client-side phone mask/validation for at least `+375 XX XXX-XX-XX`, `+7 XXX XXX-XX-XX`, and manual allowed characters `+`, digits, spaces, parentheses, and hyphens; reject short, repeated, or junk numbers with clear Russian copy.
+- Rework `/questionnaire/` UX so the first screen gets to the questionnaire faster: a compact high-contrast blue/white blueprint hero, shorter hero copy, and a visually secondary calculation summary.
+- Remove separate `Пока не знаю` and `Сохранить свой ответ` buttons. `Далее` saves the selected/custom answer and advances; `Пропустить` sits near `Далее`, saves `skipped` / needs-clarification state, and advances.
+- Progress counts only active questions and moves forward after a skipped question.
+- Admin draft TZ must show active answers, skipped/needs-clarification answers, inactive preserved answers from hidden branches, source, and update date without breaking the existing draft-TZ card.
+
+Out of scope:
+
+- Full questionnaire builder.
+- PZK-024, PZK-026, or any other pending feature work.
+- DigitalOcean/cloud/env/secret changes.
+- Codex plugin/profile changes.
+- Publicly bundling or committing filled/sample XLSX answers.
+
+Verification target:
+
+- `bun run typecheck`
+- `bun run test:contracts`
+- `bun run test:backend:unit`
+- `bun run test:backend:integration`
+- `bun run build:website`
+- Browser smoke for `/questionnaire/` on desktop and mobile: start, phone validation, answer save, skip, same-device resume, and duplicate phone without local token not revealing the questionnaire.
+- `git diff --check`
+
+Review log:
+
+- 2026-07-21 pre-task reviewer Aquinas, `gpt-5.5 xhigh`: flagged legacy PZK-019 saved-answer compatibility, flat progress/branching gaps, `sessionStorage` resume mismatch, safe duplicate-phone boundary, `Next`/skip UX mismatch, scope risk in global phone normalization, and the need not to public-bundle XLSX sample/filled-answer data. Recommendations incorporated into the implementation plan.
+- Verification:
+  - `bun run test:contracts` - passed; final local run reported 34 tests / 898 expects, including PZK-028 nested hidden-branch regressions and unrelated local blog-content tests.
+  - `bun run typecheck:backend` - passed.
+  - `bun run typecheck:webapp` - passed.
+  - `bun run typecheck:website` - passed, 0 errors / 0 warnings / 0 hints.
+  - `bun run test:backend:unit` - passed, 40 tests / 167 expects.
+  - `bun run test:backend:integration` - passed, 40 tests / 560 expects, including updated questionnaire draft/resume/duplicate coverage.
+  - `bun run test:webapp` - passed, 45 tests / 130 expects.
+  - `bun run build:webapp` - passed; existing Vite chunk-size warning only.
+  - `bun run build:website` - passed after browser smoke and again with the normal environment.
+  - Browser smoke with local mock API + static site - passed desktop start, phone validation, branch answer save, skip, `localStorage` resume, mobile resume/no horizontal overflow, and duplicate-phone 409 without rendering the token.
+  - `git diff --check` - passed; line-ending warnings only.
+- Post-task reviewer Bernoulli, `gpt-5.5 xhigh`: 7.0/10; required fixing nested hidden-child answers that could keep deeper branches active, and splitting unrelated PZK-029 proposal V2 route-test hunks out of the PZK-028 commit. Fixes incorporated: shared visibility now evaluates against active-parent answers recursively; regression tests cover hidden wall and roof child answers; staged diff excludes proposal V2 hunks while leaving unrelated working-tree changes untouched.
+- Post-task reviewer Leibniz, `gpt-5.5 xhigh`: 9.2/10; required fixing admin draft `isActive` computation that still used raw answers and could mark deeper hidden child questions active. Fix incorporated: admin draft now uses the shared fixed-point active-question set, and backend integration coverage includes hidden `OBJ_WALL_INSULATION_MATERIAL`.
+- Post-task reviewer Pauli, `gpt-5.5 xhigh`: 9.6/10; no blocking findings, confirmed staged diff is safe to commit/push, proposal V2 hunks are not staged, and hidden child/admin active-state blockers are resolved. Non-blocking fixture/section-guard suggestions were incorporated.
+
 ### PZK-029 - Commercial Proposal HTML V2 And PDF Export
 
 Status: Complete

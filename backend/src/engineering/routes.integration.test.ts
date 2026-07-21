@@ -2109,14 +2109,14 @@ maybeDescribe('engineering API integration', () => {
       source: 'public_questionnaire',
       initialAnswers: [
         {
-          questionId: 'interior_finished',
+          questionId: 'OBJ_DOCS',
           kind: 'option',
-          optionId: 'no',
+          optionId: 'PARTIAL',
         },
         {
-          questionId: 'wall_materials',
-          kind: 'custom',
-          customText: 'Газосиликат, утепление уточнить',
+          questionId: 'OBJ_WALL_MATERIAL',
+          kind: 'option',
+          optionId: 'BRICK',
         },
       ],
     }
@@ -2156,17 +2156,42 @@ maybeDescribe('engineering API integration', () => {
       body: JSON.stringify({
         answers: [
           {
-            questionId: 'roof_materials',
-            kind: 'unknown',
+            questionId: 'OBJ_WALL_THICKNESS',
+            kind: 'option',
+            optionId: 'MM_380',
           },
           {
-            questionId: 'fireplace',
+            questionId: 'OBJ_WALL_INSULATION',
+            kind: 'option',
+            optionId: 'YES',
+          },
+          {
+            questionId: 'OBJ_WALL_INSULATION_MATERIAL',
+            kind: 'option',
+            optionId: 'STONE_WOOL',
+          },
+          {
+            questionId: 'OBJ_ROOF_TYPE',
             kind: 'skipped',
           },
         ],
       }),
     })
     const patchBody = await patch.json()
+    const hideWallBranch = await app.request(`/api/public/questionnaires/${token}/answers`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: [
+          {
+            questionId: 'OBJ_WALL_MATERIAL',
+            kind: 'option',
+            optionId: 'UNKNOWN',
+          },
+        ],
+      }),
+    })
+    const hideWallBranchBody = await hideWallBranch.json()
     const looseDuplicate = await app.request('/api/public/questionnaires', {
       method: 'POST',
       headers: {
@@ -2208,10 +2233,9 @@ maybeDescribe('engineering API integration', () => {
       'Questionnaire water drawings',
     ])
     expect(startBody.questionnaire.progress).toMatchObject({
-      totalQuestions: 91,
       answeredCount: 2,
-      customCount: 1,
-      optionCount: 1,
+      customCount: 0,
+      optionCount: 2,
       unknownCount: 0,
       skippedCount: 0,
     })
@@ -2221,22 +2245,28 @@ maybeDescribe('engineering API integration', () => {
     expect(mismatch.status).toBe(409)
     expect(patch.status).toBe(200)
     expect(patchBody.questionnaire.progress).toMatchObject({
-      answeredCount: 4,
-      unknownCount: 1,
+      answeredCount: 6,
+      unknownCount: 0,
       skippedCount: 1,
     })
+    expect(hideWallBranch.status).toBe(200)
+    expect(hideWallBranchBody.questionnaire.progress.answeredCount).toBeLessThan(
+      hideWallBranchBody.questionnaire.answers.length,
+    )
     expect(looseDuplicate.status).toBe(409)
     expect(JSON.parse(looseDuplicateText).questionnaire).toBeUndefined()
     expect(looseDuplicateText).not.toContain(token)
-    expect(looseDuplicateText).not.toContain('Газосиликат, утепление уточнить')
+    expect(looseDuplicateText).not.toContain('OBJ_WALL_THICKNESS')
     expect(resume.status).toBe(200)
     expect(resume.headers.get('cache-control')).toBe('private, max-age=0, no-store')
     expect(resume.headers.get('x-robots-tag')).toBe('noindex, nofollow')
     expect(resumeBody.questionnaire.answers.map((answer: { questionId: string }) => answer.questionId)).toEqual([
-      'wall_materials',
-      'roof_materials',
-      'interior_finished',
-      'fireplace',
+      'OBJ_DOCS',
+      'OBJ_WALL_MATERIAL',
+      'OBJ_WALL_THICKNESS',
+      'OBJ_WALL_INSULATION',
+      'OBJ_WALL_INSULATION_MATERIAL',
+      'OBJ_ROOF_TYPE',
     ])
     expect(saved.source).toBe('public_questionnaire')
     expect(saved.consentVersion).toBe('pzk-questionnaire-consent-v1')
@@ -2246,30 +2276,47 @@ maybeDescribe('engineering API integration', () => {
     expect(adminDetail.status).toBe(200)
     expect(adminDetailBody.calculation.proposalArtifacts).toEqual([])
     expect(adminDetailBody.calculation.questionnaire.progress).toMatchObject({
-      answeredCount: 4,
-      totalQuestions: 91,
+      answeredCount: hideWallBranchBody.questionnaire.progress.answeredCount,
       unknownCount: 1,
       skippedCount: 1,
     })
-    expect(adminDetailBody.calculation.questionnaire.sections[1].title).toBe('Общая информация о доме')
-    const wallMaterials = adminDetailBody.calculation.questionnaire.sections[1].questions.find(
-      (question: { id: string }) => question.id === 'wall_materials',
+    expect(adminDetailBody.calculation.questionnaire.definitionSource).toContain('ТЗ_агенту_ветвление')
+    const wallsSection = adminDetailBody.calculation.questionnaire.sections.find(
+      (section: { id: string }) => section.id === 'heating_walls',
     )
-    const interiorFinished = adminDetailBody.calculation.questionnaire.sections[1].questions.find(
-      (question: { id: string }) => question.id === 'interior_finished',
+    expect(wallsSection).toBeTruthy()
+    if (!wallsSection) throw new Error('Expected heating_walls questionnaire section')
+    const wallMaterial = wallsSection.questions.find(
+      (question: { id: string }) => question.id === 'OBJ_WALL_MATERIAL',
     )
-    expect(wallMaterials.answer).toMatchObject({
-      kind: 'custom',
-      label: 'Газосиликат, утепление уточнить',
-    })
-    expect(interiorFinished.answer).toMatchObject({
+    const wallThickness = wallsSection.questions.find(
+      (question: { id: string }) => question.id === 'OBJ_WALL_THICKNESS',
+    )
+    const wallInsulationMaterial = wallsSection.questions.find(
+      (question: { id: string }) => question.id === 'OBJ_WALL_INSULATION_MATERIAL',
+    )
+    expect(wallMaterial.answer).toMatchObject({
       kind: 'option',
-      optionId: 'no',
-      label: 'нет',
+      optionId: 'UNKNOWN',
+      isActive: true,
+    })
+    expect(wallThickness.answer).toMatchObject({
+      kind: 'option',
+      optionId: 'MM_380',
+      label: '380 мм',
+      isActive: false,
+    })
+    expect(wallInsulationMaterial).toMatchObject({
+      isActive: false,
+      answer: {
+        kind: 'option',
+        optionId: 'STONE_WOOL',
+        label: 'Каменная или базальтовая вата',
+        isActive: false,
+      },
     })
     expect(listBody.calculations[0].questionnaire).toMatchObject({
-      answeredCount: 4,
-      totalQuestions: 91,
+      answeredCount: hideWallBranchBody.questionnaire.progress.answeredCount,
       unknownCount: 1,
       skippedCount: 1,
     })

@@ -7,6 +7,8 @@ export const QUESTIONNAIRE_VERSION = 'pzk-questionnaire-v1'
 export type QuestionnaireOption = {
   id: string
   label: string
+  hint?: string
+  showIf?: QuestionnaireVisibilityRule
 }
 
 export type QuestionnaireQuestion = {
@@ -14,6 +16,8 @@ export type QuestionnaireQuestion = {
   prompt: string
   sourceRow: number
   options?: readonly QuestionnaireOption[]
+  showIf?: QuestionnaireVisibilityRule
+  isLegacy?: boolean
 }
 
 export type QuestionnaireSection = {
@@ -21,18 +25,64 @@ export type QuestionnaireSection = {
   title: string
   sourceRows: readonly number[]
   questions: readonly QuestionnaireQuestion[]
+  isLegacy?: boolean
 }
+
+export type QuestionnaireVisibilityRule =
+  | {
+      never: true
+    }
+  | {
+      questionId: string
+      equals?: readonly string[]
+      notEquals?: readonly string[]
+      exists?: true
+    }
+  | {
+      all: readonly QuestionnaireVisibilityRule[]
+    }
+  | {
+      any: readonly QuestionnaireVisibilityRule[]
+    }
 
 const yesNoOptions = [
   { id: 'yes', label: 'да' },
   { id: 'no', label: 'нет' },
 ] as const
 
+const yesNoUnknownOptions = [
+  { id: 'YES', label: 'Да' },
+  { id: 'NO', label: 'Нет' },
+  { id: 'UNKNOWN', label: 'Пока не знаю' },
+] as const
+
+const hiddenLegacyQuestion = { never: true } as const
+const envelopeNeededRule = { questionId: 'OBJ_DOCS', equals: ['PARTIAL', 'NONE'] } as const
+const wallMaterialKnownRule = {
+  all: [
+    { questionId: 'OBJ_WALL_MATERIAL', exists: true },
+    { questionId: 'OBJ_WALL_MATERIAL', notEquals: ['UNKNOWN'] },
+  ],
+} as const
+const wallInsulationYesRule = { questionId: 'OBJ_WALL_INSULATION', equals: ['YES'] } as const
+const floorNeedsInsulationRule = {
+  questionId: 'OBJ_FLOOR_BELOW',
+  equals: ['GROUND_OR_SLAB', 'UNHEATED_BASEMENT'],
+} as const
+const floorInsulationYesRule = { questionId: 'OBJ_FLOOR_INSULATION', equals: ['YES'] } as const
+const roofNeedsEnvelopeRule = {
+  questionId: 'OBJ_ROOF_TYPE',
+  equals: ['COLD_ATTIC', 'MANSARD', 'FLAT_ROOF'],
+} as const
+const coldAtticRule = { questionId: 'OBJ_ROOF_TYPE', equals: ['COLD_ATTIC'] } as const
+
 export const technicalQuestionnaireDefinition = {
   version: QUESTIONNAIRE_VERSION,
-  sourceWorkbook: 'docs/design/Опросный лист.xlsx',
-  sourceWorksheet: 'Опросный лист по проектированию',
-  sourcePolicy: 'Only column A question/section/option text is used. Filled answers from column B are excluded.',
+  sourceWorkbook: 'прототип/опросник/Опросник_отопление_клиентская_логика_обновлен.xlsx',
+  sourceWorksheet: 'Updated heating questionnaire logic',
+  sourceBrief: 'прототип/опросник/ТЗ_агенту_ветвление_опросника_отопление_обновлено.md',
+  sourceUpdatedAt: '2026-07-20',
+  sourcePolicy: 'Only sanitized question, section, option, hint, and branching text is used. Filled/sample answers from the XLSX are excluded from public bundles.',
   sections: [
     {
       id: 'contacts_object',
@@ -52,6 +102,322 @@ export const technicalQuestionnaireDefinition = {
       ],
     },
     {
+      id: 'object_source',
+      title: 'Дом и исходные материалы',
+      sourceRows: [80, 115],
+      questions: [
+        {
+          id: 'OBJ_STAGE',
+          prompt: 'На какой стадии находится дом?',
+          sourceRow: 80,
+          options: [
+            {
+              id: 'DESIGN',
+              label: 'Есть архитектурный проект, строительство еще не началось',
+              hint: 'Проще заранее предусмотреть котельную, трассы и высоты пола.',
+            },
+            {
+              id: 'BUILDING',
+              label: 'Строительство уже идет',
+              hint: 'Укажите, какие работы уже выполнены и что еще можно изменить.',
+            },
+            {
+              id: 'BUILT',
+              label: 'Дом построен или реконструируется',
+              hint: 'Учтем существующие полы, отделку и доступные места прокладки.',
+            },
+          ],
+        },
+        {
+          id: 'OBJ_DOCS',
+          prompt: 'Какие материалы по дому вы можете приложить?',
+          sourceRow: 98,
+          options: [
+            {
+              id: 'FULL',
+              label: 'Полный архитектурный проект с планами и разрезами',
+              hint: 'Основные размеры и конструкции возьмем из проекта.',
+            },
+            {
+              id: 'PARTIAL',
+              label: 'Есть только планы этажей или часть документов',
+              hint: 'Недостающие данные соберем отдельным коротким списком.',
+            },
+            {
+              id: 'NONE',
+              label: 'Полного проекта пока нет',
+              hint: 'Можно начать с планировки и примерной площади.',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'heating_walls',
+      title: 'Наружные стены',
+      sourceRows: [116, 364],
+      questions: [
+        {
+          id: 'OBJ_WALL_MATERIAL',
+          prompt: 'Из какого материала выполнены или планируются наружные стены?',
+          sourceRow: 116,
+          showIf: envelopeNeededRule,
+          options: [
+            {
+              id: 'AERATED_CONCRETE',
+              label: 'Газосиликатный или газобетонный блок',
+              hint: 'Легкие белые или серые стеновые блоки.',
+            },
+            {
+              id: 'CERAMIC_BLOCK',
+              label: 'Керамический блок',
+              hint: 'Крупноформатный пустотелый блок из обожженной глины.',
+            },
+            {
+              id: 'BRICK',
+              label: 'Кирпич',
+              hint: 'Керамический, силикатный или полнотелый кирпич.',
+            },
+            {
+              id: 'CLAYDITE_BLOCK',
+              label: 'Керамзитобетонный блок',
+              hint: 'Серый бетонный блок с гранулами керамзита.',
+            },
+            {
+              id: 'REINFORCED_CONCRETE',
+              label: 'Монолитный железобетон',
+              hint: 'Стены отливаются из бетона непосредственно на объекте.',
+            },
+            {
+              id: 'FRAME',
+              label: 'Каркасная конструкция',
+              hint: 'Каркас заполнен утеплителем.',
+            },
+            {
+              id: 'TIMBER',
+              label: 'Брус',
+              hint: 'Профилированный, клееный или другой брус.',
+            },
+            {
+              id: 'LOG',
+              label: 'Бревно',
+              hint: 'Рубленое или оцилиндрованное бревно.',
+            },
+            {
+              id: 'OTHER',
+              label: 'Другой материал',
+              hint: 'Опишите материал в своем варианте.',
+            },
+            {
+              id: 'UNKNOWN',
+              label: 'Пока не знаю',
+              hint: 'Материал уточним по проекту или у строителя.',
+            },
+          ],
+        },
+        {
+          id: 'OBJ_WALL_THICKNESS',
+          prompt: 'Какая толщина основной стены без наружного утепления?',
+          sourceRow: 150,
+          showIf: wallMaterialKnownRule,
+          options: [
+            { id: 'MM_150', label: '150 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['FRAME', 'TIMBER'] } },
+            { id: 'MM_160', label: '160 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['REINFORCED_CONCRETE'] } },
+            { id: 'MM_180', label: '180 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['REINFORCED_CONCRETE', 'TIMBER'] } },
+            { id: 'MM_200', label: '200 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['AERATED_CONCRETE', 'CLAYDITE_BLOCK', 'REINFORCED_CONCRETE', 'FRAME', 'TIMBER'] } },
+            { id: 'MM_220', label: '220 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['LOG'] } },
+            { id: 'MM_240', label: '240 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['TIMBER', 'LOG'] } },
+            { id: 'MM_250', label: '250 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['AERATED_CONCRETE', 'CERAMIC_BLOCK', 'BRICK', 'REINFORCED_CONCRETE', 'FRAME'] } },
+            { id: 'MM_260_PLUS', label: '260 мм и более', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['LOG'] } },
+            { id: 'MM_300', label: '300 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['AERATED_CONCRETE', 'CLAYDITE_BLOCK', 'REINFORCED_CONCRETE', 'FRAME'] } },
+            { id: 'MM_375', label: '375 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['AERATED_CONCRETE'] } },
+            { id: 'MM_380', label: '380 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['CERAMIC_BLOCK', 'BRICK'] } },
+            { id: 'MM_400', label: '400 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['AERATED_CONCRETE', 'CLAYDITE_BLOCK'] } },
+            { id: 'MM_440', label: '440 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['CERAMIC_BLOCK'] } },
+            { id: 'MM_500', label: '500 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['AERATED_CONCRETE'] } },
+            { id: 'MM_510', label: '510 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['CERAMIC_BLOCK', 'BRICK'] } },
+            { id: 'MM_640', label: '640 мм', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['BRICK'] } },
+            { id: 'OTHER_MM', label: 'Другая толщина' },
+            { id: 'MANUAL', label: 'Указать вручную', showIf: { questionId: 'OBJ_WALL_MATERIAL', equals: ['OTHER'] } },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+        {
+          id: 'OBJ_WALL_INSULATION',
+          prompt: 'Будет ли дополнительное утепление наружных стен?',
+          sourceRow: 284,
+          showIf: wallMaterialKnownRule,
+          options: yesNoUnknownOptions,
+        },
+        {
+          id: 'OBJ_WALL_INSULATION_MATERIAL',
+          prompt: 'Какой материал утепления наружных стен планируется?',
+          sourceRow: 303,
+          showIf: wallInsulationYesRule,
+          options: [
+            { id: 'STONE_WOOL', label: 'Каменная или базальтовая вата' },
+            { id: 'GLASS_WOOL', label: 'Стекловата' },
+            { id: 'EPS', label: 'Пенопласт' },
+            { id: 'XPS', label: 'Экструдированный пенополистирол' },
+            { id: 'PIR', label: 'PIR-плиты' },
+            { id: 'CELLULOSE', label: 'Эковата или задувной утеплитель' },
+            { id: 'MULTIPLE', label: 'Несколько материалов' },
+            { id: 'OTHER', label: 'Другой материал' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+        {
+          id: 'OBJ_WALL_INSULATION_THICKNESS',
+          prompt: 'Какая общая толщина утепления наружных стен?',
+          sourceRow: 336,
+          showIf: wallInsulationYesRule,
+          options: [
+            { id: 'MM_50', label: '50 мм' },
+            { id: 'MM_100', label: '100 мм' },
+            { id: 'MM_150', label: '150 мм' },
+            { id: 'MM_200', label: '200 мм' },
+            { id: 'MORE_200', label: 'Более 200 мм' },
+            { id: 'OTHER_MM', label: 'Другая толщина' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'heating_first_floor',
+      title: 'Пол первого этажа',
+      sourceRows: [365, 459],
+      questions: [
+        {
+          id: 'OBJ_FLOOR_BELOW',
+          prompt: 'Что находится под полом первого отапливаемого этажа?',
+          sourceRow: 365,
+          showIf: envelopeNeededRule,
+          options: [
+            { id: 'GROUND_OR_SLAB', label: 'Грунт или фундаментная плита' },
+            { id: 'UNHEATED_BASEMENT', label: 'Неотапливаемый подвал или цоколь' },
+            { id: 'HEATED_SPACE', label: 'Отапливаемое помещение' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+        {
+          id: 'OBJ_FLOOR_INSULATION',
+          prompt: 'Предусмотрено ли утепление пола первого этажа?',
+          sourceRow: 386,
+          showIf: floorNeedsInsulationRule,
+          options: yesNoUnknownOptions,
+        },
+        {
+          id: 'OBJ_FLOOR_INSULATION_MATERIAL',
+          prompt: 'Какой материал утепления пола планируется?',
+          sourceRow: 405,
+          showIf: floorInsulationYesRule,
+          options: [
+            { id: 'XPS', label: 'Экструдированный пенополистирол' },
+            { id: 'EPS', label: 'Пенопласт' },
+            { id: 'STONE_WOOL', label: 'Каменная или минеральная вата' },
+            { id: 'PIR', label: 'PIR-плиты' },
+            { id: 'OTHER', label: 'Другой материал' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+        {
+          id: 'OBJ_FLOOR_INSULATION_THICKNESS',
+          prompt: 'Какая общая толщина утепления пола?',
+          sourceRow: 431,
+          showIf: floorInsulationYesRule,
+          options: [
+            { id: 'MM_50', label: '50 мм' },
+            { id: 'MM_100', label: '100 мм' },
+            { id: 'MM_150', label: '150 мм' },
+            { id: 'MM_200', label: '200 мм' },
+            { id: 'MORE_200', label: 'Более 200 мм' },
+            { id: 'OTHER_MM', label: 'Другая толщина' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'heating_roof',
+      title: 'Крыша и верхнее перекрытие',
+      sourceRows: [460, 589],
+      questions: [
+        {
+          id: 'OBJ_ROOF_TYPE',
+          prompt: 'Что находится над верхним отапливаемым этажом?',
+          sourceRow: 460,
+          showIf: envelopeNeededRule,
+          options: [
+            { id: 'COLD_ATTIC', label: 'Холодный чердак' },
+            { id: 'MANSARD', label: 'Жилая мансарда' },
+            { id: 'FLAT_ROOF', label: 'Плоская кровля' },
+            { id: 'HEATED_FLOOR', label: 'Еще один отапливаемый этаж' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+        {
+          id: 'OBJ_ROOF_INSULATION_LOCATION',
+          prompt: 'Где будет располагаться утепление?',
+          sourceRow: 483,
+          showIf: coldAtticRule,
+          options: [
+            { id: 'CEILING', label: 'В перекрытии над верхним этажом' },
+            { id: 'SLOPES', label: 'По скатам крыши' },
+            { id: 'BOTH', label: 'И в перекрытии, и по скатам' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+        {
+          id: 'OBJ_ROOF_INSULATION_MATERIAL',
+          prompt: 'Какой материал утепления крыши или верхнего перекрытия планируется?',
+          sourceRow: 504,
+          showIf: roofNeedsEnvelopeRule,
+          options: [
+            { id: 'STONE_WOOL', label: 'Каменная или базальтовая вата' },
+            { id: 'GLASS_WOOL', label: 'Стекловата' },
+            { id: 'EPS', label: 'Пенопласт' },
+            { id: 'XPS', label: 'Экструдированный пенополистирол' },
+            { id: 'PIR', label: 'PIR-плиты' },
+            { id: 'SPRAY_PU', label: 'Напыляемый пенополиуретан' },
+            { id: 'CELLULOSE', label: 'Эковата или задувной утеплитель' },
+            { id: 'MULTIPLE', label: 'Несколько материалов' },
+            { id: 'OTHER', label: 'Другой материал' },
+            { id: 'UNKNOWN', label: 'Пока не выбрали' },
+          ],
+        },
+        {
+          id: 'OBJ_ROOF_INSULATION_THICKNESS',
+          prompt: 'Какая общая толщина утепления крыши или верхнего перекрытия?',
+          sourceRow: 539,
+          showIf: roofNeedsEnvelopeRule,
+          options: [
+            { id: 'MM_100', label: '100 мм' },
+            { id: 'MM_150', label: '150 мм' },
+            { id: 'MM_200', label: '200 мм' },
+            { id: 'MM_250', label: '250 мм' },
+            { id: 'MM_300', label: '300 мм' },
+            { id: 'MORE_300', label: 'Более 300 мм' },
+            { id: 'OTHER_MM', label: 'Другая толщина' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+        {
+          id: 'OBJ_ROOF_CEILING_STRUCTURE',
+          prompt: 'Из чего выполнено перекрытие над верхним этажом?',
+          sourceRow: 570,
+          showIf: coldAtticRule,
+          options: [
+            { id: 'RC', label: 'Железобетонная плита' },
+            { id: 'WOOD', label: 'Деревянные балки' },
+            { id: 'STEEL', label: 'Металлические балки' },
+            { id: 'OTHER', label: 'Другая конструкция' },
+            { id: 'UNKNOWN', label: 'Пока не знаю' },
+          ],
+        },
+      ],
+    },
+    {
       id: 'house_general',
       title: 'Общая информация о доме',
       sourceRows: [9, 20],
@@ -65,11 +431,15 @@ export const technicalQuestionnaireDefinition = {
           id: 'wall_materials',
           prompt: 'Материалы стен для расчета теплопотерь',
           sourceRow: 10,
+          showIf: hiddenLegacyQuestion,
+          isLegacy: true,
         },
         {
           id: 'roof_materials',
           prompt: 'Материалы крыши для расчета теплопотерь',
           sourceRow: 11,
+          showIf: hiddenLegacyQuestion,
+          isLegacy: true,
         },
         {
           id: 'windows_doors_materials',
@@ -691,6 +1061,8 @@ export const technicalQuestionnaireDefinition = {
   version: string
   sourceWorkbook: string
   sourceWorksheet: string
+  sourceBrief: string
+  sourceUpdatedAt: string
   sourcePolicy: string
   sections: readonly QuestionnaireSection[]
 }
@@ -706,6 +1078,7 @@ export const technicalQuestionnaireQuestionIds = technicalQuestionnaireQuestions
 )
 
 const questionById = new Map(technicalQuestionnaireQuestions.map((question) => [question.id, question]))
+const questionOrder = new Map(technicalQuestionnaireQuestions.map((question, index) => [question.id, index]))
 
 const optionalTrimmedTextSchema = (max: number) =>
   z.preprocess((value) => {
@@ -775,6 +1148,7 @@ export const questionnaireAnswerInputSchema = z.object({
 
 export const questionnaireStoredAnswerSchema = questionnaireAnswerInputSchema.extend({
   updatedAt: z.string().datetime(),
+  isActive: z.boolean().default(true),
 })
 
 const questionnaireAnswersSchema = z.array(questionnaireAnswerInputSchema).min(1).max(25)
@@ -847,6 +1221,9 @@ export const adminQuestionnaireDraftSchema = z.object({
   id: z.string().uuid(),
   questionnaireVersion: z.literal(QUESTIONNAIRE_VERSION),
   source: z.string().nullable(),
+  definitionSource: z.string(),
+  definitionUpdatedAt: z.string(),
+  sourcePolicy: z.string(),
   progress: questionnaireProgressSchema,
   consentAcceptedAt: z.string().datetime().nullable(),
   consentVersion: z.string().nullable(),
@@ -856,16 +1233,19 @@ export const adminQuestionnaireDraftSchema = z.object({
   sections: z.array(z.object({
     id: z.string(),
     title: z.string(),
-    questions: z.array(z.object({
-      id: z.string(),
-      prompt: z.string(),
-      sourceRow: z.number().int().positive(),
-      options: z.array(z.object({
+      questions: z.array(z.object({
         id: z.string(),
-        label: z.string(),
+        prompt: z.string(),
+        sourceRow: z.number().int().positive(),
+        isActive: z.boolean(),
+        isLegacy: z.boolean(),
+        options: z.array(z.object({
+          id: z.string(),
+          label: z.string(),
+          hint: z.string().optional(),
+        })),
+        answer: adminQuestionnaireAnswerSchema.nullable(),
       })),
-      answer: adminQuestionnaireAnswerSchema.nullable(),
-    })),
   })),
 })
 
@@ -899,4 +1279,193 @@ export type AdminQuestionnaireSummary = z.infer<typeof adminQuestionnaireSummary
 
 export function getQuestionnaireQuestion(questionId: string) {
   return questionById.get(questionId) ?? null
+}
+
+export function getQuestionnaireActiveQuestions(
+  answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+) {
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers)
+
+  return technicalQuestionnaireQuestions.filter((question) =>
+    isQuestionnaireQuestionActive(question, answersByQuestionId),
+  )
+}
+
+export function getQuestionnaireActiveSections(
+  answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+) {
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers)
+
+  return technicalQuestionnaireSections
+    .map((section) => ({
+      ...section,
+      questions: section.questions.filter((question) =>
+        isQuestionnaireQuestionActive(question, answersByQuestionId),
+      ),
+    }))
+    .filter((section) => section.questions.length > 0)
+}
+
+export function getQuestionnaireActiveOptions(
+  question: QuestionnaireQuestion,
+  answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+) {
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers)
+
+  return (question.options ?? []).filter((option) =>
+    isQuestionnaireVisibilityRuleActive(option.showIf, answersByQuestionId),
+  )
+}
+
+export function markQuestionnaireAnswersActivity<T extends QuestionnaireStoredAnswer>(
+  answers: readonly T[],
+) {
+  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers).map((question) => question.id))
+
+  return sortQuestionnaireAnswerRecords(
+    answers.map((answer) => ({
+      ...answer,
+      isActive: activeQuestionIds.has(answer.questionId),
+    })),
+  )
+}
+
+export function calculateQuestionnaireProgress(
+  answers: readonly QuestionnaireStoredAnswer[],
+  updatedAtIso: string,
+): QuestionnaireProgress {
+  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers).map((question) => question.id))
+  const activeAnswers = markQuestionnaireAnswersActivity(answers).filter(
+    (answer) => answer.isActive && activeQuestionIds.has(answer.questionId),
+  )
+  const uniqueAnswers = new Map(activeAnswers.map((answer) => [answer.questionId, answer]))
+  const values = [...uniqueAnswers.values()]
+  const answeredCount = values.length
+  const unknownCount = values.filter(isQuestionnaireClarificationAnswer).length
+  const skippedCount = values.filter((answer) => answer.kind === 'skipped').length
+  const optionCount = values.filter(
+    (answer) => answer.kind === 'option' && answer.optionId !== 'UNKNOWN',
+  ).length
+  const customCount = values.filter((answer) => answer.kind === 'custom').length
+  const totalQuestions = Math.max(1, activeQuestionIds.size)
+  const completionPercent = Math.min(100, Math.round((answeredCount / totalQuestions) * 100))
+
+  return {
+    totalQuestions,
+    answeredCount,
+    optionCount,
+    customCount,
+    unknownCount,
+    skippedCount,
+    completionPercent,
+    completedAt: answeredCount >= totalQuestions ? updatedAtIso : null,
+  }
+}
+
+export function isQuestionnaireQuestionActive(
+  question: QuestionnaireQuestion,
+  answersByQuestionId: ReadonlyMap<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>,
+) {
+  if (question.isLegacy) return false
+  return isQuestionnaireVisibilityRuleActive(question.showIf, answersByQuestionId)
+}
+
+export function isQuestionnaireVisibilityRuleActive(
+  rule: QuestionnaireVisibilityRule | undefined,
+  answersByQuestionId: ReadonlyMap<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>,
+): boolean {
+  if (!rule) return true
+  if ('never' in rule) return false
+  if ('all' in rule) {
+    return rule.all.every((condition) => isQuestionnaireVisibilityRuleActive(condition, answersByQuestionId))
+  }
+  if ('any' in rule) {
+    return rule.any.some((condition) => isQuestionnaireVisibilityRuleActive(condition, answersByQuestionId))
+  }
+
+  const answer = answersByQuestionId.get(rule.questionId)
+  const answerValue = questionnaireAnswerOptionValue(answer)
+
+  if (rule.exists && answerValue === null) return false
+
+  if (rule.equals) {
+    if (answerValue === null) return false
+    if (!rule.equals.includes(answerValue)) return false
+  }
+
+  if (rule.notEquals) {
+    if (answerValue === null) return false
+    if (rule.notEquals.includes(answerValue)) return false
+  }
+
+  return true
+}
+
+function questionnaireAnswerMap(
+  answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+) {
+  return new Map(answers.map((answer) => [answer.questionId, answer]))
+}
+
+function questionnaireEffectiveAnswerMap(
+  answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
+) {
+  const sourceAnswersByQuestionId = questionnaireAnswerMap(answers)
+  let effectiveAnswersByQuestionId = new Map<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>()
+
+  for (let pass = 0; pass <= technicalQuestionnaireQuestions.length; pass += 1) {
+    const nextAnswersByQuestionId = new Map<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>()
+
+    for (const question of technicalQuestionnaireQuestions) {
+      if (!isQuestionnaireQuestionActive(question, effectiveAnswersByQuestionId)) continue
+
+      const answer = sourceAnswersByQuestionId.get(question.id)
+      if (answer) nextAnswersByQuestionId.set(question.id, answer)
+    }
+
+    if (questionnaireAnswerMapsEqual(effectiveAnswersByQuestionId, nextAnswersByQuestionId)) {
+      return nextAnswersByQuestionId
+    }
+
+    effectiveAnswersByQuestionId = nextAnswersByQuestionId
+  }
+
+  return effectiveAnswersByQuestionId
+}
+
+function questionnaireAnswerMapsEqual(
+  first: ReadonlyMap<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>,
+  second: ReadonlyMap<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>,
+) {
+  if (first.size !== second.size) return false
+
+  for (const [questionId, answer] of first) {
+    if (second.get(questionId) !== answer) return false
+  }
+
+  return true
+}
+
+function questionnaireAnswerOptionValue(
+  answer: Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'> | undefined,
+) {
+  if (!answer) return null
+  if (answer.kind === 'option') return answer.optionId ?? null
+  if (answer.kind === 'unknown') return 'UNKNOWN'
+  if (answer.kind === 'custom') return 'CUSTOM'
+  return null
+}
+
+function isQuestionnaireClarificationAnswer(answer: QuestionnaireStoredAnswer) {
+  return answer.kind === 'unknown' || (answer.kind === 'option' && answer.optionId === 'UNKNOWN')
+}
+
+function sortQuestionnaireAnswerRecords<T extends Pick<QuestionnaireStoredAnswer, 'questionId'>>(
+  answers: readonly T[],
+) {
+  return [...answers].sort(
+    (first, second) =>
+      (questionOrder.get(first.questionId) ?? Number.MAX_SAFE_INTEGER) -
+      (questionOrder.get(second.questionId) ?? Number.MAX_SAFE_INTEGER),
+  )
 }

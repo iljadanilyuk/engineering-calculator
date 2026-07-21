@@ -7,11 +7,16 @@ import {
   type BlogPostUpdateRequest,
   calculateEngineeringOffer,
   calculationResultSchema,
+  calculateQuestionnaireProgress,
   exchangeRateInputSchema,
+  getQuestionnaireActiveOptions,
+  getQuestionnaireActiveQuestions,
+  markQuestionnaireAnswersActivity,
   publicProjectExampleAssets,
   questionnaireAnswersPatchRequestSchema,
   questionnaireStartRequestSchema,
   questionnaireStoredAnswerSchema,
+  technicalQuestionnaireDefinition,
   technicalQuestionnaireSections,
   type CalculationListItem,
   type CalculationListQuery,
@@ -214,7 +219,6 @@ const questionnaireQuestions = technicalQuestionnaireSections.flatMap((section) 
     sectionId: section.id,
   })),
 )
-const questionnaireTotalQuestions = questionnaireQuestions.length
 const questionnaireQuestionOrder: ReadonlyMap<string, number> = new Map(
   questionnaireQuestions.map((question, index) => [question.id, index]),
 )
@@ -2252,7 +2256,7 @@ function questionnaireToPublicSession(
   return {
     publicToken: calculation.publicToken,
     questionnaireVersion: QUESTIONNAIRE_VERSION,
-    progress: questionnaireProgress(answers, questionnaire.updatedAt),
+    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString()),
     calculation: {
       areaSqm: calculationSnapshot.areaSqm,
       selectedServiceIds: calculationSnapshot.selectedServiceIds,
@@ -2269,12 +2273,16 @@ function questionnaireToPublicSession(
 function questionnaireToAdminDraft(questionnaire: CalculationQuestionnaireRow): CalculationRecord['questionnaire'] {
   const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
   const answersByQuestionId = new Map(answers.map((answer) => [answer.questionId, answer]))
+  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers).map((question) => question.id))
 
   return {
     id: questionnaire.id,
     questionnaireVersion: QUESTIONNAIRE_VERSION,
     source: questionnaire.source,
-    progress: questionnaireProgress(answers, questionnaire.updatedAt),
+    definitionSource: technicalQuestionnaireDefinition.sourceBrief,
+    definitionUpdatedAt: technicalQuestionnaireDefinition.sourceUpdatedAt,
+    sourcePolicy: technicalQuestionnaireDefinition.sourcePolicy,
+    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString()),
     consentAcceptedAt: questionnaire.consentAcceptedAt?.toISOString() ?? null,
     consentVersion: questionnaire.consentVersion,
     consentText: questionnaire.consentText,
@@ -2285,12 +2293,15 @@ function questionnaireToAdminDraft(questionnaire: CalculationQuestionnaireRow): 
       title: section.title,
       questions: section.questions.map((question) => {
         const answer = answersByQuestionId.get(question.id) ?? null
+        const isActive = activeQuestionIds.has(question.id)
 
         return {
           id: question.id,
           prompt: question.prompt,
           sourceRow: question.sourceRow,
-          options: [...(question.options ?? [])],
+          isActive,
+          isLegacy: question.isLegacy ?? section.isLegacy ?? false,
+          options: [...getQuestionnaireActiveOptions(question, answers)],
           answer: answer
             ? {
                 ...answer,
@@ -2309,7 +2320,7 @@ function questionnaireToAdminSummary(
   if (!questionnaire) return null
 
   const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot)
-  const progress = questionnaireProgress(answers, questionnaire.updatedAt)
+  const progress = calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString())
 
   return {
     questionnaireVersion: QUESTIONNAIRE_VERSION,
@@ -2322,50 +2333,21 @@ function questionnaireToAdminSummary(
   }
 }
 
-function questionnaireProgress(
-  answers: readonly QuestionnaireStoredAnswer[],
-  updatedAt: Date,
-): PublicQuestionnaireSession['progress'] {
-  const uniqueAnswers = new Map(answers.map((answer) => [answer.questionId, answer]))
-  const values = [...uniqueAnswers.values()]
-  const answeredCount = values.length
-  const optionCount = values.filter((answer) => answer.kind === 'option').length
-  const customCount = values.filter((answer) => answer.kind === 'custom').length
-  const unknownCount = values.filter((answer) => answer.kind === 'unknown').length
-  const skippedCount = values.filter((answer) => answer.kind === 'skipped').length
-  const completionPercent = Math.min(
-    100,
-    Math.round((answeredCount / questionnaireTotalQuestions) * 100),
-  )
-
-  return {
-    totalQuestions: questionnaireTotalQuestions,
-    answeredCount,
-    optionCount,
-    customCount,
-    unknownCount,
-    skippedCount,
-    completionPercent,
-    completedAt: answeredCount >= questionnaireTotalQuestions
-      ? updatedAt.toISOString()
-      : null,
-  }
-}
-
 function questionnaireAnswersFromJson(value: Prisma.JsonValue): QuestionnaireStoredAnswer[] {
-  return questionnaireStoredAnswerSchema.array().parse(value)
+  return markQuestionnaireAnswersActivity(questionnaireStoredAnswerSchema.array().parse(value))
 }
 
 function storedQuestionnaireAnswers(
   answers: NonNullable<QuestionnaireStartRequest['initialAnswers']>,
   updatedAt: Date,
 ): QuestionnaireStoredAnswer[] {
-  return sortQuestionnaireAnswers(
+  return markQuestionnaireAnswersActivity(sortQuestionnaireAnswers(
     answers.map((answer) => ({
       ...answer,
       updatedAt: updatedAt.toISOString(),
+      isActive: true,
     })),
-  )
+  ))
 }
 
 function mergeStoredQuestionnaireAnswers(
@@ -2379,10 +2361,11 @@ function mergeStoredQuestionnaireAnswers(
     answersByQuestionId.set(answer.questionId, {
       ...answer,
       updatedAt: updatedAt.toISOString(),
+      isActive: true,
     })
   }
 
-  return sortQuestionnaireAnswers([...answersByQuestionId.values()])
+  return markQuestionnaireAnswersActivity(sortQuestionnaireAnswers([...answersByQuestionId.values()]))
 }
 
 function sortQuestionnaireAnswers(answers: QuestionnaireStoredAnswer[]) {

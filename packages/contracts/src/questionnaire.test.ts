@@ -2,6 +2,10 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   QUESTIONNAIRE_VERSION,
+  calculateQuestionnaireProgress,
+  getQuestionnaireActiveOptions,
+  getQuestionnaireActiveQuestions,
+  markQuestionnaireAnswersActivity,
   questionnaireAnswersPatchRequestSchema,
   questionnaireStartRequestSchema,
   technicalQuestionnaireDefinition,
@@ -22,22 +26,33 @@ describe('technical questionnaire contracts', () => {
     const serialized = JSON.stringify(technicalQuestionnaireDefinition)
 
     expect(technicalQuestionnaireDefinition.version).toBe(QUESTIONNAIRE_VERSION)
-    expect(technicalQuestionnaireDefinition.sections.length).toBeGreaterThanOrEqual(9)
-    expect(technicalQuestionnaireQuestionIds.length).toBe(91)
+    expect(technicalQuestionnaireDefinition.sections.length).toBeGreaterThanOrEqual(12)
+    expect(technicalQuestionnaireQuestionIds.length).toBeGreaterThan(100)
     expect(new Set(technicalQuestionnaireQuestionIds).size).toBe(technicalQuestionnaireQuestionIds.length)
-    expect(serialized).toContain('Only column A question/section/option text is used')
+    expect(serialized).toContain('Filled/sample answers from the XLSX are excluded')
+    expect(serialized).not.toContain('iljadanilyuk@gmail.com')
 
     for (const section of technicalQuestionnaireDefinition.sections) {
       for (const question of section.questions) {
         const options = 'options' in question ? question.options : undefined
-        expect(Object.keys(question).sort()).toEqual(
-          options ? ['id', 'options', 'prompt', 'sourceRow'] : ['id', 'prompt', 'sourceRow'],
-        )
+        expect(question.id).toBeTruthy()
+        expect(question.prompt).toBeTruthy()
+        expect(question.sourceRow).toBeGreaterThan(0)
         for (const option of options ?? []) {
-          expect(Object.keys(option).sort()).toEqual(['id', 'label'])
+          expect(option.id).toBeTruthy()
+          expect(option.label).toBeTruthy()
         }
       }
     }
+  })
+
+  test('publishes the updated heating envelope branches while keeping legacy ids hidden', () => {
+    expect(questionById.get('OBJ_DOCS')?.prompt).toContain('материалы по дому')
+    expect(questionById.get('OBJ_WALL_MATERIAL')?.prompt).toContain('наружные стены')
+    expect(questionById.get('OBJ_FLOOR_BELOW')?.prompt).toContain('под полом первого')
+    expect(questionById.get('OBJ_ROOF_TYPE')?.prompt).toContain('над верхним')
+    expect(questionById.get('wall_materials')?.isLegacy).toBe(true)
+    expect(questionById.get('roof_materials')?.isLegacy).toBe(true)
   })
 
   test('keeps predefined option labels literal to column A source text', () => {
@@ -72,24 +87,113 @@ describe('technical questionnaire contracts', () => {
       source: 'public_questionnaire',
       initialAnswers: [
         {
-          questionId: 'interior_finished',
+          questionId: 'OBJ_DOCS',
           kind: 'option',
-          optionId: 'yes',
+          optionId: 'PARTIAL',
         },
         {
-          questionId: 'wall_materials',
-          kind: 'custom',
-          customText: 'Газосиликат, утепление уточним',
+          questionId: 'OBJ_WALL_MATERIAL',
+          kind: 'option',
+          optionId: 'AERATED_CONCRETE',
         },
         {
-          questionId: 'roof_materials',
-          kind: 'unknown',
+          questionId: 'OBJ_ROOF_TYPE',
+          kind: 'skipped',
         },
       ],
     })
 
     expect(result.clientName).toBe('Анна')
     expect(result.initialAnswers).toHaveLength(3)
+  })
+
+  test('activates wall, floor, and roof branches independently from document answers', () => {
+    const noAnswers = getQuestionnaireActiveQuestions([])
+    expect(noAnswers.map((question) => question.id)).toContain('OBJ_DOCS')
+    expect(noAnswers.map((question) => question.id)).not.toContain('OBJ_WALL_MATERIAL')
+
+    const docsPartial = [{ questionId: 'OBJ_DOCS', kind: 'option' as const, optionId: 'PARTIAL' }]
+    const envelopeQuestionIds = getQuestionnaireActiveQuestions(docsPartial).map((question) => question.id)
+    expect(envelopeQuestionIds).toEqual(expect.arrayContaining([
+      'OBJ_WALL_MATERIAL',
+      'OBJ_FLOOR_BELOW',
+      'OBJ_ROOF_TYPE',
+    ]))
+    expect(envelopeQuestionIds).not.toContain('OBJ_WALL_THICKNESS')
+
+    const wallKnown = [
+      ...docsPartial,
+      { questionId: 'OBJ_WALL_MATERIAL', kind: 'option' as const, optionId: 'BRICK' },
+    ]
+    const wallQuestionIds = getQuestionnaireActiveQuestions(wallKnown).map((question) => question.id)
+    const thicknessOptions = getQuestionnaireActiveOptions(
+      questionById.get('OBJ_WALL_THICKNESS')!,
+      wallKnown,
+    ).map((option) => option.id)
+
+    expect(wallQuestionIds).toEqual(expect.arrayContaining([
+      'OBJ_WALL_THICKNESS',
+      'OBJ_WALL_INSULATION',
+    ]))
+    expect(thicknessOptions).toEqual(expect.arrayContaining(['MM_250', 'MM_380', 'MM_510', 'MM_640']))
+    expect(thicknessOptions).not.toContain('MM_375')
+  })
+
+  test('marks hidden branch answers inactive and restores them when branch returns', () => {
+    const updatedAt = '2026-07-21T08:00:00.000Z'
+    const hidden = markQuestionnaireAnswersActivity([
+      { questionId: 'OBJ_DOCS', kind: 'option', optionId: 'PARTIAL', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_MATERIAL', kind: 'option', optionId: 'UNKNOWN', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_THICKNESS', kind: 'option', optionId: 'MM_380', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_INSULATION', kind: 'option', optionId: 'YES', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_INSULATION_MATERIAL', kind: 'option', optionId: 'STONE_WOOL', updatedAt, isActive: true },
+    ])
+    const restored = markQuestionnaireAnswersActivity([
+      { questionId: 'OBJ_DOCS', kind: 'option', optionId: 'PARTIAL', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_MATERIAL', kind: 'option', optionId: 'BRICK', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_THICKNESS', kind: 'option', optionId: 'MM_380', updatedAt, isActive: false },
+      { questionId: 'OBJ_WALL_INSULATION', kind: 'option', optionId: 'YES', updatedAt, isActive: false },
+      { questionId: 'OBJ_WALL_INSULATION_MATERIAL', kind: 'option', optionId: 'STONE_WOOL', updatedAt, isActive: false },
+    ])
+
+    expect(hidden.find((answer) => answer.questionId === 'OBJ_WALL_THICKNESS')?.isActive).toBe(false)
+    expect(hidden.find((answer) => answer.questionId === 'OBJ_WALL_INSULATION')?.isActive).toBe(false)
+    expect(hidden.find((answer) => answer.questionId === 'OBJ_WALL_INSULATION_MATERIAL')?.isActive).toBe(false)
+    expect(getQuestionnaireActiveQuestions(hidden).map((question) => question.id)).not.toContain(
+      'OBJ_WALL_INSULATION_MATERIAL',
+    )
+    expect(restored.find((answer) => answer.questionId === 'OBJ_WALL_THICKNESS')?.isActive).toBe(true)
+    expect(restored.find((answer) => answer.questionId === 'OBJ_WALL_INSULATION')?.isActive).toBe(true)
+    expect(restored.find((answer) => answer.questionId === 'OBJ_WALL_INSULATION_MATERIAL')?.isActive).toBe(true)
+
+    const docsFull = markQuestionnaireAnswersActivity([
+      { questionId: 'OBJ_DOCS', kind: 'option', optionId: 'FULL', updatedAt, isActive: true },
+      { questionId: 'OBJ_ROOF_TYPE', kind: 'option', optionId: 'COLD_ATTIC', updatedAt, isActive: true },
+      { questionId: 'OBJ_ROOF_INSULATION_LOCATION', kind: 'option', optionId: 'CEILING', updatedAt, isActive: true },
+    ])
+    expect(docsFull.find((answer) => answer.questionId === 'OBJ_ROOF_TYPE')?.isActive).toBe(false)
+    expect(docsFull.find((answer) => answer.questionId === 'OBJ_ROOF_INSULATION_LOCATION')?.isActive).toBe(false)
+    expect(getQuestionnaireActiveQuestions(docsFull).map((question) => question.id)).not.toContain(
+      'OBJ_ROOF_INSULATION_LOCATION',
+    )
+  })
+
+  test('calculates progress from active questions only and counts skipped as clarification', () => {
+    const updatedAt = '2026-07-21T08:00:00.000Z'
+    const answers = markQuestionnaireAnswersActivity([
+      { questionId: 'OBJ_DOCS', kind: 'option', optionId: 'PARTIAL', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_MATERIAL', kind: 'option', optionId: 'UNKNOWN', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_THICKNESS', kind: 'option', optionId: 'MM_380', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_INSULATION', kind: 'option', optionId: 'YES', updatedAt, isActive: true },
+      { questionId: 'OBJ_WALL_INSULATION_MATERIAL', kind: 'option', optionId: 'STONE_WOOL', updatedAt, isActive: true },
+      { questionId: 'OBJ_ROOF_TYPE', kind: 'skipped', updatedAt, isActive: true },
+    ])
+    const progress = calculateQuestionnaireProgress(answers, updatedAt)
+
+    expect(progress.answeredCount).toBe(3)
+    expect(progress.skippedCount).toBe(1)
+    expect(progress.unknownCount).toBe(1)
+    expect(progress.totalQuestions).toBe(getQuestionnaireActiveQuestions(answers).length)
   })
 
   test('rejects unknown questions, wrong options, duplicate question ids, and empty custom answers', () => {
