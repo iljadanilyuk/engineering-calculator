@@ -144,15 +144,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       <section class="hero" aria-labelledby="questionnaire-title">
         <div class="shell hero-grid">
           <div class="hero-copy">
-            <div class="eyebrow">Опросный лист</div>
             <h1 id="questionnaire-title">Опросник для подготовки ТЗ</h1>
             <p>
               Сохраняйте ответы по шагам. Если данных пока нет, пропустите вопрос:
               менеджер увидит, что нужно уточнить.
             </p>
-            <p class="state-status" data-config-status role="status">
-              Загружаем актуальные тарифы и выбранные разделы проекта.
-            </p>
+            <p class="state-status" data-config-status role="status" hidden></p>
           </div>
 
           <aside class="summary-card" aria-label="Выбранный расчет">
@@ -517,7 +514,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
         services = publicServices
         resolveSelectedServices()
         hasApiConfig = true
-        setConfigStatus('Актуальные тарифы загружены. Опросник готов к старту.')
+        setConfigStatus('')
       }
     } catch {
       hasApiConfig = false
@@ -1263,7 +1260,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   function setConfigStatus(message: string, state?: 'error') {
     if (!configStatus) return
-    configStatus.textContent = message
+    const shouldShow = Boolean(message.trim()) && state === 'error'
+    configStatus.hidden = !shouldShow
+    configStatus.textContent = shouldShow ? message : ''
     configStatus.classList.toggle('is-error', state === 'error')
   }
 
@@ -1578,7 +1577,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   h1 {
     max-width: 620px;
-    margin-top: 14px;
+    margin-top: 0;
     font-size: clamp(32px, 3vw, 46px);
     line-height: 1.06;
     font-weight: 600;
@@ -1589,10 +1588,6 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     margin-top: 16px;
     color: rgba(255, 255, 255, 0.86);
     font-size: 17px;
-  }
-
-  .hero .eyebrow {
-    color: rgba(255, 255, 255, 0.88);
   }
 
   .state-status,
@@ -1683,6 +1678,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   .summary-metrics dd {
     margin-top: 4px;
+    color: var(--ink);
     font-family: var(--font-heading);
     font-weight: 800;
   }
@@ -1739,6 +1735,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     display: inline-flex;
     align-items: baseline;
     gap: 7px;
+    color: var(--ink);
     font-family: var(--font-heading);
     font-size: 24px;
     line-height: 1;
