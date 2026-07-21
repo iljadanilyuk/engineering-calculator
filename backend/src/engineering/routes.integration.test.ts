@@ -396,6 +396,19 @@ maybeDescribe('engineering API integration', () => {
     expect(invalidPhone.status).toBe(400)
     expect(invalidPhoneBody.error.message).toBe('Invalid lead phone number')
 
+    const unsupportedPhone = await saveCalculation({
+      clientName: 'Client',
+      clientPhone: '+365445566654456',
+      calculation: {
+        areaSqm: '10',
+        selectedServiceIds: [service.id],
+      },
+      consentAccepted: true,
+    })
+    const unsupportedPhoneBody = await unsupportedPhone.json()
+    expect(unsupportedPhone.status).toBe(400)
+    expect(unsupportedPhoneBody.error.message).toBe('Invalid lead phone number')
+
     const missingConsent = await app.request('/api/public/calculations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

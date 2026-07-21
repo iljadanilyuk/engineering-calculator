@@ -12,7 +12,8 @@ import {
   fallbackServices,
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
-import BrandMark from '../components/BrandMark.astro'
+import PublicFontLinks from '../components/PublicFontLinks.astro'
+import SiteHeader from '../components/SiteHeader.astro'
 
 const selectedServiceIds = defaultSelectedServiceIds
 const initialCalculation = calculateEngineeringOffer({
@@ -371,12 +372,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
-      rel="stylesheet"
-    />
+    <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
     <title>{pageMeta.title}</title>
@@ -409,26 +405,7 @@ function serviceRublesMap(calculation: CalculationResult) {
       is:inline
       set:html={JSON.stringify(calculatorData)}
     />
-    <header class="header">
-      <div class="shell header-inner">
-        <a class="brand" href="#top" aria-label="ИП Позняк — проектирование инженерных систем">
-          <BrandMark />
-          <span class="brand-copy">
-            <strong>ИП Позняк</strong>
-            <span>Инженерные системы</span>
-          </span>
-        </a>
-        <nav class="nav" aria-label="Навигация">
-          <a href="#calculator">Калькулятор</a>
-          <a href="#benefits">Что дает проект</a>
-          <a href="/projects/">Реализованные проекты</a>
-          <a href="/blog/">Блог</a>
-          <a href="#process">Как работаем</a>
-          <a href="#faq">Вопросы и ответы</a>
-        </nav>
-        <a class="top-cta" href="/offer/" data-offer-link>Получить КП</a>
-      </div>
-    </header>
+    <SiteHeader />
 
     <main id="top">
       <section class="hero" aria-labelledby="page-title">
@@ -788,13 +765,14 @@ function serviceRublesMap(calculation: CalculationResult) {
                 Укажите имя: минимум 2 символа.
               </p>
               <p class="field-error" id="example-phone-error" data-example-phone-error hidden>
-                Укажите телефон в белорусском или международном формате.
+                Укажите телефон в белорусском формате или +7.
               </p>
               <label class="consent-row" for="example-consent">
                 <input
                   id="example-consent"
                   data-example-consent
                   type="checkbox"
+                  checked
                   aria-describedby="example-consent-error"
                 />
                 <span>Согласен на обработку имени и телефона для выдачи примеров проектов.</span>
@@ -986,6 +964,10 @@ function serviceRublesMap(calculation: CalculationResult) {
     type PublicProjectExampleRequestRecord,
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
+  import {
+    maskPublicContactPhoneInput,
+    validatePublicContactPhone,
+  } from '../lib/public-contact-validation'
 
   type ProjectType = 'private' | 'commercial'
   type CalculatorService = EngineeringService & { isPublic?: boolean }
@@ -1099,6 +1081,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     })
 
     examplePhoneInput?.addEventListener('input', () => {
+      maskPublicContactPhoneInput(examplePhoneInput)
       validateExampleForm(false)
       resetExampleRequestState()
     })
@@ -1392,15 +1375,11 @@ function serviceRublesMap(calculation: CalculationResult) {
   function validateExampleForm(showErrors: boolean) {
     const clientName = exampleNameInput?.value.trim() ?? ''
     const clientPhone = examplePhoneInput?.value.trim() ?? ''
-    const phoneDigits = clientPhone.replace(/\D/g, '')
+    const phone = validatePublicContactPhone(clientPhone)
     const requestedExampleSlugs = selectedExampleSlugs()
     const examplesValid = requestedExampleSlugs.length > 0
     const nameValid = clientName.length >= 2 && clientName.length <= 120
-    const phoneValid =
-      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
-      phoneDigits.length >= 8 &&
-      phoneDigits.length <= 15 &&
-      !/^(\d)\1+$/.test(phoneDigits)
+    const phoneValid = phone.valid
     const consentValid = exampleConsent?.checked === true
 
     if (exampleChoiceError) {
@@ -1413,7 +1392,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     return {
       valid: examplesValid && nameValid && phoneValid && consentValid,
       clientName,
-      clientPhone,
+      clientPhone: phone.valid ? phone.normalized : clientPhone,
       requestedExampleSlugs,
     }
   }
@@ -3235,6 +3214,50 @@ function serviceRublesMap(calculation: CalculationResult) {
       grid-template-columns: 1fr;
     }
 
+    .benefits-grid {
+      gap: 20px;
+    }
+
+    .benefit {
+      grid-template-columns: 58px minmax(0, 1fr);
+      align-items: center;
+      justify-items: start;
+      gap: 14px;
+      text-align: left;
+    }
+
+    .benefit svg {
+      width: 58px;
+      height: 58px;
+      padding: 14px;
+      border-radius: 14px;
+    }
+
+    .benefit strong {
+      max-width: none;
+      font-size: 16px;
+      line-height: 1.32;
+    }
+
+    .example-request-form {
+      padding: 22px 18px;
+    }
+
+    .example-choice {
+      grid-template-columns: 20px 34px minmax(0, 1fr);
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .example-choice strong,
+    .consent-row span {
+      font-size: 13px;
+    }
+
+    .example-action-row .button {
+      white-space: normal;
+    }
+
     .area-input-wrap {
       width: 100%;
     }
@@ -3258,16 +3281,19 @@ function serviceRublesMap(calculation: CalculationResult) {
     }
 
     .process {
-      gap: 22px;
+      gap: 18px;
     }
 
     .step {
       grid-template-columns: 48px minmax(0, 1fr);
-      gap: 8px 12px;
+      gap: 7px 12px;
     }
 
     .step-icon {
       grid-column: 1;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
     }
 
     .step strong,

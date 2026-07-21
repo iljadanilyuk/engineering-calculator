@@ -11,7 +11,8 @@ import {
   fallbackServices,
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
-import BrandMark from '../components/BrandMark.astro'
+import PublicFontLinks from '../components/PublicFontLinks.astro'
+import SiteHeader from '../components/SiteHeader.astro'
 
 const initialCalculation = calculateEngineeringOffer({
   areaSqm: defaultAreaSqm,
@@ -89,12 +90,7 @@ const structuredData = {
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
-      rel="stylesheet"
-    />
+    <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
     <title>{pageMeta.title}</title>
@@ -127,23 +123,7 @@ const structuredData = {
     />
   </head>
   <body>
-    <header class="header">
-      <div class="shell header-inner">
-        <a class="brand" href="/" aria-label="ИП Позняк, на главную">
-          <BrandMark />
-          <span class="brand-copy">
-            <strong>ИП Позняк</strong>
-            <span>Инженерные системы</span>
-          </span>
-        </a>
-        <nav class="nav" aria-label="Навигация">
-          <a href="/#calculator">Изменить расчет</a>
-          <a href="/#documents">Примеры проектов</a>
-          <a href="/blog/">Блог</a>
-          <a href="/#faq">Вопросы</a>
-        </nav>
-      </div>
-    </header>
+    <SiteHeader />
 
     <main>
       <section class="offer-hero" aria-labelledby="offer-title">
@@ -295,7 +275,7 @@ const structuredData = {
               />
             </label>
             <p class="field-error" id="lead-phone-error" data-lead-phone-error hidden>
-              Укажите телефон в белорусском или международном формате.
+              Укажите телефон в белорусском формате или +7.
             </p>
 
             <label for="lead-object">
@@ -314,7 +294,8 @@ const structuredData = {
                 id="lead-consent"
                 data-lead-consent
                 type="checkbox"
-                aria-describedby="lead-consent-error privacy-note"
+                checked
+                aria-describedby="lead-consent-error"
               />
               <span>Согласен на обработку персональных данных для подготовки КП и обратной связи.</span>
             </label>
@@ -329,10 +310,6 @@ const structuredData = {
               Заполните контакты: быстрое КП будет доступно после отправки формы.
             </p>
             <div class="lead-success" data-lead-success hidden></div>
-            <p class="privacy-note" id="privacy-note">
-              В заявку сохраняются имя, телефон, согласие, площадь, выбранные разделы проекта,
-              краткое описание объекта и источник обращения.
-            </p>
           </form>
         </div>
       </section>
@@ -349,6 +326,10 @@ const structuredData = {
     type EngineeringService,
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
+  import {
+    maskPublicContactPhoneInput,
+    validatePublicContactPhone,
+  } from '../lib/public-contact-validation'
 
   type ProjectType = 'private' | 'commercial'
   type CalculatorService = EngineeringService & { isPublic?: boolean }
@@ -463,6 +444,7 @@ const structuredData = {
     })
 
     leadPhoneInput?.addEventListener('input', () => {
+      maskPublicContactPhoneInput(leadPhoneInput)
       validateLeadForm(false)
       resetSubmissionState()
     })
@@ -708,13 +690,9 @@ const structuredData = {
   function validateLeadForm(showErrors: boolean) {
     const clientName = leadNameInput?.value.trim() ?? ''
     const clientPhone = leadPhoneInput?.value.trim() ?? ''
-    const phoneDigits = clientPhone.replace(/\D/g, '')
+    const phone = validatePublicContactPhone(clientPhone)
     const nameValid = clientName.length >= 2 && clientName.length <= 120
-    const phoneValid =
-      /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
-      phoneDigits.length >= 8 &&
-      phoneDigits.length <= 15 &&
-      !/^(\d)\1+$/.test(phoneDigits)
+    const phoneValid = phone.valid
     const consentValid = leadConsent?.checked === true
 
     setFieldValidity(leadNameInput, leadNameError, nameValid, showErrors)
@@ -724,7 +702,7 @@ const structuredData = {
     return {
       valid: nameValid && phoneValid && consentValid,
       clientName,
-      clientPhone,
+      clientPhone: phone.valid ? phone.normalized : clientPhone,
     }
   }
 
@@ -1592,11 +1570,6 @@ const structuredData = {
 
   .lead-form p.is-loading {
     color: var(--blue);
-  }
-
-  .privacy-note {
-    border-top: 1px solid var(--line);
-    padding-top: 10px;
   }
 
   .lead-success {

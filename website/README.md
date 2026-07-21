@@ -8,6 +8,15 @@ The website workspace is a separate Astro project for public, SEO-facing surface
 - TypeScript
 - Vite through Astro
 
+## Public Typography
+
+The public website and token-protected proposal HTML use one Cyrillic-friendly font pair:
+
+- body/UI: `Inter` 400, 500, 600, 700;
+- headings: `Nunito` 700, 800.
+
+New public pages should import `src/components/PublicFontLinks.astro` in the `<head>` and define page CSS variables as `--font-body: Inter, "Segoe UI", Arial, sans-serif` and `--font-heading: Nunito, Inter, "Segoe UI", Arial, sans-serif`. The admin `webapp` keeps its own `Figtree` stack.
+
 ## Rendering model
 
 Astro prerenders every page to static HTML by default, so the standard build is a cheap static site in `website/dist`, deployable to a Static Site host or object storage + CDN. No server adapter is installed by default, on purpose: the public landing/calculator shell and durable content can start as static pages.

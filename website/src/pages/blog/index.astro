@@ -1,5 +1,6 @@
 ---
-import BrandMark from '../../components/BrandMark.astro'
+import PublicFontLinks from '../../components/PublicFontLinks.astro'
+import SiteHeader from '../../components/SiteHeader.astro'
 import {
   blogCoverImageUrl,
   formatBlogDate,
@@ -45,12 +46,7 @@ const structuredData = {
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap"
-      rel="stylesheet"
-    />
+    <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
     <title>{pageMeta.title}</title>
@@ -77,21 +73,7 @@ const structuredData = {
     <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
   </head>
   <body>
-    <header class="header">
-      <a class="brand" href="/" aria-label="На главную ИП Позняк">
-        <BrandMark />
-        <span class="brand-copy">
-          <strong>ИП Позняк</strong>
-          <span>Инженерные системы</span>
-        </span>
-      </a>
-      <nav aria-label="Публичная навигация">
-        <a href="/#calculator">Калькулятор</a>
-        <a href="/projects/">Проекты</a>
-        <a href="/blog/" aria-current="page">Блог</a>
-        <a href="/#contacts">Контакты</a>
-      </nav>
-    </header>
+    <SiteHeader />
 
     <main>
       <section class="blog-hero">

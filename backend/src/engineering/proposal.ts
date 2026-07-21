@@ -59,6 +59,8 @@ const maxVisibleServiceRows = 7
 const paymentTerms = '70% для начала работы, 30% перед выдачей полного комплекта со спецификациями'
 const validityDays = 14
 const proposalHeroImageUrl = new URL('../../assets/proposal/hero-consultation-v2.jpg', import.meta.url)
+const proposalFontStylesheetHref =
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap'
 let proposalHeroImageDataUriPromise: Promise<string | null> | null = null
 
 export function createCommercialProposalGenerator(
@@ -123,6 +125,9 @@ export function renderCommercialProposalHtmlSnapshot(
     '<meta charset="utf-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     '<meta name="robots" content="noindex,nofollow" />',
+    '<link rel="preconnect" href="https://fonts.googleapis.com" />',
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />',
+    `<link href="${proposalFontStylesheetHref}" rel="stylesheet" />`,
     `<title>${escapeHtml(input.offerNumber)} | Коммерческое предложение</title>`,
     '<style>',
     proposalCss(),
@@ -946,19 +951,24 @@ function proposalCss() {
       --line: #dbe3eb;
       --paper: #ffffff;
       --surface: #f6f8fb;
+      --font-body: "Inter", "Segoe UI", Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+      --font-heading: "Nunito", "Inter", "Segoe UI", Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; background: #e9edf2; }
     body {
       color: var(--ink);
-      font-family: "Segoe UI", Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+      font-family: var(--font-body);
       font-size: 10.2pt;
       line-height: 1.38;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     h1, h2, h3, p { margin: 0; }
-    h1, h2, h3 { letter-spacing: 0; }
+    h1, h2, h3 {
+      font-family: var(--font-heading);
+      letter-spacing: 0;
+    }
     a { color: inherit; }
     .proposal-shell {
       min-height: 100vh;

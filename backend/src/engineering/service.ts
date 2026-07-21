@@ -2559,34 +2559,38 @@ function assertFormulaPricingTypeTransitionAllowed(
 function normalizeLeadPhone(rawPhone: string) {
   const trimmed = rawPhone.trim()
 
-  if (!/^[+\d\s().-]+$/.test(trimmed)) {
+  if (!/^[+\d\s().-]{5,40}$/.test(trimmed)) {
     throwInvalidPhone()
   }
 
   const digits = trimmed.replace(/\D/g, '')
-  let normalizedDigits: string
+  const normalizedDigits = normalizeSupportedLeadPhoneDigits(digits)
 
-  if (trimmed.startsWith('+')) {
-    normalizedDigits = digits
-  } else if (digits.startsWith('00')) {
-    normalizedDigits = digits.slice(2)
-  } else if (digits.length === 12 && digits.startsWith('375')) {
-    normalizedDigits = digits
-  } else if (/^80\d{9}$/.test(digits)) {
-    normalizedDigits = `375${digits.slice(2)}`
-  } else if (/^0\d{9}$/.test(digits)) {
-    normalizedDigits = `375${digits.slice(1)}`
-  } else if (/^(25|29|33|44)\d{7}$/.test(digits)) {
-    normalizedDigits = `375${digits}`
-  } else {
-    normalizedDigits = digits
-  }
-
-  if (!/^[1-9]\d{7,14}$/.test(normalizedDigits) || /^(\d)\1+$/.test(normalizedDigits)) {
+  if (
+    !normalizedDigits ||
+    !/^(375\d{9}|7\d{10})$/.test(normalizedDigits) ||
+    /^(\d)\1+$/.test(normalizedDigits) ||
+    hasLongRepeatedDigitRun(normalizedDigits)
+  ) {
     throwInvalidPhone()
   }
 
   return `+${normalizedDigits}`
+}
+
+function normalizeSupportedLeadPhoneDigits(digits: string) {
+  if (digits.startsWith('00375') && digits.length === 14) return digits.slice(2)
+  if (digits.startsWith('007') && digits.length === 13) return digits.slice(2)
+  if (digits.startsWith('375') && digits.length === 12) return digits
+  if (digits.startsWith('7') && digits.length === 11) return digits
+  if (/^80\d{9}$/.test(digits)) return `375${digits.slice(2)}`
+  if (/^0\d{9}$/.test(digits)) return `375${digits.slice(1)}`
+  if (/^(25|29|33|44)\d{7}$/.test(digits)) return `375${digits}`
+  return null
+}
+
+function hasLongRepeatedDigitRun(value: string) {
+  return /(\d)\1{5,}/.test(value)
 }
 
 function normalizeProjectExampleSlugs(rawSlugs: readonly string[]): string[] {
@@ -2763,7 +2767,7 @@ function throwInvalidPhone(): never {
   throw new AppError(400, 'VALIDATION_ERROR', 'Invalid lead phone number', [
     {
       path: ['clientPhone'],
-      message: 'Enter a valid phone number in Belarusian or international format',
+      message: 'Enter a valid phone number in Belarusian format or +7 format',
     },
   ])
 }

@@ -84,7 +84,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
       Укажите имя: минимум 2 символа.
     </p>
     <p class="field-error" id={`${id}-phone-error`} data-example-phone-error hidden>
-      Укажите корректный телефон для связи.
+      Укажите телефон в белорусском формате или +7.
     </p>
     <label class="consent-line" for={`${id}-consent`}>
       <input id={`${id}-consent`} data-example-consent type="checkbox" checked />
@@ -104,6 +104,10 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     projectExampleRequestSaveResponseSchema,
     type PublicProjectExampleRequestRecord,
   } from '@poznyak-engineering-calculator/contracts'
+  import {
+    maskPublicContactPhoneInput,
+    validatePublicContactPhone,
+  } from '../lib/public-contact-validation'
 
   const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
 
@@ -137,6 +141,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
 
     ;[nameInput, phoneInput].forEach((input) => {
       input?.addEventListener('input', () => {
+        if (input === phoneInput) maskPublicContactPhoneInput(phoneInput)
         validate(false)
         resetRequest()
       })
@@ -235,15 +240,11 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     function validate(showErrors: boolean) {
       const clientName = nameInput?.value.trim() ?? ''
       const clientPhone = phoneInput?.value.trim() ?? ''
-      const phoneDigits = clientPhone.replace(/\D/g, '')
+      const phone = validatePublicContactPhone(clientPhone)
       const requestedExampleSlugs = selectedSlugs()
       const examplesValid = requestedExampleSlugs.length > 0
       const nameValid = clientName.length >= 2 && clientName.length <= 120
-      const phoneValid =
-        /^[+\d\s().-]{5,40}$/.test(clientPhone) &&
-        phoneDigits.length >= 8 &&
-        phoneDigits.length <= 15 &&
-        !/^(\d)\1+$/.test(phoneDigits)
+      const phoneValid = phone.valid
       const consentValid = consent?.checked === true
 
       if (choiceError) choiceError.hidden = examplesValid || !showErrors
@@ -254,7 +255,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
       return {
         valid: examplesValid && nameValid && phoneValid && consentValid,
         clientName,
-        clientPhone,
+        clientPhone: phone.valid ? phone.normalized : clientPhone,
         requestedExampleSlugs,
       }
     }
