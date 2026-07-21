@@ -1,7 +1,7 @@
 # PZK-DESIGN-001 - Public Calculator Visual Brief
 
 Date: 2026-07-08
-Revision: v4 after typography/hero feedback
+Revision: v5 typography alignment on 2026-07-21
 Artifact: `docs/design/public-calculator-concept.png`
 Preview source: `docs/design/public-calculator-concept.html`
 Questionnaire source: `docs/design/Опросный лист.xlsx`
@@ -100,24 +100,24 @@ Why this works:
 
 ## Typography
 
-Use Google Fonts with Cyrillic support:
+Use the production public website pair everywhere in the public surface and commercial proposal template:
 
-- headings: `Montserrat` 700-800;
-- body/UI: `IBM Plex Sans` 400-700.
+- body/UI: `Inter` 400, 500, 600, 700;
+- headings: `Nunito` 700-800.
 
 Reasons:
 
-- `Montserrat` gives sturdy geometric authority for the offer and section titles;
-- `IBM Plex Sans` reads as technical, precise, and less generic than a default UI stack;
+- the live website already uses this pair across calculator, offer, questionnaire, blog, and project pages;
+- the commercial proposal must feel like the same product, not a separate generated document;
 - no serif fonts;
 - no negative letter spacing;
 - tabular numerals for prices, rates, and area.
 
-Rejected for this direction:
+Implementation note:
 
-- serif display pairings;
-- overly soft lifestyle fonts;
-- generic default Inter-only look.
+- website pages should use `website/src/components/PublicFontLinks.astro`;
+- CSS should expose `--font-body` and `--font-heading`;
+- admin `webapp` typography is intentionally separate.
 
 ## Palette
 
