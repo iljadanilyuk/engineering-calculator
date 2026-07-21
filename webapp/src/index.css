@@ -1199,7 +1199,26 @@
   }
 
   .admin-editor-content-field {
+    width: 100%;
     min-height: 0;
+  }
+
+  .admin-blog-editor-layout[data-slot="field-group"] {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 18px;
+  }
+
+  .admin-blog-meta-grid {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(280px, 1.4fr) minmax(220px, 1fr) minmax(150px, 0.55fr) minmax(220px, 0.85fr) minmax(120px, 0.45fr);
+    gap: 12px;
+    align-items: start;
   }
 
   .admin-drawer-grid {
@@ -1333,10 +1352,14 @@
   }
 
   .admin-rich-editor {
+    display: block;
+    width: 100%;
     min-width: 0;
   }
 
   .admin-rich-editor .tox.tox-tinymce {
+    width: 100% !important;
+    max-width: none !important;
     min-width: 0;
     overflow: hidden;
     border-color: var(--pzk-line);
@@ -1344,10 +1367,29 @@
     box-shadow: 0 5px 18px rgba(16, 32, 51, 0.035);
   }
 
+  .admin-rich-editor .tox .tox-editor-container,
+  .admin-rich-editor .tox .tox-sidebar-wrap,
+  .admin-rich-editor .tox .tox-edit-area,
+  .admin-rich-editor .tox .tox-edit-area__iframe {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+  }
+
   .admin-rich-editor .tox .tox-toolbar,
   .admin-rich-editor .tox .tox-toolbar__overflow,
   .admin-rich-editor .tox .tox-toolbar__primary {
     background: var(--pzk-surface);
+  }
+
+  @media (max-width: 1180px) {
+    .admin-blog-meta-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-blog-title-field {
+      grid-column: 1 / -1;
+    }
   }
 
   .admin-rich-content {
@@ -1536,6 +1578,7 @@
   .admin-requirement-grid,
   .admin-process-grid,
   .admin-filter-grid,
+  .admin-blog-meta-grid,
   .admin-editor-layout[data-slot="field-group"],
   .admin-drawer-grid.two,
   .admin-drawer-grid {

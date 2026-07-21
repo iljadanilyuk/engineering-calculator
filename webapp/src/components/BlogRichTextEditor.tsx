@@ -83,7 +83,8 @@ const blogEditorInit: BlogEditorInitOptions = {
   table_use_colgroups: false,
   object_resizing: 'img',
   content_style: [
-    'body { color: #102033; font-family: "Figtree Variable", system-ui, sans-serif; font-size: 16px; line-height: 1.72; padding: 14px; }',
+    'html, body { min-width: 100%; }',
+    'body { width: auto !important; max-width: none !important; color: #102033; font-family: "Figtree Variable", system-ui, sans-serif; font-size: 16px; line-height: 1.72; padding: 18px 22px; overflow-wrap: break-word; }',
     'p { margin: 0 0 14px; }',
     'h2 { margin: 24px 0 12px; font-size: 30px; line-height: 1.12; }',
     'h3 { margin: 18px 0 10px; font-size: 23px; line-height: 1.2; }',
