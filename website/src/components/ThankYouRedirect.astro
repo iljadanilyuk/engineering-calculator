@@ -1,0 +1,23 @@
+---
+const targetPath = '/thank-you/'
+---
+
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content={`0; url=${targetPath}`} />
+    <title>Переход на страницу спасибо</title>
+    <link rel="canonical" href={targetPath} />
+  </head>
+  <body>
+    <p>Переходим на страницу спасибо: <a href={targetPath}>открыть</a>.</p>
+    <script is:inline>
+      const destination = new URL('/thank-you/', window.location.origin)
+      destination.search = window.location.search
+      destination.hash = window.location.hash
+      window.location.replace(destination.toString())
+    </script>
+  </body>
+</html>
