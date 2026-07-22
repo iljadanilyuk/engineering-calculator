@@ -77,6 +77,7 @@ describe('technical questionnaire contracts', () => {
           prompt: 'Электронная почта для связи',
           isEnabled: true,
           answerType: 'text',
+          showIf: null,
         },
         {
           target: 'option',
@@ -85,6 +86,7 @@ describe('technical questionnaire contracts', () => {
           label: 'Есть часть материалов',
           hint: null,
           isEnabled: false,
+          showIf: { questionId: 'OBJ_STAGE', exists: true },
         },
         {
           target: 'section_order',
@@ -96,19 +98,40 @@ describe('technical questionnaire contracts', () => {
           questionIds: record.sections[0].questions.map((question) => question.id),
         },
         {
+          target: 'question_create',
+          sectionId: record.sections[0].id,
+          prompt: 'Новый уточняющий вопрос',
+          answerType: 'number',
+        },
+        {
+          target: 'question_delete',
+          questionId: 'client_email',
+        },
+        {
           target: 'option_order',
           questionId: 'OBJ_DOCS',
           optionIds: questionById.get('OBJ_DOCS')?.options?.map((option) => option.id) ?? [],
+        },
+        {
+          target: 'option_create',
+          questionId: 'client_email',
+          label: 'Почта будет позже',
+          hint: null,
+        },
+        {
+          target: 'option_delete',
+          questionId: 'client_email',
+          optionId: 'OPTION_1',
         },
       ],
     })
 
     expect(record.status).toBe('static_fallback')
-    expect(edit.edits).toHaveLength(6)
+    expect(edit.edits).toHaveLength(10)
     expect(getQuestionnaireQuestionAnswerType(questionById.get('OBJ_DOCS')!)).toBe('single_option')
     expect(getQuestionnaireQuestionAnswerType(questionById.get('client_email')!)).toBe('text')
     expect(getQuestionnaireQuestionAnswerType(questionById.get('total_area')!)).toBe('number')
-    expect(() =>
+    expect(
       questionnaireDefinitionPatchRequestSchema.parse({
         baseDefinitionHash: record.definitionHash,
         edits: [
@@ -119,8 +142,8 @@ describe('technical questionnaire contracts', () => {
             showIf: { never: true },
           },
         ],
-      }),
-    ).toThrow()
+      }).edits[0],
+    ).toMatchObject({ target: 'question', showIf: { never: true } })
     expect(() =>
       questionnaireDefinitionPatchRequestSchema.parse({
         baseDefinitionHash: record.definitionHash,

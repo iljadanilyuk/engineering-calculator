@@ -3,6 +3,7 @@ import {
   ArrowDown01Icon,
   ArrowReloadHorizontalIcon,
   ArrowUp01Icon,
+  Delete02Icon,
   FileViewIcon,
   FloppyDiskIcon,
   GitBranchIcon,
@@ -222,6 +223,23 @@ export function QuestionnaireManager() {
     setSelectedQuestionId(section.questions[0]?.id ?? null)
   }
 
+  function promptCreateQuestion(section: QuestionnaireSection) {
+    const prompt = window.prompt('Текст нового вопроса')
+    const trimmedPrompt = prompt?.trim()
+    if (!trimmedPrompt) return
+    void saveEdit({
+      target: 'question_create',
+      sectionId: section.id,
+      prompt: trimmedPrompt,
+      answerType: 'text',
+    })
+  }
+
+  function deleteSelectedQuestion(question: QuestionnaireQuestion) {
+    if (!window.confirm(`Удалить вопрос ${question.id} из новой версии опросника?`)) return
+    void saveEdit({ target: 'question_delete', questionId: question.id })
+  }
+
   if (definitionQuery.isLoading) {
     return <LoadingBlock label="Загружаем структуру опросника..." />
   }
@@ -317,7 +335,7 @@ export function QuestionnaireManager() {
               <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
               Добавить раздел
             </Button>
-            <Button type="button" variant="outline" size="sm" disabled title="Добавление вопросов будет отдельной версией опросника">
+            <Button type="button" variant="outline" size="sm" disabled={isSaving} onClick={() => promptCreateQuestion(selectedSection)}>
               <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
               Добавить вопрос
             </Button>
@@ -448,7 +466,7 @@ export function QuestionnaireManager() {
             <Typography variant="caption" tone="muted">Перетащите вопрос сюда, чтобы поставить в конец раздела</Typography>
           </div>
 
-          <Button type="button" variant="ghost" size="sm" disabled title="Новые вопросы требуют версии и миграции ветвлений">
+          <Button type="button" variant="ghost" size="sm" disabled={isSaving} onClick={() => promptCreateQuestion(selectedSection)}>
             <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
             Добавить вопрос
           </Button>
@@ -464,6 +482,7 @@ export function QuestionnaireManager() {
           onToggleQuestion={(checked) => selectedQuestion
             ? void saveEdit({ target: 'question', questionId: selectedQuestion.id, isEnabled: checked })
             : undefined}
+          onDeleteQuestion={() => selectedQuestion ? deleteSelectedQuestion(selectedQuestion) : undefined}
           onMoveOption={moveOption}
           draggedOptionId={dragState?.kind === 'option' ? dragState.optionId : null}
           onOptionDragStart={(event, question, optionId) => startDrag(event, {
@@ -719,6 +738,7 @@ function QuestionInspector({
   isSaving,
   onSave,
   onToggleQuestion,
+  onDeleteQuestion,
   onMoveOption,
   draggedOptionId,
   onOptionDragStart,
@@ -738,6 +758,7 @@ function QuestionInspector({
   isSaving: boolean
   onSave: SaveDefinitionEdit
   onToggleQuestion: (checked: boolean) => void | undefined
+  onDeleteQuestion: () => void | undefined
   onMoveOption: (question: QuestionnaireQuestion, optionId: string, direction: MoveDirection) => Promise<void>
   draggedOptionId: string | null
   onOptionDragStart: (event: DragEvent<HTMLSpanElement>, question: QuestionnaireQuestion, optionId: string) => void
@@ -814,9 +835,24 @@ function QuestionInspector({
                     optionId: option.id,
                     isEnabled: checked,
                   })}
+                  onDelete={() => void onSave({
+                    target: 'option_delete',
+                    questionId: question.id,
+                    optionId: option.id,
+                  })}
                 />
               ))}
-              <Button type="button" variant="ghost" size="sm" disabled title="Новые option IDs требуют отдельной версии и миграции">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isSaving}
+                onClick={() => void onSave({
+                  target: 'option_create',
+                  questionId: question.id,
+                  label: `Новый вариант ${options.length + 1}`,
+                })}
+              >
                 <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
                 Добавить вариант
               </Button>
@@ -836,7 +872,21 @@ function QuestionInspector({
           ) : (
             <div className="admin-qb-muted-panel">
               <Typography variant="bodySmMedium">Свободный ответ</Typography>
-              <Typography variant="caption" tone="muted">У этого вопроса нет вариантов. Тип данных и валидация зафиксированы текущей версией.</Typography>
+              <Typography variant="caption" tone="muted">Можно оставить текст/число или создать варианты ответа в новой опубликованной версии.</Typography>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSaving}
+                onClick={() => void onSave({
+                  target: 'option_create',
+                  questionId: question.id,
+                  label: 'Вариант 1',
+                })}
+              >
+                <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
+                Добавить вариант
+              </Button>
             </div>
           )}
 
@@ -856,14 +906,12 @@ function QuestionInspector({
               <HugeiconsIcon icon={GitBranchIcon} strokeWidth={2} />
               <Typography variant="caption" tone="muted">{visibilitySummary(question.showIf)}</Typography>
             </div>
-            <Field>
-              <FieldLabel htmlFor={`question-condition-${question.id}`}>Зависит от ответа</FieldLabel>
-              <Input id={`question-condition-${question.id}`} value={question.showIf ? 'Условие зафиксировано' : 'Всегда'} disabled readOnly />
-            </Field>
-            <Button type="button" variant="outline" size="sm" disabled title="Изменение ветвлений требует версии и миграции">
-              <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
-              Добавить условие
-            </Button>
+            <QuestionVisibilityEditor
+              record={record}
+              question={question}
+              isSaving={isSaving}
+              onSave={onSave}
+            />
           </div>
 
           <div className="admin-qb-side-section">
@@ -889,6 +937,10 @@ function QuestionInspector({
               <Input id={`question-tech-${question.id}`} value={question.id} disabled readOnly />
             </Field>
             <Typography variant="caption" tone="muted">ID используется в API, токенах различия и ветвлениях. Его нельзя менять без миграции.</Typography>
+            <Button type="button" variant="destructive" size="sm" disabled={isSaving} onClick={onDeleteQuestion}>
+              <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} data-icon="inline-start" />
+              Удалить вопрос
+            </Button>
           </div>
 
           <div className="admin-qb-side-section compact">
@@ -972,12 +1024,10 @@ function QuestionTypeField({
 }) {
   const type = questionTypeKind(question)
   const hintId = `question-type-hint-${question.id}`
-  const hasOptions = (question.options ?? []).length > 0
-  const canEditType = !hasOptions
 
   async function changeType(value: string) {
     const answerType = value as QuestionnaireQuestionAnswerType
-    if (!canEditType || answerType === type || answerType === 'single_option') return
+    if (answerType === type) return
     await onSave({ target: 'question', questionId: question.id, answerType })
   }
 
@@ -988,23 +1038,151 @@ function QuestionTypeField({
         className="admin-qb-select"
         id={`question-type-${question.id}`}
         value={type}
-        disabled={isSaving || !canEditType}
+        disabled={isSaving}
         aria-describedby={hintId}
-        title={canEditType
-          ? 'Можно переключать текстовый и числовой ответ'
-          : 'Изменение option-вопроса требует новой версии и миграции ветвлений'}
+        title="Смена типа публикует новую версию опросника; начатые анкеты остаются на своем snapshot"
         onChange={(event) => void changeType(event.currentTarget.value)}
       >
-        <option value="single_option" disabled={!hasOptions}>Один вариант</option>
+        <option value="single_option">Один вариант</option>
         <option value="number">Число</option>
         <option value="text">Свободный ответ</option>
       </select>
       <Typography id={hintId} variant="caption" tone="muted">
-        {canEditType
-          ? 'Можно менять между текстом и числом. Варианты ответа создаются отдельной версией.'
-          : 'У вопроса уже есть option IDs, поэтому тип защищен от случайной поломки ветвлений.'}
+        Тип можно менять. При переходе с вариантов на текст/число варианты убираются из новой версии, старые анкеты остаются без изменений.
       </Typography>
     </Field>
+  )
+}
+
+type VisibilityEditorMode = 'always' | 'exists' | 'equals'
+
+function QuestionVisibilityEditor({
+  record,
+  question,
+  isSaving,
+  onSave,
+}: {
+  record: QuestionnaireDefinitionRecord
+  question: QuestionnaireQuestion
+  isSaving: boolean
+  onSave: SaveDefinitionEdit
+}) {
+  const allQuestions = record.sections.flatMap((section) => section.questions)
+  const sourceQuestions = allQuestions.filter((item) => item.id !== question.id)
+  const optionQuestions = sourceQuestions.filter((item) => (item.options ?? []).length > 0)
+  const initialState = simpleVisibilityEditorState(question.showIf, sourceQuestions)
+  const [mode, setMode] = useState<VisibilityEditorMode>(initialState.mode)
+  const [sourceQuestionId, setSourceQuestionId] = useState(initialState.sourceQuestionId)
+  const [optionQuestionId, setOptionQuestionId] = useState(initialState.optionQuestionId)
+  const selectedOptionQuestion = optionQuestions.find((item) => item.id === optionQuestionId) ?? optionQuestions[0]
+  const [optionId, setOptionId] = useState(
+    initialState.optionId ?? selectedOptionQuestion?.options?.[0]?.id ?? '',
+  )
+  const canSave =
+    mode === 'always' ||
+    (mode === 'exists' && Boolean(sourceQuestionId)) ||
+    (mode === 'equals' && Boolean(selectedOptionQuestion && optionId))
+
+  async function saveVisibility() {
+    if (!canSave) return
+
+    if (mode === 'always') {
+      await onSave({ target: 'question', questionId: question.id, showIf: null })
+      return
+    }
+
+    if (mode === 'exists') {
+      await onSave({
+        target: 'question',
+        questionId: question.id,
+        showIf: { questionId: sourceQuestionId, exists: true },
+      })
+      return
+    }
+
+    await onSave({
+      target: 'question',
+      questionId: question.id,
+      showIf: { questionId: selectedOptionQuestion.id, equals: [optionId] },
+    })
+  }
+
+  return (
+    <div className="admin-qb-visibility-editor">
+      <Field>
+        <FieldLabel htmlFor={`question-show-mode-${question.id}`}>Показывать вопрос</FieldLabel>
+        <select
+          className="admin-qb-select"
+          id={`question-show-mode-${question.id}`}
+          value={mode}
+          disabled={isSaving}
+          onChange={(event) => setMode(event.currentTarget.value as VisibilityEditorMode)}
+        >
+          <option value="always">Всегда</option>
+          <option value="exists">Если вопрос отвечен</option>
+          <option value="equals">Если выбран вариант</option>
+        </select>
+      </Field>
+
+      {mode === 'exists' && (
+        <Field>
+          <FieldLabel htmlFor={`question-show-source-${question.id}`}>Вопрос-источник</FieldLabel>
+          <select
+            className="admin-qb-select"
+            id={`question-show-source-${question.id}`}
+            value={sourceQuestionId}
+            disabled={isSaving || sourceQuestions.length === 0}
+            onChange={(event) => setSourceQuestionId(event.currentTarget.value)}
+          >
+            {sourceQuestions.map((item) => (
+              <option key={item.id} value={item.id}>{item.prompt}</option>
+            ))}
+          </select>
+        </Field>
+      )}
+
+      {mode === 'equals' && (
+        <>
+          <Field>
+            <FieldLabel htmlFor={`question-show-option-source-${question.id}`}>Вопрос-источник</FieldLabel>
+            <select
+              className="admin-qb-select"
+              id={`question-show-option-source-${question.id}`}
+              value={selectedOptionQuestion?.id ?? ''}
+              disabled={isSaving || optionQuestions.length === 0}
+              onChange={(event) => {
+                const nextQuestion = optionQuestions.find((item) => item.id === event.currentTarget.value)
+                setOptionQuestionId(event.currentTarget.value)
+                setOptionId(nextQuestion?.options?.[0]?.id ?? '')
+              }}
+            >
+              {optionQuestions.map((item) => (
+                <option key={item.id} value={item.id}>{item.prompt}</option>
+              ))}
+            </select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`question-show-option-${question.id}`}>Вариант</FieldLabel>
+            <select
+              className="admin-qb-select"
+              id={`question-show-option-${question.id}`}
+              value={optionId}
+              disabled={isSaving || !selectedOptionQuestion}
+              onChange={(event) => setOptionId(event.currentTarget.value)}
+            >
+              {(selectedOptionQuestion?.options ?? []).map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </Field>
+        </>
+      )}
+
+      <Button type="button" variant="outline" size="sm" disabled={isSaving || !canSave} onClick={() => void saveVisibility()}>
+        <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} data-icon="inline-start" />
+        Сохранить условие
+      </Button>
+    </div>
   )
 }
 
@@ -1027,6 +1205,7 @@ function OptionRowEditor({
   onPointerDragEnd,
   onDragEnd,
   onToggle,
+  onDelete,
 }: {
   question: QuestionnaireQuestion
   option: QuestionnaireOption
@@ -1046,6 +1225,7 @@ function OptionRowEditor({
   onPointerDragEnd: (event: PointerEvent<HTMLSpanElement>) => void
   onDragEnd: () => void
   onToggle: (checked: boolean) => void
+  onDelete: () => void
 }) {
   const [label, setLabel] = useState(option.label)
   const [hint, setHint] = useState(option.hint ?? '')
@@ -1065,6 +1245,11 @@ function OptionRowEditor({
       label: trimmedLabel,
       hint: normalizedHint,
     })
+  }
+
+  function deleteOption() {
+    if (!window.confirm(`Удалить вариант ${option.id} из новой версии опросника?`)) return
+    onDelete()
   }
 
   return (
@@ -1126,6 +1311,9 @@ function OptionRowEditor({
         />
         <Button type="submit" variant="outline" size="icon-xs" aria-label={`Сохранить вариант ${option.id}`} disabled={isSaving || !isDirty || !trimmedLabel}>
           <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} />
+        </Button>
+        <Button type="button" variant="destructive" size="icon-xs" aria-label={`Удалить вариант ${option.id}`} disabled={isSaving} onClick={deleteOption}>
+          <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
         </Button>
       </div>
     </form>
@@ -1244,6 +1432,41 @@ function questionTypeLabel(question: QuestionnaireQuestion) {
 
 function questionTypeKind(question: QuestionnaireQuestion) {
   return getQuestionnaireQuestionAnswerType(question)
+}
+
+function simpleVisibilityEditorState(
+  rule: QuestionnaireVisibilityRule | undefined,
+  sourceQuestions: readonly QuestionnaireQuestion[],
+) {
+  const fallbackQuestion = sourceQuestions[0]
+  const fallbackOptionQuestion = sourceQuestions.find((question) => (question.options ?? []).length > 0)
+
+  if (rule && 'questionId' in rule) {
+    if (rule.equals?.[0]) {
+      return {
+        mode: 'equals' as VisibilityEditorMode,
+        sourceQuestionId: fallbackQuestion?.id ?? '',
+        optionQuestionId: rule.questionId,
+        optionId: rule.equals[0],
+      }
+    }
+
+    if (rule.exists) {
+      return {
+        mode: 'exists' as VisibilityEditorMode,
+        sourceQuestionId: rule.questionId,
+        optionQuestionId: fallbackOptionQuestion?.id ?? '',
+        optionId: fallbackOptionQuestion?.options?.[0]?.id ?? '',
+      }
+    }
+  }
+
+  return {
+    mode: 'always' as VisibilityEditorMode,
+    sourceQuestionId: fallbackQuestion?.id ?? '',
+    optionQuestionId: fallbackOptionQuestion?.id ?? '',
+    optionId: fallbackOptionQuestion?.options?.[0]?.id ?? '',
+  }
 }
 
 function definitionStats(record: QuestionnaireDefinitionRecord) {

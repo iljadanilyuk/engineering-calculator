@@ -174,9 +174,14 @@ const questionnaireQuestionPromptEditSchema = z.object({
   prompt: questionnaireTextSchema(700).optional(),
   isEnabled: z.boolean().optional(),
   answerType: questionnaireQuestionAnswerTypeSchema.optional(),
+  showIf: z.union([questionnaireVisibilityRuleSchema, z.null()]).optional(),
 }).strict().refine(
-  (value) => value.prompt !== undefined || value.isEnabled !== undefined || value.answerType !== undefined,
-  'At least prompt, isEnabled, or answerType is required',
+  (value) =>
+    value.prompt !== undefined ||
+    value.isEnabled !== undefined ||
+    value.answerType !== undefined ||
+    value.showIf !== undefined,
+  'At least prompt, isEnabled, answerType, or showIf is required',
 )
 
 const questionnaireOptionTextEditSchema = z.object({
@@ -186,9 +191,14 @@ const questionnaireOptionTextEditSchema = z.object({
   label: questionnaireTextSchema(300).optional(),
   hint: optionalQuestionnaireHintSchema.optional(),
   isEnabled: z.boolean().optional(),
+  showIf: z.union([questionnaireVisibilityRuleSchema, z.null()]).optional(),
 }).strict().refine(
-  (value) => value.label !== undefined || value.hint !== undefined || value.isEnabled !== undefined,
-  'At least label, hint, or isEnabled is required',
+  (value) =>
+    value.label !== undefined ||
+    value.hint !== undefined ||
+    value.isEnabled !== undefined ||
+    value.showIf !== undefined,
+  'At least label, hint, isEnabled, or showIf is required',
 )
 
 const questionnaireSectionOrderEditSchema = z.object({
@@ -202,10 +212,35 @@ const questionnaireQuestionOrderEditSchema = z.object({
   questionIds: z.array(questionnaireIdSchema).min(1),
 }).strict()
 
+const questionnaireQuestionCreateEditSchema = z.object({
+  target: z.literal('question_create'),
+  sectionId: questionnaireIdSchema,
+  prompt: questionnaireTextSchema(700),
+  answerType: questionnaireQuestionAnswerTypeSchema.optional(),
+}).strict()
+
+const questionnaireQuestionDeleteEditSchema = z.object({
+  target: z.literal('question_delete'),
+  questionId: questionnaireIdSchema,
+}).strict()
+
 const questionnaireOptionOrderEditSchema = z.object({
   target: z.literal('option_order'),
   questionId: questionnaireIdSchema,
   optionIds: z.array(questionnaireIdSchema).min(1),
+}).strict()
+
+const questionnaireOptionCreateEditSchema = z.object({
+  target: z.literal('option_create'),
+  questionId: questionnaireIdSchema,
+  label: questionnaireTextSchema(300),
+  hint: optionalQuestionnaireHintSchema.optional(),
+}).strict()
+
+const questionnaireOptionDeleteEditSchema = z.object({
+  target: z.literal('option_delete'),
+  questionId: questionnaireIdSchema,
+  optionId: questionnaireIdSchema,
 }).strict()
 
 export const questionnaireDefinitionTextEditSchema = z.discriminatedUnion('target', [
@@ -214,7 +249,11 @@ export const questionnaireDefinitionTextEditSchema = z.discriminatedUnion('targe
   questionnaireOptionTextEditSchema,
   questionnaireSectionOrderEditSchema,
   questionnaireQuestionOrderEditSchema,
+  questionnaireQuestionCreateEditSchema,
+  questionnaireQuestionDeleteEditSchema,
   questionnaireOptionOrderEditSchema,
+  questionnaireOptionCreateEditSchema,
+  questionnaireOptionDeleteEditSchema,
 ])
 
 export const questionnaireDefinitionPatchRequestSchema = z.object({

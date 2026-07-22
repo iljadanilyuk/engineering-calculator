@@ -109,6 +109,14 @@ async function exerciseQuestionnaireControls(page: Page) {
 
   await page.getByLabel('Тип вопроса').selectOption('number')
   await expect(page.getByLabel('Тип вопроса')).toHaveValue('number')
+  await page.getByLabel('Тип вопроса').selectOption('single_option')
+  await expect(page.getByLabel('Тип вопроса')).toHaveValue('single_option')
+  await expect(page.getByTestId('option-row-OPTION_1')).toBeVisible()
+  await page.getByRole('button', { name: 'Добавить вариант' }).last().click()
+  await expect(page.getByTestId('option-row-OPTION_3')).toBeVisible()
+  page.once('dialog', (dialog) => void dialog.accept())
+  await page.getByRole('button', { name: 'Удалить вариант OPTION_3' }).click()
+  await expect(page.getByTestId('option-row-OPTION_3')).toBeHidden()
   await page.getByLabel('Тип вопроса').selectOption('text')
   await expect(page.getByLabel('Тип вопроса')).toHaveValue('text')
 
@@ -137,9 +145,11 @@ async function exerciseQuestionnaireControls(page: Page) {
   await page.getByRole('button', { name: 'Поднять вариант FULL' }).click()
   await expect(page.getByRole('button', { name: 'Опустить вариант FULL' })).toBeEnabled()
 
-  await page.getByTestId('option-drag-FULL').dragTo(page.getByTestId('option-dropzone-end'))
+  await page.getByTestId('option-dropzone-end').scrollIntoViewIfNeeded()
+  await page.getByTestId('option-drag-FULL').dragTo(page.getByTestId('option-dropzone-end'), { force: true })
   await expect(page.getByRole('button', { name: 'Поднять вариант FULL' })).toBeEnabled()
-  await page.getByTestId('option-drag-FULL').dragTo(page.getByTestId('option-row-PARTIAL'))
+  await page.getByTestId('option-row-PARTIAL').scrollIntoViewIfNeeded()
+  await page.getByTestId('option-drag-FULL').dragTo(page.getByTestId('option-row-PARTIAL'), { force: true })
   await expect(page.getByRole('button', { name: 'Опустить вариант FULL' })).toBeEnabled()
 }
 

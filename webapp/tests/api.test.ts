@@ -530,7 +530,28 @@ test('ApiClient sends authenticated questionnaire definition requests', async ()
         target: 'question',
         questionId: 'client_email',
         prompt: 'Контактный email',
+        answerType: 'single_option',
+        showIf: null,
+      },
+      {
+        target: 'question_create',
+        sectionId: 'contacts_object',
+        prompt: 'Предпочтительный способ связи',
         answerType: 'text',
+      },
+      {
+        target: 'question_delete',
+        questionId: 'object_address',
+      },
+      {
+        target: 'option_create',
+        questionId: 'client_email',
+        label: 'Почта будет позже',
+      },
+      {
+        target: 'option_delete',
+        questionId: 'client_email',
+        optionId: 'OPTION_2',
       },
     ],
   })
@@ -549,7 +570,28 @@ test('ApiClient sends authenticated questionnaire definition requests', async ()
         target: 'question',
         questionId: 'client_email',
         prompt: 'Контактный email',
+        answerType: 'single_option',
+        showIf: null,
+      },
+      {
+        target: 'question_create',
+        sectionId: 'contacts_object',
+        prompt: 'Предпочтительный способ связи',
         answerType: 'text',
+      },
+      {
+        target: 'question_delete',
+        questionId: 'object_address',
+      },
+      {
+        target: 'option_create',
+        questionId: 'client_email',
+        label: 'Почта будет позже',
+      },
+      {
+        target: 'option_delete',
+        questionId: 'client_email',
+        optionId: 'OPTION_2',
       },
     ],
   })

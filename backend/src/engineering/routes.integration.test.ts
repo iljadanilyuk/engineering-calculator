@@ -2185,35 +2185,6 @@ maybeDescribe('engineering API integration', () => {
       }),
     })
     const patchBody = await patch.json()
-    const blockedQuestionTypePatch = await app.request('/api/admin/questionnaire-definition', {
-      method: 'PATCH',
-      headers: jsonAuthHeaders(accessToken),
-      body: JSON.stringify({
-        baseDefinitionHash: patchBody.questionnaireDefinition.definitionHash,
-        edits: [
-          {
-            target: 'question',
-            questionId: 'OBJ_DOCS',
-            answerType: 'text',
-          },
-        ],
-      }),
-    })
-    const blockedBranchPatch = await app.request('/api/admin/questionnaire-definition', {
-      method: 'PATCH',
-      headers: jsonAuthHeaders(accessToken),
-      body: JSON.stringify({
-        baseDefinitionHash: patchBody.questionnaireDefinition.definitionHash,
-        edits: [
-          {
-            target: 'question',
-            questionId: 'OBJ_DOCS',
-            prompt: 'Question text',
-            showIf: { never: true },
-          },
-        ],
-      }),
-    })
     const missingEdit = await app.request('/api/admin/questionnaire-definition', {
       method: 'PATCH',
       headers: jsonAuthHeaders(accessToken),
@@ -2380,8 +2351,6 @@ maybeDescribe('engineering API integration', () => {
       label: editedOptionLabel,
       hint: editedOptionHint,
     })
-    expect(blockedQuestionTypePatch.status).toBe(400)
-    expect(blockedBranchPatch.status).toBe(400)
     expect(missingEdit.status).toBe(404)
     expect(orderAndEnablementPatch.status).toBe(200)
     expect(orderAndEnablementBody.questionnaireDefinition.sections[0].id).toBe(reorderedSectionIds[0])
@@ -2416,6 +2385,83 @@ maybeDescribe('engineering API integration', () => {
         .flatMap((section: { questions: Array<{ id: string; prompt: string }> }) => section.questions)
         .find((question: { id: string }) => question.id === 'OBJ_DOCS')?.prompt,
     ).toBe(editedQuestionPrompt)
+  })
+
+  test('publishes structural questionnaire edits as new definition snapshots', async () => {
+    const accessToken = await loginAdmin('questionnaire-structure@example.com')
+    const adminFallback = await app.request('/api/admin/questionnaire-definition', {
+      headers: authHeaders(accessToken),
+    })
+    const adminFallbackBody = await adminFallback.json()
+    const patch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: adminFallbackBody.questionnaireDefinition.definitionHash,
+        edits: [
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            answerType: 'text',
+          },
+          {
+            target: 'question',
+            questionId: 'client_email',
+            answerType: 'single_option',
+          },
+          {
+            target: 'question',
+            questionId: 'OBJ_WALL_MATERIAL',
+            showIf: { questionId: 'client_email', equals: ['OPTION_1'] },
+          },
+          {
+            target: 'question_create',
+            sectionId: 'contacts_object',
+            prompt: 'Какой удобный способ связи?',
+            answerType: 'text',
+          },
+          {
+            target: 'question_delete',
+            questionId: 'object_address',
+          },
+          {
+            target: 'option_create',
+            questionId: 'client_email',
+            label: 'Почту уточнит менеджер',
+          },
+          {
+            target: 'option_delete',
+            questionId: 'client_email',
+            optionId: 'OPTION_2',
+          },
+        ],
+      }),
+    })
+    const patchBody = await patch.json()
+    const docsQuestion = definitionQuestion(patchBody.questionnaireDefinition, 'OBJ_DOCS')
+    const emailQuestion = definitionQuestion(patchBody.questionnaireDefinition, 'client_email')
+    const wallMaterialQuestion = definitionQuestion(patchBody.questionnaireDefinition, 'OBJ_WALL_MATERIAL')
+
+    expect(adminFallback.status).toBe(200)
+    expect(patch.status).toBe(200)
+    expect(patchBody.questionnaireDefinition.definitionHash).not.toBe(
+      adminFallbackBody.questionnaireDefinition.definitionHash,
+    )
+    expect(docsQuestion?.answerType).toBe('text')
+    expect(docsQuestion?.options).toBeUndefined()
+    expect(wallMaterialQuestion?.showIf).toEqual({ questionId: 'client_email', equals: ['OPTION_1'] })
+    expect(definitionQuestion(patchBody.questionnaireDefinition, 'object_address')).toBeNull()
+    expect(
+      patchBody.questionnaireDefinition.sections
+        .flatMap((section: { questions: Array<{ prompt: string }> }) => section.questions)
+        .some((question: { prompt: string }) => question.prompt === 'Какой удобный способ связи?'),
+    ).toBe(true)
+    expect(emailQuestion?.answerType).toBe('single_option')
+    expect(emailQuestion?.options?.map((option: { id: string; label: string }) => option.id)).toEqual([
+      'OPTION_1',
+      'OPTION_3',
+    ])
+    expect(emailQuestion?.options?.at(-1)?.label).toBe('Почту уточнит менеджер')
   })
 
   test('sends questionnaire start and completion Telegram notifications once', async () => {

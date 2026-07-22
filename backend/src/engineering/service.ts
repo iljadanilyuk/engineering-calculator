@@ -12,6 +12,7 @@ import {
   exchangeRateInputSchema,
   getQuestionnaireActiveOptions,
   getQuestionnaireActiveQuestions,
+  getQuestionnaireQuestionAnswerType,
   getQuestionnairePublicDefinition,
   markQuestionnaireAnswersActivity,
   publicProjectExampleAssets,
@@ -49,9 +50,13 @@ import {
   type QuestionnaireDefinition,
   type QuestionnaireDefinitionPatchRequest,
   type QuestionnaireDefinitionRecord,
+  type QuestionnaireOption,
+  type QuestionnaireQuestion,
+  type QuestionnaireQuestionAnswerType,
   type QuestionnaireAnswersPatchRequest,
   type QuestionnaireStartRequest,
   type QuestionnaireStoredAnswer,
+  type QuestionnaireVisibilityRule,
   type ServiceCreateRequest,
   type ServiceRecord,
   type ServiceReorderRequest,
@@ -2694,8 +2699,14 @@ function applyQuestionnaireDefinitionTextEdits(
       if (edit.prompt !== undefined) question.prompt = edit.prompt
       if (edit.isEnabled !== undefined) question.isEnabled = edit.isEnabled
       if (edit.answerType !== undefined) {
-        assertQuestionnaireAnswerTypeEditAllowed(question, edit.answerType)
-        question.answerType = edit.answerType
+        applyQuestionnaireQuestionAnswerTypeEdit(next, question, edit.answerType)
+      }
+      if (edit.showIf !== undefined) {
+        if (edit.showIf === null) {
+          delete question.showIf
+        } else {
+          question.showIf = edit.showIf
+        }
       }
       continue
     }
@@ -2712,12 +2723,81 @@ function applyQuestionnaireDefinitionTextEdits(
       continue
     }
 
+    if (edit.target === 'question_create') {
+      const section = next.sections.find((item) => item.id === edit.sectionId)
+      if (!section) throw new AppError(404, 'NOT_FOUND', 'Questionnaire section not found')
+      const question: (typeof section.questions)[number] = {
+        id: allocateQuestionnaireQuestionId(next),
+        prompt: edit.prompt,
+        sourceRow: allocateQuestionnaireSourceRow(next),
+        answerType: edit.answerType ?? 'text',
+      }
+      if (question.answerType === 'single_option') {
+        question.options = [
+          { id: 'OPTION_1', label: 'Вариант 1' },
+          { id: 'OPTION_2', label: 'Вариант 2' },
+        ]
+      }
+      section.questions = [...section.questions, question]
+      continue
+    }
+
+    if (edit.target === 'question_delete') {
+      const section = next.sections.find((item) =>
+        item.questions.some((question) => question.id === edit.questionId),
+      )
+      if (!section) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
+      if (section.questions.length <= 1) {
+        throw new AppError(400, 'BAD_REQUEST', 'Questionnaire section must keep at least one question')
+      }
+      section.questions = section.questions.filter((question) => question.id !== edit.questionId)
+      sanitizeQuestionnaireVisibilityRules(next, (rule) =>
+        normalizeVisibilityRuleAfterQuestionDelete(rule, edit.questionId),
+      )
+      continue
+    }
+
     if (edit.target === 'option_order') {
       const question = next.sections.flatMap((section) => section.questions)
         .find((item) => item.id === edit.questionId)
       if (!question) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
       if (!question.options?.length) throw new AppError(404, 'NOT_FOUND', 'Questionnaire options not found')
       question.options = reorderQuestionnaireItems(question.options, edit.optionIds, 'Questionnaire option order')
+      continue
+    }
+
+    if (edit.target === 'option_create') {
+      const question = next.sections.flatMap((section) => section.questions)
+        .find((item) => item.id === edit.questionId)
+      if (!question) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
+      const option: QuestionnaireOption = {
+        id: allocateQuestionnaireOptionId(question),
+        label: edit.label,
+      }
+      if (edit.hint) option.hint = edit.hint
+      question.options = [...(question.options ?? []), option]
+      question.answerType = 'single_option'
+      continue
+    }
+
+    if (edit.target === 'option_delete') {
+      const question = next.sections.flatMap((section) => section.questions)
+        .find((item) => item.id === edit.questionId)
+      if (!question) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
+      if (!question.options?.some((item) => item.id === edit.optionId)) {
+        throw new AppError(404, 'NOT_FOUND', 'Questionnaire option not found')
+      }
+      question.options = question.options.filter((item) => item.id !== edit.optionId)
+      sanitizeQuestionnaireVisibilityRules(next, (rule) =>
+        normalizeVisibilityRuleAfterOptionDelete(rule, question.id, edit.optionId),
+      )
+      if (question.options.length === 0) {
+        delete question.options
+        question.answerType = 'text'
+        sanitizeQuestionnaireVisibilityRules(next, (rule) =>
+          normalizeVisibilityRuleAfterAnswerTypeChange(rule, question.id),
+        )
+      }
       continue
     }
 
@@ -2736,52 +2816,173 @@ function applyQuestionnaireDefinitionTextEdits(
       }
     }
     if (edit.isEnabled !== undefined) option.isEnabled = edit.isEnabled
+    if (edit.showIf !== undefined) {
+      if (edit.showIf === null) {
+        delete option.showIf
+      } else {
+        option.showIf = edit.showIf
+      }
+    }
   }
 
   return questionnaireDefinitionSchema.parse(next)
 }
 
-function assertQuestionnaireAnswerTypeEditAllowed(
-  question: { options?: readonly unknown[] },
-  answerType: 'single_option' | 'text' | 'number',
+function applyQuestionnaireQuestionAnswerTypeEdit(
+  definition: QuestionnaireDefinition,
+  question: QuestionnaireQuestion,
+  answerType: QuestionnaireQuestionAnswerType,
 ) {
-  const hasOptions = Boolean(question.options?.length)
+  const currentAnswerType = getQuestionnaireQuestionAnswerType(question)
+  if (currentAnswerType === answerType) return
 
-  if (hasOptions && answerType !== 'single_option') {
-    throw new AppError(
-      400,
-      'BAD_REQUEST',
-      'Questions with existing options can only use the single option type in this editor version',
-    )
+  if (answerType === 'single_option') {
+    if (!question.options?.length) {
+      const firstOptionId = allocateQuestionnaireOptionId(question)
+      question.options = [
+        { id: firstOptionId, label: 'Вариант 1' },
+        { id: allocateQuestionnaireOptionId(question, [firstOptionId]), label: 'Вариант 2' },
+      ]
+    }
+    question.answerType = 'single_option'
+    return
   }
 
-  if (!hasOptions && answerType === 'single_option') {
+  delete question.options
+  question.answerType = answerType
+  sanitizeQuestionnaireVisibilityRules(definition, (rule) =>
+    normalizeVisibilityRuleAfterAnswerTypeChange(rule, question.id),
+  )
+}
+
+function assertQuestionnaireAnswerTypeIsCoherent(question: QuestionnaireQuestion) {
+  const answerType = getQuestionnaireQuestionAnswerType(question)
+  const hasOptions = (question.options?.length ?? 0) > 0
+
+  if (answerType === 'single_option' && !hasOptions) {
     throw new AppError(
       400,
       'BAD_REQUEST',
-      'Single option type requires existing option ids and must be created in a versioned migration',
+      'Questionnaire single option questions must keep at least one option',
     )
   }
 }
 
-function assertQuestionnaireAnswerTypeIsCoherent(question: { options?: readonly unknown[]; answerType?: string }) {
-  const hasOptions = Boolean(question.options?.length)
+function allocateQuestionnaireOptionId(question: Pick<QuestionnaireQuestion, 'options'>, reservedIds: string[] = []) {
+  const existingIds = new Set([...(question.options ?? []).map((option) => option.id), ...reservedIds])
 
-  if (hasOptions && question.answerType && question.answerType !== 'single_option') {
-    throw new AppError(
-      400,
-      'BAD_REQUEST',
-      'Questions with existing options can only use the single option type in this editor version',
-    )
+  for (let index = existingIds.size + 1; index < existingIds.size + 500; index += 1) {
+    const optionId = `OPTION_${index}`
+    if (!existingIds.has(optionId)) return optionId
   }
 
-  if (!hasOptions && question.answerType === 'single_option') {
-    throw new AppError(
-      400,
-      'BAD_REQUEST',
-      'Single option type requires existing option ids and must be created in a versioned migration',
-    )
+  throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate questionnaire option id')
+}
+
+function allocateQuestionnaireQuestionId(definition: QuestionnaireDefinition) {
+  const existingIds = new Set(
+    definition.sections.flatMap((section) => section.questions).map((question) => question.id),
+  )
+
+  for (let index = existingIds.size + 1; index < existingIds.size + 2_000; index += 1) {
+    const questionId = `CUSTOM_${index}`
+    if (!existingIds.has(questionId)) return questionId
   }
+
+  throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate questionnaire question id')
+}
+
+function allocateQuestionnaireSourceRow(definition: QuestionnaireDefinition) {
+  return Math.max(
+    1,
+    ...definition.sections.flatMap((section) => [
+      ...section.sourceRows,
+      ...section.questions.map((question) => question.sourceRow),
+    ]),
+  ) + 1
+}
+
+function sanitizeQuestionnaireVisibilityRules(
+  definition: QuestionnaireDefinition,
+  normalize: (rule: QuestionnaireVisibilityRule | undefined) => QuestionnaireVisibilityRule | undefined,
+) {
+  for (const section of definition.sections) {
+    for (const question of section.questions) {
+      question.showIf = normalize(question.showIf)
+      for (const option of question.options ?? []) {
+        option.showIf = normalize(option.showIf)
+      }
+    }
+  }
+}
+
+function normalizeVisibilityRuleAfterAnswerTypeChange(
+  rule: QuestionnaireVisibilityRule | undefined,
+  questionId: string,
+): QuestionnaireVisibilityRule | undefined {
+  return normalizeQuestionnaireVisibilityRule(rule, (leaf) => {
+    if (leaf.questionId !== questionId) return leaf
+    if (!leaf.equals && !leaf.notEquals) return leaf
+    return { questionId, exists: true }
+  })
+}
+
+function normalizeVisibilityRuleAfterQuestionDelete(
+  rule: QuestionnaireVisibilityRule | undefined,
+  questionId: string,
+): QuestionnaireVisibilityRule | undefined {
+  return normalizeQuestionnaireVisibilityRule(rule, (leaf) => {
+    if (leaf.questionId !== questionId) return leaf
+    return { never: true }
+  })
+}
+
+function normalizeVisibilityRuleAfterOptionDelete(
+  rule: QuestionnaireVisibilityRule | undefined,
+  questionId: string,
+  optionId: string,
+): QuestionnaireVisibilityRule | undefined {
+  return normalizeQuestionnaireVisibilityRule(rule, (leaf) => {
+    if (leaf.questionId !== questionId) return leaf
+
+    const equals = leaf.equals?.filter((id) => id !== optionId)
+    const notEquals = leaf.notEquals?.filter((id) => id !== optionId)
+
+    if (leaf.equals && equals?.length === 0) return { never: true }
+
+    return {
+      questionId: leaf.questionId,
+      ...(equals && equals.length > 0 ? { equals } : {}),
+      ...(notEquals && notEquals.length > 0 ? { notEquals } : {}),
+      ...(leaf.exists || (leaf.notEquals && notEquals?.length === 0 && !leaf.equals) ? { exists: true } : {}),
+    }
+  })
+}
+
+function normalizeQuestionnaireVisibilityRule(
+  rule: QuestionnaireVisibilityRule | undefined,
+  normalizeLeaf: (
+    leaf: Extract<QuestionnaireVisibilityRule, { questionId: string }>,
+  ) => QuestionnaireVisibilityRule,
+): QuestionnaireVisibilityRule | undefined {
+  if (!rule) return undefined
+  if ('never' in rule) return rule
+  if ('all' in rule) {
+    return {
+      all: rule.all.map((condition) =>
+        normalizeQuestionnaireVisibilityRule(condition, normalizeLeaf) ?? { never: true },
+      ),
+    }
+  }
+  if ('any' in rule) {
+    return {
+      any: rule.any.map((condition) =>
+        normalizeQuestionnaireVisibilityRule(condition, normalizeLeaf) ?? { never: true },
+      ),
+    }
+  }
+
+  return normalizeLeaf(rule)
 }
 
 function assertQuestionnaireDefinitionPublishable(definition: QuestionnaireDefinition) {
