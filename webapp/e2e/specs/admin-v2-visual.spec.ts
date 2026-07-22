@@ -112,6 +112,11 @@ async function exerciseQuestionnaireControls(page: Page) {
   await page.getByRole('button', { name: 'Поднять вопрос client_email' }).click()
   await expect(page.getByRole('button', { name: 'Опустить вопрос client_email' })).toBeEnabled()
 
+  await page.getByTestId('question-drag-client_email').dragTo(page.getByTestId('question-dropzone-end'))
+  await expect(page.getByRole('button', { name: 'Поднять вопрос client_email' })).toBeEnabled()
+  await page.getByTestId('question-drag-client_email').dragTo(page.getByTestId('question-card-object_address'))
+  await expect(page.getByRole('button', { name: 'Опустить вопрос client_email' })).toBeEnabled()
+
   await page.getByRole('button', { name: /^2\. Дом и исходные материалы/ }).click()
   await page.getByLabel(/Вопросы раздела/).getByRole('button', { name: /материалы/i }).first().click()
 
@@ -125,6 +130,11 @@ async function exerciseQuestionnaireControls(page: Page) {
   await page.getByRole('button', { name: 'Опустить вариант FULL' }).click()
   await expect(page.getByRole('button', { name: 'Поднять вариант FULL' })).toBeEnabled()
   await page.getByRole('button', { name: 'Поднять вариант FULL' }).click()
+  await expect(page.getByRole('button', { name: 'Опустить вариант FULL' })).toBeEnabled()
+
+  await page.getByTestId('option-drag-FULL').dragTo(page.getByTestId('option-dropzone-end'))
+  await expect(page.getByRole('button', { name: 'Поднять вариант FULL' })).toBeEnabled()
+  await page.getByTestId('option-drag-FULL').dragTo(page.getByTestId('option-row-PARTIAL'))
   await expect(page.getByRole('button', { name: 'Опустить вариант FULL' })).toBeEnabled()
 }
 

@@ -18,7 +18,7 @@ import type {
   QuestionnaireSection,
   QuestionnaireVisibilityRule,
 } from '@poznyak-engineering-calculator/contracts'
-import { type FormEvent, useMemo, useState } from 'react'
+import { type DragEvent, type FormEvent, type PointerEvent, useMemo, useRef, useState } from 'react'
 
 import {
   ErrorBlock,
@@ -43,6 +43,11 @@ import { cn } from '@/lib/utils'
 
 type SaveDefinitionEdit = (edit: QuestionnaireDefinitionTextEdit) => Promise<void>
 
+type BuilderDragState =
+  | { kind: 'section'; sectionId: string }
+  | { kind: 'question'; sectionId: string; questionId: string }
+  | { kind: 'option'; questionId: string; optionId: string }
+
 export function QuestionnaireManager() {
   const auth = useAuth()
   const definitionQuery = useQuestionnaireDefinitionQuery({
@@ -54,6 +59,8 @@ export function QuestionnaireManager() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null)
+  const [dragState, setDragState] = useState<BuilderDragState | null>(null)
+  const dragStateRef = useRef<BuilderDragState | null>(null)
   const record = definitionQuery.data?.questionnaireDefinition ?? null
   const stats = useMemo(() => (record ? definitionStats(record) : null), [record])
   const selectedSection = useMemo(() => {
@@ -89,16 +96,123 @@ export function QuestionnaireManager() {
     await saveEdit({ target: 'section_order', sectionIds })
   }
 
+  async function dropSection(sectionId: string | null) {
+    const activeDrag = dragStateRef.current ?? dragState
+    if (!record || activeDrag?.kind !== 'section') return
+    const sectionIds = reorderId(record.sections.map((section) => section.id), activeDrag.sectionId, sectionId)
+    clearDragState()
+    if (!sectionIds) return
+    await saveEdit({ target: 'section_order', sectionIds })
+  }
+
   async function moveQuestion(section: QuestionnaireSection, questionId: string, direction: MoveDirection) {
     const questionIds = moveId(section.questions.map((question) => question.id), questionId, direction)
     if (!questionIds) return
     await saveEdit({ target: 'question_order', sectionId: section.id, questionIds })
   }
 
+  async function dropQuestion(section: QuestionnaireSection, questionId: string | null) {
+    const activeDrag = dragStateRef.current ?? dragState
+    if (activeDrag?.kind !== 'question' || activeDrag.sectionId !== section.id) return
+    const draggedQuestionId = activeDrag.questionId
+    const questionIds = reorderId(section.questions.map((question) => question.id), draggedQuestionId, questionId)
+    clearDragState()
+    if (!questionIds) return
+    await saveEdit({ target: 'question_order', sectionId: section.id, questionIds })
+    setSelectedQuestionId(draggedQuestionId)
+  }
+
   async function moveOption(question: QuestionnaireQuestion, optionId: string, direction: MoveDirection) {
     const optionIds = moveId((question.options ?? []).map((option) => option.id), optionId, direction)
     if (!optionIds) return
     await saveEdit({ target: 'option_order', questionId: question.id, optionIds })
+  }
+
+  async function dropOption(question: QuestionnaireQuestion, optionId: string | null) {
+    const activeDrag = dragStateRef.current ?? dragState
+    if (activeDrag?.kind !== 'option' || activeDrag.questionId !== question.id) return
+    const optionIds = reorderId((question.options ?? []).map((option) => option.id), activeDrag.optionId, optionId)
+    clearDragState()
+    if (!optionIds) return
+    await saveEdit({ target: 'option_order', questionId: question.id, optionIds })
+  }
+
+  function startDrag(event: DragEvent<HTMLElement>, state: BuilderDragState) {
+    const dragTarget = event.target instanceof HTMLElement ? event.target : null
+    const startedOnHandle = dragTarget?.closest('.admin-drag-handle')
+    const startedOnInteractiveControl = dragTarget?.closest('button, input, textarea, select')
+
+    if (isSaving || (startedOnInteractiveControl && !startedOnHandle)) {
+      event.preventDefault()
+      return
+    }
+
+    dragStateRef.current = state
+    setDragState(state)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', dragStateLabel(state))
+  }
+
+  function startPointerDrag(state: BuilderDragState) {
+    if (isSaving) return
+    dragStateRef.current = state
+    setDragState(state)
+  }
+
+  function allowDrop(event: DragEvent<HTMLElement>) {
+    if (isSaving) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }
+
+  function finishDrag() {
+    clearDragState()
+  }
+
+  function finishPointerDrag(event: PointerEvent<HTMLSpanElement>) {
+    if (isSaving) {
+      clearDragState()
+      return
+    }
+
+    const hovered = document.elementFromPoint(event.clientX, event.clientY)
+    const dropTarget = hovered?.closest<HTMLElement>('[data-qb-drop-kind]')
+    if (!dropTarget) {
+      clearDragState()
+      return
+    }
+
+    const targetId = dropTarget.dataset.qbDropId === '__end__' ? null : dropTarget.dataset.qbDropId ?? null
+
+    if (dropTarget.dataset.qbDropKind === 'section') {
+      void dropSection(targetId)
+      return
+    }
+
+    if (dropTarget.dataset.qbDropKind === 'question') {
+      const section = record?.sections.find((item) => item.id === dropTarget.dataset.qbDropSection)
+      if (section) {
+        void dropQuestion(section, targetId)
+        return
+      }
+    }
+
+    if (dropTarget.dataset.qbDropKind === 'option') {
+      const targetQuestion = record?.sections
+        .flatMap((item) => item.questions)
+        .find((item) => item.id === dropTarget.dataset.qbDropQuestion)
+      if (targetQuestion) {
+        void dropOption(targetQuestion, targetId)
+        return
+      }
+    }
+
+    clearDragState()
+  }
+
+  function clearDragState() {
+    dragStateRef.current = null
+    setDragState(null)
   }
 
   function selectSection(section: QuestionnaireSection) {
@@ -217,16 +331,38 @@ export function QuestionnaireManager() {
                 isSaving={isSaving}
                 canMoveUp={index > 0}
                 canMoveDown={index < record.sections.length - 1}
+                isDragging={dragState?.kind === 'section' && dragState.sectionId === section.id}
                 onSelect={() => selectSection(section)}
                 onMoveUp={() => void moveSection(section.id, 'up')}
                 onMoveDown={() => void moveSection(section.id, 'down')}
+                onDragStart={(event) => startDrag(event, { kind: 'section', sectionId: section.id })}
+                onDragOver={allowDrop}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  void dropSection(section.id)
+                }}
+                onMouseDrop={() => void dropSection(section.id)}
+                onPointerDragStart={() => startPointerDrag({ kind: 'section', sectionId: section.id })}
+                onPointerDragEnd={finishPointerDrag}
+                onDragEnd={finishDrag}
                 onToggle={(checked) => void saveEdit({ target: 'section', sectionId: section.id, isEnabled: checked })}
               />
             ))}
           </div>
 
-          <div className="admin-qb-dropzone" aria-disabled="true">
-            <Typography variant="caption" tone="muted">Перемещайте разделы кнопками порядка</Typography>
+          <div
+            className={cn('admin-qb-dropzone', dragState?.kind === 'section' && 'is-ready')}
+            data-testid="section-dropzone-end"
+            data-qb-drop-kind="section"
+            data-qb-drop-id="__end__"
+            onDragOver={allowDrop}
+            onDrop={(event) => {
+              event.preventDefault()
+              void dropSection(null)
+            }}
+            onMouseUp={() => void dropSection(null)}
+          >
+            <Typography variant="caption" tone="muted">Перетащите раздел сюда, чтобы поставить в конец</Typography>
           </div>
 
           <SelectedSectionTitleEditor
@@ -261,21 +397,53 @@ export function QuestionnaireManager() {
                 key={question.id}
                 question={question}
                 index={index}
+                sectionId={selectedSection.id}
                 sectionIndex={record.sections.findIndex((section) => section.id === selectedSection.id)}
                 isSelected={question.id === selectedQuestion?.id}
                 isSaving={isSaving}
                 canMoveUp={index > 0}
                 canMoveDown={index < selectedSection.questions.length - 1}
+                isDragging={dragState?.kind === 'question' && dragState.questionId === question.id}
                 onSelect={() => setSelectedQuestionId(question.id)}
                 onMoveUp={() => void moveQuestion(selectedSection, question.id, 'up')}
                 onMoveDown={() => void moveQuestion(selectedSection, question.id, 'down')}
+                onDragStart={(event) => startDrag(event, {
+                  kind: 'question',
+                  sectionId: selectedSection.id,
+                  questionId: question.id,
+                })}
+                onDragOver={allowDrop}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  void dropQuestion(selectedSection, question.id)
+                }}
+                onMouseDrop={() => void dropQuestion(selectedSection, question.id)}
+                onPointerDragStart={() => startPointerDrag({
+                  kind: 'question',
+                  sectionId: selectedSection.id,
+                  questionId: question.id,
+                })}
+                onPointerDragEnd={finishPointerDrag}
+                onDragEnd={finishDrag}
                 onToggle={(checked) => void saveEdit({ target: 'question', questionId: question.id, isEnabled: checked })}
               />
             ))}
           </div>
 
-          <div className="admin-qb-dropzone" aria-disabled="true">
-            <Typography variant="caption" tone="muted">Перемещайте вопросы кнопками порядка</Typography>
+          <div
+            className={cn('admin-qb-dropzone', dragState?.kind === 'question' && 'is-ready')}
+            data-testid="question-dropzone-end"
+            data-qb-drop-kind="question"
+            data-qb-drop-section={selectedSection.id}
+            data-qb-drop-id="__end__"
+            onDragOver={allowDrop}
+            onDrop={(event) => {
+              event.preventDefault()
+              void dropQuestion(selectedSection, null)
+            }}
+            onMouseUp={() => void dropQuestion(selectedSection, null)}
+          >
+            <Typography variant="caption" tone="muted">Перетащите вопрос сюда, чтобы поставить в конец раздела</Typography>
           </div>
 
           <Button type="button" variant="ghost" size="sm" disabled title="Новые вопросы требуют версии и миграции ветвлений">
@@ -295,6 +463,30 @@ export function QuestionnaireManager() {
             ? void saveEdit({ target: 'question', questionId: selectedQuestion.id, isEnabled: checked })
             : undefined}
           onMoveOption={moveOption}
+          draggedOptionId={dragState?.kind === 'option' ? dragState.optionId : null}
+          onOptionDragStart={(event, question, optionId) => startDrag(event, {
+            kind: 'option',
+            questionId: question.id,
+            optionId,
+          })}
+          onOptionDragOver={allowDrop}
+          onOptionDrop={(event, question, optionId) => {
+            event.preventDefault()
+            void dropOption(question, optionId)
+          }}
+          onOptionMouseDrop={(question, optionId) => void dropOption(question, optionId)}
+          onOptionDropEnd={(event, question) => {
+            event.preventDefault()
+            void dropOption(question, null)
+          }}
+          onOptionMouseDropEnd={(question) => void dropOption(question, null)}
+          onOptionPointerDragStart={(question, optionId) => startPointerDrag({
+            kind: 'option',
+            questionId: question.id,
+            optionId,
+          })}
+          onOptionPointerDragEnd={finishPointerDrag}
+          onOptionDragEnd={finishDrag}
           stats={stats}
         />
       </div>
@@ -309,9 +501,17 @@ function SectionCard({
   isSaving,
   canMoveUp,
   canMoveDown,
+  isDragging,
   onSelect,
   onMoveUp,
   onMoveDown,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onMouseDrop,
+  onPointerDragStart,
+  onPointerDragEnd,
+  onDragEnd,
   onToggle,
 }: {
   section: QuestionnaireSection
@@ -320,17 +520,41 @@ function SectionCard({
   isSaving: boolean
   canMoveUp: boolean
   canMoveDown: boolean
+  isDragging: boolean
   onSelect: () => void
   onMoveUp: () => void
   onMoveDown: () => void
+  onDragStart: (event: DragEvent<HTMLSpanElement>) => void
+  onDragOver: (event: DragEvent<HTMLElement>) => void
+  onDrop: (event: DragEvent<HTMLElement>) => void
+  onMouseDrop: () => void
+  onPointerDragStart: () => void
+  onPointerDragEnd: (event: PointerEvent<HTMLSpanElement>) => void
+  onDragEnd: () => void
   onToggle: (checked: boolean) => void
 }) {
   const isEnabled = itemIsEnabled(section)
 
   return (
-    <article className={cn('admin-qb-section-card', isSelected && 'is-active', !isEnabled && 'is-disabled')}>
+    <article
+      className={cn('admin-qb-section-card', isSelected && 'is-active', !isEnabled && 'is-disabled', isDragging && 'is-dragging')}
+      aria-label={`Раздел ${section.title}`}
+      data-testid={`section-card-${section.id}`}
+      data-qb-drop-kind="section"
+      data-qb-drop-id={section.id}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onMouseUp={onMouseDrop}
+    >
       <button className="admin-qb-card-main" type="button" onClick={onSelect}>
-        <DragHandle />
+        <DragHandle
+          draggable={!isSaving}
+          testId={`section-drag-${section.id}`}
+          onDragStart={onDragStart}
+          onPointerDown={onPointerDragStart}
+          onPointerUp={onPointerDragEnd}
+          onDragEnd={onDragEnd}
+        />
         <span className="admin-qb-card-copy">
           <Typography variant="bodySmMedium">{index + 1}. {section.title}</Typography>
           <Typography variant="caption" tone="muted">{section.questions.length} вопросов</Typography>
@@ -358,34 +582,69 @@ function SectionCard({
 function QuestionCard({
   question,
   index,
+  sectionId,
   sectionIndex,
   isSelected,
   isSaving,
   canMoveUp,
   canMoveDown,
+  isDragging,
   onSelect,
   onMoveUp,
   onMoveDown,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onMouseDrop,
+  onPointerDragStart,
+  onPointerDragEnd,
+  onDragEnd,
   onToggle,
 }: {
   question: QuestionnaireQuestion
   index: number
+  sectionId: string
   sectionIndex: number
   isSelected: boolean
   isSaving: boolean
   canMoveUp: boolean
   canMoveDown: boolean
+  isDragging: boolean
   onSelect: () => void
   onMoveUp: () => void
   onMoveDown: () => void
+  onDragStart: (event: DragEvent<HTMLSpanElement>) => void
+  onDragOver: (event: DragEvent<HTMLElement>) => void
+  onDrop: (event: DragEvent<HTMLElement>) => void
+  onMouseDrop: () => void
+  onPointerDragStart: () => void
+  onPointerDragEnd: (event: PointerEvent<HTMLSpanElement>) => void
+  onDragEnd: () => void
   onToggle: (checked: boolean) => void
 }) {
   const isEnabled = itemIsEnabled(question)
 
   return (
-    <article className={cn('admin-qb-question-card', isSelected && 'is-active', !isEnabled && 'is-disabled')}>
+    <article
+      className={cn('admin-qb-question-card', isSelected && 'is-active', !isEnabled && 'is-disabled', isDragging && 'is-dragging')}
+      aria-label={`Вопрос ${question.id}`}
+      data-testid={`question-card-${question.id}`}
+      data-qb-drop-kind="question"
+      data-qb-drop-section={sectionId}
+      data-qb-drop-id={question.id}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onMouseUp={onMouseDrop}
+    >
       <button className="admin-qb-card-main" type="button" onClick={onSelect}>
-        <DragHandle />
+        <DragHandle
+          draggable={!isSaving}
+          testId={`question-drag-${question.id}`}
+          onDragStart={onDragStart}
+          onPointerDown={onPointerDragStart}
+          onPointerUp={onPointerDragEnd}
+          onDragEnd={onDragEnd}
+        />
         <span className="admin-qb-card-copy">
           <Typography variant="bodySmMedium">{sectionIndex + 1}.{index + 1} {question.prompt}</Typography>
           <span className="admin-qb-card-meta">
@@ -459,6 +718,16 @@ function QuestionInspector({
   onSave,
   onToggleQuestion,
   onMoveOption,
+  draggedOptionId,
+  onOptionDragStart,
+  onOptionDragOver,
+  onOptionDrop,
+  onOptionMouseDrop,
+  onOptionDropEnd,
+  onOptionMouseDropEnd,
+  onOptionPointerDragStart,
+  onOptionPointerDragEnd,
+  onOptionDragEnd,
   stats,
 }: {
   record: QuestionnaireDefinitionRecord
@@ -468,6 +737,16 @@ function QuestionInspector({
   onSave: SaveDefinitionEdit
   onToggleQuestion: (checked: boolean) => void | undefined
   onMoveOption: (question: QuestionnaireQuestion, optionId: string, direction: MoveDirection) => Promise<void>
+  draggedOptionId: string | null
+  onOptionDragStart: (event: DragEvent<HTMLSpanElement>, question: QuestionnaireQuestion, optionId: string) => void
+  onOptionDragOver: (event: DragEvent<HTMLElement>) => void
+  onOptionDrop: (event: DragEvent<HTMLElement>, question: QuestionnaireQuestion, optionId: string) => void
+  onOptionMouseDrop: (question: QuestionnaireQuestion, optionId: string) => void
+  onOptionDropEnd: (event: DragEvent<HTMLElement>, question: QuestionnaireQuestion) => void
+  onOptionMouseDropEnd: (question: QuestionnaireQuestion) => void
+  onOptionPointerDragStart: (question: QuestionnaireQuestion, optionId: string) => void
+  onOptionPointerDragEnd: (event: PointerEvent<HTMLSpanElement>) => void
+  onOptionDragEnd: () => void
   stats: ReturnType<typeof definitionStats>
 }) {
   if (!question) {
@@ -516,9 +795,17 @@ function QuestionInspector({
                   isSaving={isSaving}
                   canMoveUp={index > 0}
                   canMoveDown={index < options.length - 1}
+                  isDragging={draggedOptionId === option.id}
                   onSave={onSave}
                   onMoveUp={() => void onMoveOption(question, option.id, 'up')}
                   onMoveDown={() => void onMoveOption(question, option.id, 'down')}
+                  onDragStart={(event) => onOptionDragStart(event, question, option.id)}
+                  onDragOver={onOptionDragOver}
+                  onDrop={(event) => onOptionDrop(event, question, option.id)}
+                  onMouseDrop={() => onOptionMouseDrop(question, option.id)}
+                  onPointerDragStart={() => onOptionPointerDragStart(question, option.id)}
+                  onPointerDragEnd={onOptionPointerDragEnd}
+                  onDragEnd={onOptionDragEnd}
                   onToggle={(checked) => void onSave({
                     target: 'option',
                     questionId: question.id,
@@ -531,6 +818,18 @@ function QuestionInspector({
                 <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
                 Добавить вариант
               </Button>
+              <div
+                className={cn('admin-qb-dropzone compact', draggedOptionId && 'is-ready')}
+                data-testid="option-dropzone-end"
+                data-qb-drop-kind="option"
+                data-qb-drop-question={question.id}
+                data-qb-drop-id="__end__"
+                onDragOver={onOptionDragOver}
+                onDrop={(event) => onOptionDropEnd(event, question)}
+                onMouseUp={() => onOptionMouseDropEnd(question)}
+              >
+                <Typography variant="caption" tone="muted">Перетащите вариант сюда, чтобы поставить в конец</Typography>
+              </div>
             </div>
           ) : (
             <div className="admin-qb-muted-panel">
@@ -636,10 +935,7 @@ function QuestionPromptEditor({
           <FieldLabel htmlFor={`question-id-${question.id}`}>ID вопроса</FieldLabel>
           <Input id={`question-id-${question.id}`} value={question.id} disabled readOnly />
         </Field>
-        <Field>
-          <FieldLabel htmlFor={`question-type-${question.id}`}>Тип вопроса</FieldLabel>
-          <Input id={`question-type-${question.id}`} value={questionTypeLabel(question)} disabled readOnly />
-        </Field>
+        <QuestionTypeField question={question} />
       </div>
 
       <Field>
@@ -663,6 +959,32 @@ function QuestionPromptEditor({
   )
 }
 
+function QuestionTypeField({ question }: { question: QuestionnaireQuestion }) {
+  const type = questionTypeKind(question)
+  const hintId = `question-type-hint-${question.id}`
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={`question-type-${question.id}`}>Тип вопроса</FieldLabel>
+      <select
+        className="admin-qb-select"
+        id={`question-type-${question.id}`}
+        value={type}
+        disabled
+        aria-describedby={hintId}
+        title="Изменение типа требует новой версии опросника и миграции старых ответов"
+      >
+        <option value="single_option">Один вариант</option>
+        <option value="number">Число</option>
+        <option value="text">Свободный ответ</option>
+      </select>
+      <Typography id={hintId} variant="caption" tone="muted">
+        Тип зафиксирован текущей версией, чтобы старые ответы и ветвления не поменяли смысл.
+      </Typography>
+    </Field>
+  )
+}
+
 function OptionRowEditor({
   question,
   option,
@@ -670,9 +992,17 @@ function OptionRowEditor({
   isSaving,
   canMoveUp,
   canMoveDown,
+  isDragging,
   onSave,
   onMoveUp,
   onMoveDown,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onMouseDrop,
+  onPointerDragStart,
+  onPointerDragEnd,
+  onDragEnd,
   onToggle,
 }: {
   question: QuestionnaireQuestion
@@ -681,9 +1011,17 @@ function OptionRowEditor({
   isSaving: boolean
   canMoveUp: boolean
   canMoveDown: boolean
+  isDragging: boolean
   onSave: SaveDefinitionEdit
   onMoveUp: () => void
   onMoveDown: () => void
+  onDragStart: (event: DragEvent<HTMLSpanElement>) => void
+  onDragOver: (event: DragEvent<HTMLElement>) => void
+  onDrop: (event: DragEvent<HTMLElement>) => void
+  onMouseDrop: () => void
+  onPointerDragStart: () => void
+  onPointerDragEnd: (event: PointerEvent<HTMLSpanElement>) => void
+  onDragEnd: () => void
   onToggle: (checked: boolean) => void
 }) {
   const [label, setLabel] = useState(option.label)
@@ -707,9 +1045,27 @@ function OptionRowEditor({
   }
 
   return (
-    <form className={cn('admin-qb-option-row', !isEnabled && 'is-disabled')} onSubmit={(event) => void submit(event)}>
+    <form
+      className={cn('admin-qb-option-row', !isEnabled && 'is-disabled', isDragging && 'is-dragging')}
+      aria-label={`Вариант ${option.id}`}
+      data-testid={`option-row-${option.id}`}
+      data-qb-drop-kind="option"
+      data-qb-drop-question={question.id}
+      data-qb-drop-id={option.id}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onMouseUp={onMouseDrop}
+      onSubmit={(event) => void submit(event)}
+    >
       <div className="admin-qb-option-grip">
-        <DragHandle />
+        <DragHandle
+          draggable={!isSaving}
+          testId={`option-drag-${option.id}`}
+          onDragStart={onDragStart}
+          onPointerDown={onPointerDragStart}
+          onPointerUp={onPointerDragEnd}
+          onDragEnd={onDragEnd}
+        />
         <Typography variant="caption" tone="muted">{index + 1}</Typography>
       </div>
       <div className="admin-qb-option-edit">
@@ -770,9 +1126,33 @@ function DefinitionMeta({
   )
 }
 
-function DragHandle() {
+function DragHandle({
+  draggable = false,
+  testId,
+  onDragStart,
+  onPointerDown,
+  onPointerUp,
+  onDragEnd,
+}: {
+  draggable?: boolean
+  testId?: string
+  onDragStart?: (event: DragEvent<HTMLSpanElement>) => void
+  onPointerDown?: () => void
+  onPointerUp?: (event: PointerEvent<HTMLSpanElement>) => void
+  onDragEnd?: () => void
+}) {
   return (
-    <span className="admin-drag-handle" aria-hidden="true">
+    <span
+      className="admin-drag-handle"
+      aria-hidden="true"
+      draggable={draggable}
+      data-testid={testId}
+      onDragStart={onDragStart}
+      onPointerDown={onPointerDown}
+      onMouseDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onDragEnd={onDragEnd}
+    >
       <span />
       <span />
       <span />
@@ -797,6 +1177,28 @@ function moveId(ids: string[], id: string, direction: MoveDirection) {
   return nextIds
 }
 
+function reorderId(ids: string[], id: string, targetId: string | null) {
+  const fromIndex = ids.indexOf(id)
+  if (fromIndex === -1 || id === targetId) return null
+
+  const nextIds = ids.filter((item) => item !== id)
+  const targetIndex = targetId ? ids.indexOf(targetId) : ids.length
+  if (targetIndex === -1) return null
+
+  nextIds.splice(Math.min(targetIndex, nextIds.length), 0, id)
+  return arraysEqual(nextIds, ids) ? null : nextIds
+}
+
+function arraysEqual(first: readonly string[], second: readonly string[]) {
+  return first.length === second.length && first.every((item, index) => item === second[index])
+}
+
+function dragStateLabel(state: BuilderDragState) {
+  if (state.kind === 'section') return state.sectionId
+  if (state.kind === 'question') return state.questionId
+  return state.optionId
+}
+
 function itemIsEnabled(item: { isEnabled?: boolean }) {
   return item.isEnabled !== false
 }
@@ -811,9 +1213,16 @@ function sectionIndexLabel(sections: readonly QuestionnaireSection[], selectedSe
 }
 
 function questionTypeLabel(question: QuestionnaireQuestion) {
-  if ((question.options ?? []).length > 0) return 'Один вариант'
-  if (question.id.toLowerCase().includes('area')) return 'Число'
+  const kind = questionTypeKind(question)
+  if (kind === 'single_option') return 'Один вариант'
+  if (kind === 'number') return 'Число'
   return 'Свободный ответ'
+}
+
+function questionTypeKind(question: QuestionnaireQuestion) {
+  if ((question.options ?? []).length > 0) return 'single_option'
+  if (question.id.toLowerCase().includes('area')) return 'number'
+  return 'text'
 }
 
 function definitionStats(record: QuestionnaireDefinitionRecord) {

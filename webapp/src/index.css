@@ -1705,6 +1705,10 @@
     transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
   }
 
+  .admin-drag-handle[draggable="true"] {
+    user-select: none;
+  }
+
   .admin-qb-question-card {
     padding: 13px 12px;
   }
@@ -1721,6 +1725,16 @@
   .admin-qb-option-row.is-disabled {
     background: #f6f8fb;
     opacity: 0.72;
+  }
+
+  .admin-qb-section-card.is-dragging,
+  .admin-qb-question-card.is-dragging,
+  .admin-qb-option-row.is-dragging {
+    border-color: var(--pzk-blue);
+    background: #edf5ff;
+    box-shadow: 0 10px 26px rgba(15, 45, 75, 0.12);
+    opacity: 0.66;
+    transform: scale(0.985);
   }
 
   .admin-qb-card-main {
@@ -1773,6 +1787,12 @@
     grid-template-columns: repeat(2, 4px);
     gap: 3px;
     justify-content: center;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .admin-drag-handle:active {
+    cursor: grabbing;
   }
 
   .admin-drag-handle > span {
@@ -1794,6 +1814,17 @@
     background: #fbfdff;
     padding: 17px;
     text-align: center;
+  }
+
+  .admin-qb-dropzone.is-ready {
+    border-color: rgba(11, 95, 181, 0.44);
+    background: #f1f7ff;
+    color: var(--pzk-blue);
+  }
+
+  .admin-qb-dropzone.compact {
+    margin-top: 10px;
+    padding: 11px;
   }
 
   .admin-qb-section-editor {
@@ -1876,18 +1907,18 @@
   .admin-qb-inspector-grid {
     display: grid;
     min-height: 0;
-    grid-template-columns: minmax(360px, 1fr) minmax(260px, 0.56fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-qb-inspector-main,
   .admin-qb-inspector-side {
     align-content: start;
-    overflow: auto;
+    overflow: visible;
     padding: 22px;
   }
 
   .admin-qb-inspector-side {
-    border-left: 1px solid var(--pzk-line);
+    border-top: 1px solid var(--pzk-line);
     background: #fbfcfe;
   }
 
@@ -1896,6 +1927,23 @@
     min-width: 0;
     grid-template-columns: minmax(160px, 0.46fr) minmax(0, 1fr);
     gap: 12px;
+  }
+
+  .admin-qb-select {
+    min-height: 36px;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--pzk-line);
+    border-radius: 8px;
+    background: #f7f9fc;
+    color: var(--pzk-body);
+    padding: 0 34px 0 12px;
+    font: inherit;
+  }
+
+  .admin-qb-select:disabled {
+    cursor: not-allowed;
+    opacity: 0.78;
   }
 
   .admin-qb-question-editor textarea[data-slot="textarea"] {
