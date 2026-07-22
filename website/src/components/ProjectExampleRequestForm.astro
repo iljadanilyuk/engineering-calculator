@@ -414,75 +414,109 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
 <style is:global>
   .example-request-form {
     display: grid;
-    gap: 16px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #ffffff;
-    padding: 20px;
+    gap: 18px;
+    border: 1px solid rgba(183, 206, 227, 0.9);
+    border-radius: 12px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 254, 0.98)),
+      #ffffff;
+    box-shadow: 0 20px 58px rgba(16, 32, 51, 0.08);
+    padding: clamp(18px, 3vw, 28px);
   }
 
   .example-form-copy {
     display: grid;
-    gap: 4px;
+    gap: 6px;
   }
 
   .example-form-copy strong {
     color: var(--ink);
     font-family: var(--font-heading);
-    font-size: 18px;
+    font-size: clamp(18px, 2vw, 22px);
+    line-height: 1.18;
   }
 
   .example-form-copy span,
   .form-status {
-    color: var(--muted);
-    font-size: 13px;
-    line-height: 1.55;
+    color: var(--body, #536273);
+    font-size: 14px;
+    line-height: 1.6;
   }
 
   .example-hidden-choices {
     display: none;
   }
 
+  .proposal-success[hidden],
+  .field-error[hidden] {
+    display: none;
+  }
+
   .example-fields,
   .proposal-success {
     display: grid;
-    gap: 10px;
+    gap: 12px;
   }
 
   .example-input-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 14px;
   }
 
   .example-input-grid label {
     display: grid;
-    gap: 6px;
+    gap: 8px;
     color: var(--ink);
     font-size: 12px;
     font-weight: 800;
+    line-height: 1.2;
   }
 
   .example-input-grid input {
     width: 100%;
-    min-height: 44px;
-    border: 1px solid var(--line);
+    min-height: 52px;
+    border: 1px solid rgba(183, 206, 227, 0.95);
     border-radius: 8px;
-    padding: 0 12px;
+    background: #ffffff;
+    padding: 0 14px;
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+
+  .example-input-grid input::placeholder {
+    color: #7f8f9f;
+  }
+
+  .example-input-grid input:focus {
+    border-color: rgba(11, 95, 181, 0.72);
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(11, 95, 181, 0.1);
+    outline: 0;
   }
 
   .example-input-grid input[aria-invalid="true"] {
     border-color: #c54040;
+    box-shadow: 0 0 0 4px rgba(197, 64, 64, 0.09);
   }
 
   .consent-line {
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 10px;
     align-items: start;
     color: var(--body);
-    font-size: 12px;
-    line-height: 1.45;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .consent-line input {
+    width: 16px;
+    height: 16px;
+    margin: 2px 0 0;
+    accent-color: var(--blue, #0b5fb5);
   }
 
   .field-error {
@@ -493,29 +527,83 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
   }
 
   .form-status {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
     margin: 0;
+    border: 1px solid rgba(183, 206, 227, 0.7);
+    border-radius: 8px;
+    background: #f8fbfe;
+    padding: 10px 12px;
   }
 
   .form-status.is-ready {
+    border-color: #b9decf;
+    background: #f3fbf7;
     color: #17875d;
     font-weight: 800;
   }
 
   .form-status.is-error {
+    border-color: rgba(197, 64, 64, 0.28);
+    background: #fff6f6;
     color: #c54040;
     font-weight: 800;
   }
 
   .form-status.is-loading {
+    border-color: rgba(11, 95, 181, 0.28);
+    background: #f0f7ff;
     color: var(--blue);
     font-weight: 800;
+  }
+
+  .example-request-form .primary-btn {
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--blue, #0b5fb5);
+    border-radius: 8px;
+    background: var(--blue, #0b5fb5);
+    box-shadow: 0 12px 28px rgba(11, 95, 181, 0.18);
+    color: #ffffff;
+    padding: 0 18px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 850;
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+  }
+
+  .example-request-form .primary-btn:hover:not(:disabled) {
+    background: #074f9a;
+    box-shadow: 0 16px 34px rgba(11, 95, 181, 0.24);
+    transform: translateY(-1px);
+  }
+
+  .example-request-form .primary-btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .example-request-form .primary-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+  }
+
+  .example-request-form .primary-btn:focus-visible,
+  .proposal-link:focus-visible {
+    outline: 3px solid rgba(11, 95, 181, 0.35);
+    outline-offset: 2px;
   }
 
   .proposal-success {
     border: 1px solid #b9decf;
     border-radius: 8px;
     background: #f3fbf7;
-    padding: 14px;
+    padding: 16px;
     color: var(--body);
     font-size: 13px;
   }
@@ -550,11 +638,23 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     font-size: 13px;
     font-weight: 800;
     text-decoration: none;
+    transition: border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  }
+
+  .proposal-link:hover {
+    border-color: var(--blue, #0b5fb5);
+    color: #074f9a;
+    transform: translateY(-1px);
   }
 
   @media (max-width: 760px) {
     .example-input-grid {
       grid-template-columns: 1fr;
+    }
+
+    .example-request-form {
+      border-radius: 10px;
+      padding: 18px;
     }
   }
 </style>

@@ -1,11 +1,15 @@
 ---
 import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import PublicFontLinks from '../../components/PublicFontLinks.astro'
+import SiteFooter from '../../components/SiteFooter.astro'
 import SiteHeader from '../../components/SiteHeader.astro'
 import { loadProjectCases } from '../../lib/project-cases'
 import { createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
 
 const projectCases = await loadProjectCases()
+const projectFilterTags = uniqueSortedTags(
+  projectCases.flatMap((projectCase) => projectFilterTokens(projectCase)),
+)
 const pageMeta = createPageMeta({
   siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
   path: '/projects/',
@@ -34,6 +38,14 @@ const structuredData = {
       name: projectCase.title,
     })),
   },
+}
+
+function projectFilterTokens(projectCase: (typeof projectCases)[number]) {
+  return [projectCase.objectType, ...projectCase.engineeringSections].filter((tag) => tag.trim())
+}
+
+function uniqueSortedTags(values: readonly string[]) {
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'ru'))
 }
 ---
 
@@ -91,16 +103,32 @@ const structuredData = {
         </div>
       </section>
 
-      <section class="section" aria-labelledby="project-list-title">
+      <section class="section filterable-section" aria-labelledby="project-list-title" data-filter-region>
         <div class="shell">
           <div class="section-head">
             <p class="eyebrow">Каталог</p>
             <h2 id="project-list-title">Обезличенные примеры проектов</h2>
+            <p>Выберите тип объекта или инженерный раздел, чтобы быстрее найти близкий пример.</p>
           </div>
+
+          <div class="filter-panel" aria-label="Фильтр проектов по тегам">
+            <div class="filter-chips" data-filter-buttons>
+              <button class="filter-chip is-active" type="button" data-filter-value="" aria-pressed="true">
+                Все
+              </button>
+              {projectFilterTags.map((tag) => (
+                <button class="filter-chip" type="button" data-filter-value={tag} aria-pressed="false">
+                  {tag}
+                </button>
+              ))}
+            </div>
+            <span class="filter-count" data-filter-count>{projectCases.length} кейса</span>
+          </div>
+
           <div class="case-list">
             {
               projectCases.map((projectCase) => (
-                <article class="case-card">
+                <article class="case-card" data-filter-card data-filter-tags={projectFilterTokens(projectCase).join('|')}>
                   <a class="case-cover-link" href={`/projects/${projectCase.slug}/`} aria-label={`Открыть кейс: ${projectCase.title}`}>
                     <img src={projectCase.coverImageUrl} alt={projectCase.coverImageAlt} loading="lazy" />
                   </a>
@@ -125,6 +153,11 @@ const structuredData = {
               ))
             }
           </div>
+
+          <div class="empty-state filter-empty" data-filter-empty hidden>
+            <h3>По этому тегу пока нет проектов</h3>
+            <p>Выберите другой фильтр или вернитесь ко всем примерам.</p>
+          </div>
         </div>
       </section>
 
@@ -143,8 +176,54 @@ const structuredData = {
         </div>
       </section>
     </main>
+    <SiteFooter />
   </body>
 </html>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-filter-region]').forEach((region) => {
+    const buttons = [...region.querySelectorAll<HTMLButtonElement>('[data-filter-value]')]
+    const cards = [...region.querySelectorAll<HTMLElement>('[data-filter-card]')]
+    const empty = region.querySelector<HTMLElement>('[data-filter-empty]')
+    const count = region.querySelector<HTMLElement>('[data-filter-count]')
+
+    const applyFilter = (rawValue: string) => {
+      const activeValue = normalizeFilterValue(rawValue)
+      let visibleCount = 0
+
+      cards.forEach((card) => {
+        const tokens = (card.dataset.filterTags ?? '')
+          .split('|')
+          .map(normalizeFilterValue)
+          .filter(Boolean)
+        const visible = !activeValue || tokens.includes(activeValue)
+        card.hidden = !visible
+        if (visible) visibleCount += 1
+      })
+
+      buttons.forEach((button) => {
+        const isActive = normalizeFilterValue(button.dataset.filterValue ?? '') === activeValue
+        button.classList.toggle('is-active', isActive)
+        button.setAttribute('aria-pressed', String(isActive))
+      })
+
+      if (empty) empty.hidden = visibleCount > 0
+      if (count) {
+        count.textContent = activeValue
+          ? `Показано ${visibleCount} из ${cards.length}`
+          : `${cards.length} кейса`
+      }
+    }
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => applyFilter(button.dataset.filterValue ?? ''))
+    })
+  })
+
+  function normalizeFilterValue(value: string) {
+    return value.trim().toLocaleLowerCase('ru-RU')
+  }
+</script>
 
 <style>
   :root {
@@ -382,6 +461,59 @@ const structuredData = {
     margin-bottom: 28px;
   }
 
+  .filter-panel {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(183, 206, 227, 0.9);
+    border-radius: 8px;
+    background: #f8fbfe;
+    padding: 12px;
+  }
+
+  .filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filter-chip {
+    min-height: 38px;
+    border: 1px solid #cfe0ee;
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--body);
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  }
+
+  .filter-chip:hover {
+    border-color: rgba(11, 95, 181, 0.42);
+    color: var(--blue);
+    transform: translateY(-1px);
+  }
+
+  .filter-chip.is-active {
+    border-color: var(--blue);
+    background: var(--blue);
+    color: #ffffff;
+  }
+
+  .filter-count {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 38px;
+    text-transform: uppercase;
+  }
+
   .case-list {
     display: grid;
     gap: 22px;
@@ -395,6 +527,10 @@ const structuredData = {
     border-radius: 8px;
     background: var(--paper);
     box-shadow: 0 8px 28px rgba(16, 32, 51, 0.045);
+  }
+
+  .case-card[hidden] {
+    display: none;
   }
 
   .case-cover-link img {
@@ -486,6 +622,34 @@ const structuredData = {
     transform: translateY(1px);
   }
 
+  .empty-state {
+    display: grid;
+    gap: 8px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    background: var(--soft);
+    padding: 28px;
+  }
+
+  .empty-state p {
+    color: var(--body);
+    line-height: 1.65;
+  }
+
+  .filter-empty {
+    margin-top: 18px;
+  }
+
+  .filter-empty[hidden] {
+    display: none;
+  }
+
+  .filter-chip:focus-visible,
+  .secondary-btn:focus-visible {
+    outline: 3px solid rgba(11, 95, 181, 0.35);
+    outline-offset: 2px;
+  }
+
   @media (max-width: 860px) {
     .header {
       align-items: flex-start;
@@ -514,6 +678,15 @@ const structuredData = {
 
     .section {
       padding: 52px 0;
+    }
+
+    .filter-panel {
+      display: grid;
+      gap: 10px;
+    }
+
+    .filter-count {
+      line-height: 1.4;
     }
 
     .case-cover-link img {

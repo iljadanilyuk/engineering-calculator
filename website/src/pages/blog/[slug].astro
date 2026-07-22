@@ -1,7 +1,9 @@
 ---
 import { renderBlogContentHtml } from '@poznyak-engineering-calculator/contracts'
 
+import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import PublicFontLinks from '../../components/PublicFontLinks.astro'
+import SiteFooter from '../../components/SiteFooter.astro'
 import SiteHeader from '../../components/SiteHeader.astro'
 import {
   blogCoverImageUrl,
@@ -134,7 +136,25 @@ const structuredData = {
           </div>
         </section>
       </article>
+
+      <section class="section soft request-section" aria-labelledby="article-example-title">
+        <div class="shell narrow">
+          <div class="section-head">
+            <p class="eyebrow">Получить пример</p>
+            <h2 id="article-example-title">Получить пример инженерного проекта</h2>
+            <p>Оставьте контакт, и мы согласуем удобный способ показать доступный пример проектной документации.</p>
+          </div>
+          <ProjectExampleRequestForm
+            id="article-example-request-form"
+            title="Получить пример проекта"
+            description="Оставьте имя и контакт: менеджер пришлет доступный пример проекта."
+            source={`blog_post:${post.slug}`}
+            submitLabel="Получить пример"
+          />
+        </div>
+      </section>
     </main>
+    <SiteFooter />
   </body>
 </html>
 
@@ -282,6 +302,10 @@ const structuredData = {
     margin: 0 auto;
   }
 
+  .shell.narrow {
+    width: min(780px, calc(100% - 32px));
+  }
+
   .article-hero {
     border-bottom: 1px solid var(--line);
     background: linear-gradient(180deg, #f7fafc 0%, #ffffff 100%);
@@ -370,12 +394,28 @@ const structuredData = {
 
   .hero-media img {
     width: 100%;
-    min-height: 320px;
+    aspect-ratio: 1 / 1;
     object-fit: cover;
   }
 
   .section {
     padding: clamp(42px, 7vw, 76px) 0;
+  }
+
+  .section.soft {
+    background: var(--soft);
+  }
+
+  .section-head {
+    display: grid;
+    max-width: 760px;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .section-head h2 {
+    font-size: clamp(28px, 4vw, 42px);
+    line-height: 1.05;
   }
 
   .article-layout {
@@ -546,8 +586,7 @@ const structuredData = {
     }
 
     .hero-media img {
-      min-height: 220px;
-      max-height: 320px;
+      aspect-ratio: 1 / 1;
     }
   }
 </style>

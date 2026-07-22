@@ -24,6 +24,22 @@ export type BlogContentBlock =
   | { kind: 'paragraph'; text: string }
   | { kind: 'list'; items: string[] }
 
+const generatedBlogCoverDefault = '/blog-covers/heating-project-prep.jpg'
+const generatedBlogCoverBySlug: Record<string, string> = {
+  'kak-podgotovitsya-k-proektu-otopleniya': '/blog-covers/heating-project-prep.jpg',
+  'zachem-nuzhna-spetsifikatsiya-v-proekte': '/blog-covers/engineering-specification.jpg',
+}
+const generatedBlogCoverTopics = [
+  {
+    pattern: /спецификац|закупк|ведомост|материал/i,
+    url: '/blog-covers/engineering-specification.jpg',
+  },
+  {
+    pattern: /отоплен|тепл|котельн|радиатор|вентиляц|частн/i,
+    url: '/blog-covers/heating-project-prep.jpg',
+  },
+] as const
+
 const curatedBlogPosts = [
   {
     id: '00000000-0000-7000-8000-000000000b01',
@@ -41,7 +57,7 @@ const curatedBlogPosts = [
       '## Почему это важно',
       'Инженерный проект связывает теплопотери, оборудование, трассы и ведомость материалов. Если часть вводных меняется после выпуска документации, смета и монтажные решения тоже начинают расходиться.',
     ].join('\n\n'),
-    coverImageUrl: '/landing-v4/project-preview-plan-08.jpg',
+    coverImageUrl: '/blog-covers/heating-project-prep.jpg',
     category: 'Подготовка',
     tags: ['Отопление', 'Частный дом'],
     seoTitle: 'Как подготовиться к проекту отопления | ИП Позняк',
@@ -66,7 +82,7 @@ const curatedBlogPosts = [
       '## Как читать документ',
       'Смотрите не только итоговую сумму. Важно проверить назначение оборудования, количество, диаметр, тип арматуры и соответствие проектным листам.',
     ].join('\n\n'),
-    coverImageUrl: '/landing-v4/project-preview-spec-10.jpg',
+    coverImageUrl: '/blog-covers/engineering-specification.jpg',
     category: 'Документация',
     tags: ['Спецификация', 'Закупка'],
     seoTitle: 'Спецификация инженерного проекта | ИП Позняк',
@@ -195,7 +211,7 @@ async function loadManagedBlogPostDetails(): Promise<PublicBlogPostRecord[] | nu
 function blogPostSummaryFromRecord(record: PublicBlogPostSummary): BlogPostSummary {
   return {
     ...record,
-    coverImageAlt: `${record.title}: иллюстрация инженерной статьи`,
+    coverImageAlt: `${record.title}: сгенерированная тематическая иллюстрация`,
     seoTitleResolved: record.seoTitle ?? `${record.title} | Блог ИП Позняк`,
     seoDescriptionResolved: truncateSeoDescription(record.seoDescription ?? record.excerpt),
   }
@@ -204,7 +220,7 @@ function blogPostSummaryFromRecord(record: PublicBlogPostSummary): BlogPostSumma
 function blogPostFromRecord(record: PublicBlogPostRecord): BlogPost {
   return {
     ...record,
-    coverImageAlt: `${record.title}: иллюстрация инженерной статьи`,
+    coverImageAlt: `${record.title}: сгенерированная тематическая иллюстрация`,
     seoTitleResolved: record.seoTitle ?? `${record.title} | Блог ИП Позняк`,
     seoDescriptionResolved: truncateSeoDescription(record.seoDescription ?? record.excerpt),
   }
@@ -219,6 +235,22 @@ function apiBase() {
   return apiBaseUrl || null
 }
 
-export function blogCoverImageUrl(post: Pick<BlogPostSummary, 'coverImageUrl'>) {
-  return post.coverImageUrl ?? defaultSocialImagePath
+type BlogCoverSource = Pick<BlogPostSummary, 'coverImageUrl'> &
+  Partial<Pick<BlogPostSummary, 'category' | 'slug' | 'tags' | 'title'>>
+
+export function blogCoverImageUrl(post: BlogCoverSource) {
+  const generatedBySlug = post.slug ? generatedBlogCoverBySlug[post.slug] : undefined
+  if (generatedBySlug) return generatedBySlug
+
+  const coverImageUrl = post.coverImageUrl?.trim()
+  if (coverImageUrl && !isProjectFragmentCover(coverImageUrl)) return coverImageUrl
+
+  const topicText = `${post.title ?? ''} ${post.category ?? ''} ${(post.tags ?? []).join(' ')}`
+  const generatedByTopic = generatedBlogCoverTopics.find((topic) => topic.pattern.test(topicText))
+
+  return generatedByTopic?.url ?? generatedBlogCoverDefault ?? defaultSocialImagePath
+}
+
+function isProjectFragmentCover(value: string) {
+  return /\/landing-v4\/project-preview-/i.test(value)
 }

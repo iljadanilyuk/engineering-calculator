@@ -1,5 +1,7 @@
 ---
+import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import PublicFontLinks from '../../components/PublicFontLinks.astro'
+import SiteFooter from '../../components/SiteFooter.astro'
 import SiteHeader from '../../components/SiteHeader.astro'
 import {
   blogCoverImageUrl,
@@ -9,6 +11,9 @@ import {
 import { createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
 
 const posts = await loadBlogPosts()
+const blogFilterTags = uniqueSortedTags(
+  posts.flatMap((post) => postFilterTokens(post)),
+)
 const pageMeta = createPageMeta({
   siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
   path: '/blog/',
@@ -37,6 +42,14 @@ const structuredData = {
       name: post.title,
     })),
   },
+}
+
+function postFilterTokens(post: (typeof posts)[number]) {
+  return [post.category, ...post.tags].filter((tag): tag is string => Boolean(tag?.trim()))
+}
+
+function uniqueSortedTags(values: readonly string[]) {
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'ru'))
 }
 ---
 
@@ -94,11 +107,12 @@ const structuredData = {
         </div>
       </section>
 
-      <section class="section" aria-labelledby="blog-list-title">
+      <section class="section filterable-section" aria-labelledby="blog-list-title" data-filter-region>
         <div class="shell">
           <div class="section-head">
             <p class="eyebrow">Материалы</p>
             <h2 id="blog-list-title">Статьи и обновления</h2>
+            <p>Выберите тему, чтобы оставить только материалы по нужному разделу инженерии.</p>
           </div>
 
           {
@@ -108,36 +122,120 @@ const structuredData = {
                 <p>Когда в админке появятся опубликованные статьи, они будут доступны в этом разделе после следующей сборки сайта.</p>
               </div>
             ) : (
-              <div class="post-list">
-                {posts.map((post) => (
-                  <article class="post-card">
-                    <a class="post-cover-link" href={`/blog/${post.slug}/`} aria-label={`Открыть статью: ${post.title}`}>
-                      <img src={blogCoverImageUrl(post)} alt={post.coverImageAlt} loading="lazy" />
-                    </a>
-                    <div class="post-card-body">
-                      <div class="post-meta">
-                        <span>{formatBlogDate(post.publishedAt)}</span>
-                        {post.category && <span>{post.category}</span>}
+              <>
+                <div class="filter-panel" aria-label="Фильтр статей по темам">
+                  <div class="filter-chips" data-filter-buttons>
+                    <button class="filter-chip is-active" type="button" data-filter-value="" aria-pressed="true">
+                      Все
+                    </button>
+                    {blogFilterTags.map((tag) => (
+                      <button class="filter-chip" type="button" data-filter-value={tag} aria-pressed="false">
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <span class="filter-count" data-filter-count>{posts.length} материалов</span>
+                </div>
+
+                <div class="post-list">
+                  {posts.map((post) => (
+                    <article class="post-card" data-filter-card data-filter-tags={postFilterTokens(post).join('|')}>
+                      <a class="post-cover-link" href={`/blog/${post.slug}/`} aria-label={`Открыть статью: ${post.title}`}>
+                        <img src={blogCoverImageUrl(post)} alt={post.coverImageAlt} loading="lazy" />
+                      </a>
+                      <div class="post-card-body">
+                        <div class="post-meta">
+                          <span>{formatBlogDate(post.publishedAt)}</span>
+                          {post.category && <span>{post.category}</span>}
+                        </div>
+                        <h3>
+                          <a href={`/blog/${post.slug}/`}>{post.title}</a>
+                        </h3>
+                        <p>{post.excerpt}</p>
+                        <div class="pill-row" aria-label="Темы статьи">
+                          {post.tags.map((tag) => <span>{tag}</span>)}
+                        </div>
+                        <a class="secondary-btn" href={`/blog/${post.slug}/`}>Читать статью</a>
                       </div>
-                      <h3>
-                        <a href={`/blog/${post.slug}/`}>{post.title}</a>
-                      </h3>
-                      <p>{post.excerpt}</p>
-                      <div class="pill-row" aria-label="Темы статьи">
-                        {post.tags.map((tag) => <span>{tag}</span>)}
-                      </div>
-                      <a class="secondary-btn" href={`/blog/${post.slug}/`}>Читать статью</a>
-                    </div>
-                  </article>
-                ))}
-              </div>
+                    </article>
+                  ))}
+                </div>
+
+                <div class="empty-state filter-empty" data-filter-empty hidden>
+                  <h3>По этой теме пока нет материалов</h3>
+                  <p>Выберите другой тег или вернитесь ко всем публикациям.</p>
+                </div>
+              </>
             )
           }
         </div>
       </section>
+
+      <section class="section soft request-section" aria-labelledby="blog-example-title">
+        <div class="shell narrow">
+          <div class="section-head">
+            <p class="eyebrow">Получить пример</p>
+            <h2 id="blog-example-title">Получить пример инженерного проекта</h2>
+            <p>Оставьте контакт, и мы согласуем удобный способ показать доступный пример проектной документации.</p>
+          </div>
+          <ProjectExampleRequestForm
+            id="blog-example-request-form"
+            title="Получить пример проекта"
+            description="Оставьте имя и контакт: менеджер пришлет доступный пример проекта."
+            source="blog_listing"
+            submitLabel="Получить пример"
+          />
+        </div>
+      </section>
     </main>
+    <SiteFooter />
   </body>
 </html>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-filter-region]').forEach((region) => {
+    const buttons = [...region.querySelectorAll<HTMLButtonElement>('[data-filter-value]')]
+    const cards = [...region.querySelectorAll<HTMLElement>('[data-filter-card]')]
+    const empty = region.querySelector<HTMLElement>('[data-filter-empty]')
+    const count = region.querySelector<HTMLElement>('[data-filter-count]')
+
+    const applyFilter = (rawValue: string) => {
+      const activeValue = normalizeFilterValue(rawValue)
+      let visibleCount = 0
+
+      cards.forEach((card) => {
+        const tokens = (card.dataset.filterTags ?? '')
+          .split('|')
+          .map(normalizeFilterValue)
+          .filter(Boolean)
+        const visible = !activeValue || tokens.includes(activeValue)
+        card.hidden = !visible
+        if (visible) visibleCount += 1
+      })
+
+      buttons.forEach((button) => {
+        const isActive = normalizeFilterValue(button.dataset.filterValue ?? '') === activeValue
+        button.classList.toggle('is-active', isActive)
+        button.setAttribute('aria-pressed', String(isActive))
+      })
+
+      if (empty) empty.hidden = visibleCount > 0
+      if (count) {
+        count.textContent = activeValue
+          ? `Показано ${visibleCount} из ${cards.length}`
+          : `${cards.length} материалов`
+      }
+    }
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => applyFilter(button.dataset.filterValue ?? ''))
+    })
+  })
+
+  function normalizeFilterValue(value: string) {
+    return value.trim().toLocaleLowerCase('ru-RU')
+  }
+</script>
 
 <style>
   :root {
@@ -285,6 +383,10 @@ const structuredData = {
     margin: 0 auto;
   }
 
+  .shell.narrow {
+    width: min(780px, calc(100% - 32px));
+  }
+
   .blog-hero {
     border-bottom: 1px solid var(--line);
     background: linear-gradient(180deg, #f7fafc 0%, #ffffff 100%);
@@ -365,6 +467,10 @@ const structuredData = {
     padding: clamp(42px, 7vw, 72px) 0;
   }
 
+  .section.soft {
+    background: var(--soft);
+  }
+
   .section-head {
     display: grid;
     max-width: 760px;
@@ -377,26 +483,96 @@ const structuredData = {
     line-height: 1.05;
   }
 
+  .filter-panel {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(183, 206, 227, 0.9);
+    border-radius: 8px;
+    background: #f8fbfe;
+    padding: 12px;
+  }
+
+  .filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filter-chip {
+    min-height: 38px;
+    border: 1px solid #cfe0ee;
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--body);
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  }
+
+  .filter-chip:hover {
+    border-color: rgba(11, 95, 181, 0.42);
+    color: var(--blue);
+    transform: translateY(-1px);
+  }
+
+  .filter-chip.is-active {
+    border-color: var(--blue);
+    background: var(--blue);
+    color: #ffffff;
+  }
+
+  .filter-count {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 38px;
+    text-transform: uppercase;
+  }
+
   .post-list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 18px;
   }
 
   .post-card {
     display: grid;
-    grid-template-columns: minmax(180px, 42%) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
     overflow: hidden;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: var(--paper);
+    box-shadow: 0 8px 28px rgba(16, 32, 51, 0.045);
+  }
+
+  .post-card[hidden] {
+    display: none;
+  }
+
+  .post-cover-link {
+    display: block;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background: var(--soft);
   }
 
   .post-cover-link img {
     width: 100%;
     height: 100%;
-    min-height: 280px;
+    aspect-ratio: 1 / 1;
     object-fit: cover;
+    transition: transform 0.28s ease;
+  }
+
+  .post-card:hover .post-cover-link img {
+    transform: scale(1.025);
   }
 
   .post-card-body {
@@ -434,6 +610,7 @@ const structuredData = {
 
   .secondary-btn {
     width: fit-content;
+    align-self: end;
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 10px 14px;
@@ -457,10 +634,33 @@ const structuredData = {
     padding: 28px;
   }
 
+  .filter-empty {
+    margin-top: 18px;
+  }
+
+  .filter-empty[hidden] {
+    display: none;
+  }
+
+  .request-section .section-head {
+    margin-bottom: 20px;
+  }
+
+  .filter-chip:focus-visible,
+  .secondary-btn:focus-visible {
+    outline: 3px solid rgba(11, 95, 181, 0.35);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 980px) {
+    .post-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
   @media (max-width: 860px) {
     .header,
-    .hero-grid,
-    .post-card {
+    .hero-grid {
       grid-template-columns: minmax(0, 1fr);
     }
 
@@ -476,9 +676,13 @@ const structuredData = {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .post-cover-link img {
-      min-height: 220px;
-      max-height: 320px;
+    .filter-panel {
+      display: grid;
+      gap: 10px;
+    }
+
+    .filter-count {
+      line-height: 1.4;
     }
   }
 </style>

@@ -1,6 +1,7 @@
 ---
 import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import PublicFontLinks from '../../components/PublicFontLinks.astro'
+import SiteFooter from '../../components/SiteFooter.astro'
 import SiteHeader from '../../components/SiteHeader.astro'
 import { loadProjectCases, type ProjectCase } from '../../lib/project-cases'
 import { absoluteUrl, createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
@@ -205,6 +206,7 @@ const structuredData = {
         </section>
       </article>
     </main>
+    <SiteFooter />
   </body>
 </html>
 
