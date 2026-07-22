@@ -1,16 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
-  <defs>
-    <style>
-      .navy { fill: #0A2342; }
-      .blue { fill: #3E8EEA; }
-      .gray { fill: #7E899A; }
-      .word { font-family: Inter, Arial, Helvetica, sans-serif; font-weight: 700; letter-spacing: 0.02em; }
-      .sub { font-family: Inter, Arial, Helvetica, sans-serif; font-weight: 500; letter-spacing: 0.07em; }
-    </style>
-  </defs>
-  <g transform="translate(35,50) scale(1.1)">
-    <path class="navy" d="M100 320V110L255 0L410 112V150L255 40L145 125V320H100Z"/>
-    <path class="navy" d="M165 320V160H285V320H240V205H210V320H165Z"/>
-    <path class="blue" d="M300 165H405V200H360L410 245L360 285H405V320H300V285H345L386 245L345 200H300V165Z"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="14" fill="#102033" />
+  <path d="M15 34V14h10.2c5.1 0 8.8 3.2 8.8 8s-3.7 8-8.8 8H20" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M15 34c7-1.2 10.8-4.2 12.7-8.2" stroke="#85c2ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="13" cy="25" r="2.2" fill="#fff" stroke="#85c2ff" stroke-width="1.6" />
+  <circle cx="25.8" cy="19" r="2.2" fill="#fff" stroke="#85c2ff" stroke-width="1.6" />
 </svg>

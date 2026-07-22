@@ -2267,6 +2267,7 @@ Out of scope:
 These do not block the PZK-015 production launch, but should be resolved for polish, operations, or v2 work:
 
 - Exact brand name to show: `ИП Позняк`, another name, or a future studio/bureau name?
+- Logo, favicon, and public/admin brand-asset rollout is paused until the owner explicitly approves it; do not include logo changes in feature releases by default.
 - Exact contact phone/email/Telegram for production.
 - Configure production Telegram env when notifications or PZK-020 client delivery should be turned on.
 - Should PDF offers have an expiration period, for example 7 or 14 days?

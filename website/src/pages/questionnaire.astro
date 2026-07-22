@@ -14,7 +14,6 @@ import {
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
 import PublicFontLinks from '../components/PublicFontLinks.astro'
-import SiteIcons from '../components/SiteIcons.astro'
 import SiteHeader from '../components/SiteHeader.astro'
 
 const initialCalculation = calculateEngineeringOffer({
@@ -84,7 +83,8 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <SiteIcons />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
     <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
