@@ -2157,6 +2157,7 @@ maybeDescribe('engineering API integration', () => {
       method: 'PATCH',
       headers: jsonAuthHeaders(accessToken),
       body: JSON.stringify({
+        baseDefinitionHash: adminFallbackBody.questionnaireDefinition.definitionHash,
         edits: [
           {
             target: 'section',
@@ -2183,6 +2184,7 @@ maybeDescribe('engineering API integration', () => {
       method: 'PATCH',
       headers: jsonAuthHeaders(accessToken),
       body: JSON.stringify({
+        baseDefinitionHash: patchBody.questionnaireDefinition.definitionHash,
         edits: [
           {
             target: 'question',
@@ -2197,11 +2199,99 @@ maybeDescribe('engineering API integration', () => {
       method: 'PATCH',
       headers: jsonAuthHeaders(accessToken),
       body: JSON.stringify({
+        baseDefinitionHash: patchBody.questionnaireDefinition.definitionHash,
         edits: [
           {
             target: 'section',
             sectionId: 'missing_section',
             title: 'Missing',
+          },
+        ],
+      }),
+    })
+    const sectionIds = patchBody.questionnaireDefinition.sections.map((section: { id: string }) => section.id)
+    const objectSourceQuestionIds = patchBody.questionnaireDefinition.sections
+      .find((section: { id: string }) => section.id === 'object_source')
+      ?.questions.map((question: { id: string }) => question.id) ?? []
+    const reorderedSectionIds = [...sectionIds].reverse()
+    const reorderedObjectSourceQuestionIds = [...objectSourceQuestionIds].reverse()
+    const orderAndEnablementPatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: patchBody.questionnaireDefinition.definitionHash,
+        edits: [
+          {
+            target: 'section_order',
+            sectionIds: reorderedSectionIds,
+          },
+          {
+            target: 'question_order',
+            sectionId: 'object_source',
+            questionIds: reorderedObjectSourceQuestionIds,
+          },
+          {
+            target: 'section',
+            sectionId: 'object_source',
+            isEnabled: false,
+          },
+          {
+            target: 'section',
+            sectionId: 'object_source',
+            isEnabled: true,
+          },
+        ],
+      }),
+    })
+    const orderAndEnablementBody = await orderAndEnablementPatch.json()
+    const staleHashPatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: patchBody.questionnaireDefinition.definitionHash,
+        edits: [
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            prompt: 'Stale editor prompt',
+          },
+        ],
+      }),
+    })
+    const emptyStartPatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: orderAndEnablementBody.questionnaireDefinition.definitionHash,
+        edits: sectionIds.map((sectionId: string) => ({
+          target: 'section',
+          sectionId,
+          isEnabled: false,
+        })),
+      }),
+    })
+    const badOrderPatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: orderAndEnablementBody.questionnaireDefinition.definitionHash,
+        edits: [
+          {
+            target: 'section_order',
+            sectionIds: ['object_source'],
+          },
+        ],
+      }),
+    })
+    const missingHashPatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        edits: [
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            prompt: 'No hash prompt',
           },
         ],
       }),
@@ -2237,6 +2327,7 @@ maybeDescribe('engineering API integration', () => {
       method: 'PATCH',
       headers: jsonAuthHeaders(accessToken),
       body: JSON.stringify({
+        baseDefinitionHash: orderAndEnablementBody.questionnaireDefinition.definitionHash,
         edits: [
           {
             target: 'question',
@@ -2271,12 +2362,23 @@ maybeDescribe('engineering API integration', () => {
     })
     expect(blockedBranchPatch.status).toBe(400)
     expect(missingEdit.status).toBe(404)
+    expect(orderAndEnablementPatch.status).toBe(200)
+    expect(orderAndEnablementBody.questionnaireDefinition.sections[0].id).toBe(reorderedSectionIds[0])
+    expect(
+      orderAndEnablementBody.questionnaireDefinition.sections
+        .find((section: { id: string }) => section.id === 'object_source')?.questions[0].id,
+    ).toBe(reorderedObjectSourceQuestionIds[0])
+    expect(definitionSection(orderAndEnablementBody.questionnaireDefinition, 'object_source')?.isEnabled).toBe(true)
+    expect(staleHashPatch.status).toBe(409)
+    expect(emptyStartPatch.status).toBe(400)
+    expect(badOrderPatch.status).toBe(400)
+    expect(missingHashPatch.status).toBe(400)
     expect(publicPublished.status).toBe(200)
     expect(publicPublishedBody.questionnaireDefinition.status).toBe('published')
     expect(definitionQuestionPrompt(publicPublishedBody.questionnaireDefinition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
     expect(start.status).toBe(201)
-    expect(startBody.questionnaire.questionnaireVersion).toBe(patchBody.questionnaireDefinition.version)
-    expect(startBody.questionnaire.definitionHash).toBe(patchBody.questionnaireDefinition.definitionHash)
+    expect(startBody.questionnaire.questionnaireVersion).toBe(publicPublishedBody.questionnaireDefinition.version)
+    expect(startBody.questionnaire.definitionHash).toBe(publicPublishedBody.questionnaireDefinition.definitionHash)
     expect(definitionQuestionPrompt(startBody.questionnaire.definition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
     expect(secondPatch.status).toBe(200)
     expect(definitionQuestionPrompt((await secondPatch.json()).questionnaireDefinition, 'OBJ_DOCS')).toBe(secondPrompt)
@@ -3036,6 +3138,10 @@ function sha256Hex(value: Uint8Array) {
 
 function definitionSectionTitle(definition: QuestionnaireDefinitionRecord, sectionId: string) {
   return definition.sections.find((section) => section.id === sectionId)?.title ?? null
+}
+
+function definitionSection(definition: QuestionnaireDefinitionRecord, sectionId: string) {
+  return definition.sections.find((section) => section.id === sectionId) ?? null
 }
 
 function definitionQuestionPrompt(definition: QuestionnaireDefinitionRecord, questionId: string) {

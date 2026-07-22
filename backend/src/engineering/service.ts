@@ -12,6 +12,7 @@ import {
   exchangeRateInputSchema,
   getQuestionnaireActiveOptions,
   getQuestionnaireActiveQuestions,
+  getQuestionnairePublicDefinition,
   markQuestionnaireAnswersActivity,
   publicProjectExampleAssets,
   questionnaireDefinitionPatchRequestSchema,
@@ -267,10 +268,18 @@ export class EngineeringDataService {
     return this.activeQuestionnaireDefinition()
   }
 
+  async getPublicQuestionnaireDefinition() {
+    return publicQuestionnaireDefinitionRecord(await this.activeQuestionnaireDefinition())
+  }
+
   async updateQuestionnaireDefinition(input: QuestionnaireDefinitionPatchRequest) {
     const parsedInput = questionnaireDefinitionPatchRequestSchema.parse(input)
     const current = await this.activeQuestionnaireDefinition()
+    if (parsedInput.baseDefinitionHash !== current.definitionHash) {
+      throw new AppError(409, 'CONFLICT', 'Questionnaire definition changed. Refresh before saving.')
+    }
     const nextDefinition = applyQuestionnaireDefinitionTextEdits(current, parsedInput)
+    assertQuestionnaireDefinitionPublishable(nextDefinition)
     const setting = await this.db.appSetting.upsert({
       where: { key: questionnaireDefinitionSettingKey },
       create: {
@@ -790,7 +799,7 @@ export class EngineeringDataService {
       )
     }
 
-    const activeDefinition = await this.activeQuestionnaireDefinition()
+    const activeDefinition = publicQuestionnaireDefinitionRecord(await this.activeQuestionnaireDefinition())
     const publicToken = await this.createUniqueCalculationToken()
     const consentAcceptedAt = new Date()
     const initialAnswers = storedQuestionnaireAnswers(
@@ -2640,6 +2649,19 @@ function questionnaireDefinitionRecord(
   })
 }
 
+function publicQuestionnaireDefinitionRecord(
+  record: QuestionnaireDefinitionRecord,
+): QuestionnaireDefinitionRecord {
+  const publicDefinition = getQuestionnairePublicDefinition(questionnaireDefinitionContent(record))
+
+  return questionnaireDefinitionRecord(
+    publicDefinition,
+    record.status,
+    new Date(record.updatedAt),
+    record.publishedAt ? new Date(record.publishedAt) : null,
+  )
+}
+
 function committedQuestionnaireDefinition(): QuestionnaireDefinition {
   return questionnaireDefinitionSchema.parse(technicalQuestionnaireDefinition)
 }
@@ -2660,7 +2682,8 @@ function applyQuestionnaireDefinitionTextEdits(
     if (edit.target === 'section') {
       const section = next.sections.find((item) => item.id === edit.sectionId)
       if (!section) throw new AppError(404, 'NOT_FOUND', 'Questionnaire section not found')
-      section.title = edit.title
+      if (edit.title !== undefined) section.title = edit.title
+      if (edit.isEnabled !== undefined) section.isEnabled = edit.isEnabled
       continue
     }
 
@@ -2668,7 +2691,29 @@ function applyQuestionnaireDefinitionTextEdits(
       const question = next.sections.flatMap((section) => section.questions)
         .find((item) => item.id === edit.questionId)
       if (!question) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
-      question.prompt = edit.prompt
+      if (edit.prompt !== undefined) question.prompt = edit.prompt
+      if (edit.isEnabled !== undefined) question.isEnabled = edit.isEnabled
+      continue
+    }
+
+    if (edit.target === 'section_order') {
+      next.sections = reorderQuestionnaireItems(next.sections, edit.sectionIds, 'Questionnaire section order')
+      continue
+    }
+
+    if (edit.target === 'question_order') {
+      const section = next.sections.find((item) => item.id === edit.sectionId)
+      if (!section) throw new AppError(404, 'NOT_FOUND', 'Questionnaire section not found')
+      section.questions = reorderQuestionnaireItems(section.questions, edit.questionIds, 'Questionnaire question order')
+      continue
+    }
+
+    if (edit.target === 'option_order') {
+      const question = next.sections.flatMap((section) => section.questions)
+        .find((item) => item.id === edit.questionId)
+      if (!question) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
+      if (!question.options?.length) throw new AppError(404, 'NOT_FOUND', 'Questionnaire options not found')
+      question.options = reorderQuestionnaireItems(question.options, edit.optionIds, 'Questionnaire option order')
       continue
     }
 
@@ -2686,9 +2731,56 @@ function applyQuestionnaireDefinitionTextEdits(
         option.hint = edit.hint
       }
     }
+    if (edit.isEnabled !== undefined) option.isEnabled = edit.isEnabled
   }
 
   return questionnaireDefinitionSchema.parse(next)
+}
+
+function assertQuestionnaireDefinitionPublishable(definition: QuestionnaireDefinition) {
+  const publicDefinition = getQuestionnairePublicDefinition(definition)
+  const startingQuestions = getQuestionnaireActiveQuestions([], publicDefinition)
+
+  if (startingQuestions.length === 0) {
+    throw new AppError(
+      400,
+      'BAD_REQUEST',
+      'Questionnaire must keep at least one enabled starting question',
+    )
+  }
+
+  for (const section of definition.sections.filter((item) => item.isEnabled !== false)) {
+    for (const question of section.questions.filter((item) => item.isEnabled !== false && !item.isLegacy)) {
+      if ((question.options?.length ?? 0) > 0 && !question.options?.some((option) => option.isEnabled !== false)) {
+        throw new AppError(
+          400,
+          'BAD_REQUEST',
+          'Enabled questionnaire option question must keep at least one enabled option',
+        )
+      }
+    }
+  }
+}
+
+function reorderQuestionnaireItems<T extends { id: string }>(
+  items: T[],
+  orderedIds: string[],
+  label: string,
+): T[] {
+  const itemById = new Map(items.map((item) => [item.id, item]))
+  const uniqueIds = new Set(orderedIds)
+
+  if (uniqueIds.size !== orderedIds.length || orderedIds.length !== items.length) {
+    throw new AppError(400, 'BAD_REQUEST', `${label} must contain every existing id exactly once`)
+  }
+
+  const reordered = orderedIds.map((id) => itemById.get(id))
+
+  if (reordered.some((item) => !item)) {
+    throw new AppError(400, 'BAD_REQUEST', `${label} contains an unknown id`)
+  }
+
+  return reordered as T[]
 }
 
 function questionnaireDefinitionContent(record: QuestionnaireDefinitionRecord): QuestionnaireDefinition {

@@ -556,6 +556,10 @@ const updateQuestionnaireDefinitionRoute = createRoute({
       content: errorResponseContent,
       description: 'Questionnaire edit target not found',
     },
+    409: {
+      content: errorResponseContent,
+      description: 'Questionnaire definition changed before save',
+    },
   },
 })
 
@@ -1057,7 +1061,7 @@ export function createEngineeringRoutes() {
   routes.openapi(publicQuestionnaireDefinitionRoute, async (c) => {
     c.header('Cache-Control', 'public, max-age=0, must-revalidate')
     const engineering = c.get('engineeringDataService')
-    return c.json({ questionnaireDefinition: await engineering.getQuestionnaireDefinition() }, 200)
+    return c.json({ questionnaireDefinition: await engineering.getPublicQuestionnaireDefinition() }, 200)
   })
 
   routes.openapi(publicProjectExamplesRoute, async (c) => {

@@ -59,6 +59,7 @@ test('admin V2 shell visual smoke has stable viewport overflow behavior', async 
     await smokePage(page, `/app/leads/${lead.id}`, lead.clientName, `${viewport.name}-record`)
     await smokePage(page, '/app/services', 'Услуги и цены', `${viewport.name}-services`)
     await smokePage(page, '/app/blog', 'Блог и публикации', `${viewport.name}-blog`)
+    await smokeQuestionnaireBuilder(page, `${viewport.name}-questionnaire`)
 
     if (viewport.width < 900) {
       await page.goto('/app')
@@ -75,6 +76,56 @@ async function smokePage(page: Page, path: string, heading: string, screenshotNa
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
   await expectNoHorizontalOverflow(page)
   await page.screenshot({ path: `e2e/.artifacts/admin-v2-${screenshotName}.png`, fullPage: true })
+}
+
+async function smokeQuestionnaireBuilder(page: Page, screenshotName: string) {
+  await page.goto('/app/questionnaire')
+  await expect(page.getByLabel('Конструктор опросника')).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Структура' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('switch', { name: /Отключить вопрос|Включить вопрос/ }).first()).toBeVisible()
+
+  if (screenshotName === 'desktop-1440-questionnaire') {
+    await exerciseQuestionnaireControls(page)
+  }
+
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: `e2e/.artifacts/admin-v2-${screenshotName}.png`, fullPage: true })
+}
+
+async function exerciseQuestionnaireControls(page: Page) {
+  const disableSection = page.getByRole('switch', { name: /Отключить раздел/ }).first()
+  await disableSection.click()
+  const enableSection = page.getByRole('switch', { name: /Включить раздел/ }).first()
+  await expect(enableSection).toBeVisible()
+  await enableSection.click()
+  await expect(page.getByRole('switch', { name: /Отключить раздел/ }).first()).toBeVisible()
+
+  const disableQuestion = page.getByRole('switch', { name: 'Отключить вопрос client_email' }).first()
+  await disableQuestion.click()
+  const enableQuestion = page.getByRole('switch', { name: 'Включить вопрос client_email' }).first()
+  await expect(enableQuestion).toBeVisible()
+  await enableQuestion.click()
+  await expect(page.getByRole('switch', { name: 'Отключить вопрос client_email' }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Опустить вопрос client_email' }).click()
+  await expect(page.getByRole('button', { name: 'Поднять вопрос client_email' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Поднять вопрос client_email' }).click()
+  await expect(page.getByRole('button', { name: 'Опустить вопрос client_email' })).toBeEnabled()
+
+  await page.getByRole('button', { name: /^2\. Дом и исходные материалы/ }).click()
+  await page.getByLabel(/Вопросы раздела/).getByRole('button', { name: /материалы/i }).first().click()
+
+  const disableOption = page.getByRole('switch', { name: 'Отключить вариант PARTIAL' }).first()
+  await disableOption.click()
+  const enableOption = page.getByRole('switch', { name: 'Включить вариант PARTIAL' }).first()
+  await expect(enableOption).toBeVisible()
+  await enableOption.click()
+  await expect(page.getByRole('switch', { name: 'Отключить вариант PARTIAL' }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Опустить вариант FULL' }).click()
+  await expect(page.getByRole('button', { name: 'Поднять вариант FULL' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Поднять вариант FULL' }).click()
+  await expect(page.getByRole('button', { name: 'Опустить вариант FULL' })).toBeEnabled()
 }
 
 async function expectNoHorizontalOverflow(page: Page) {

@@ -524,6 +524,7 @@ test('ApiClient sends authenticated questionnaire definition requests', async ()
 
   const loaded = await client.getQuestionnaireDefinition()
   const updated = await client.updateQuestionnaireDefinition({
+    baseDefinitionHash: loaded.questionnaireDefinition.definitionHash,
     edits: [
       {
         target: 'question',
@@ -541,6 +542,7 @@ test('ApiClient sends authenticated questionnaire definition requests', async ()
   ])
   expect(calls.every((call) => call.authorization === 'Bearer admin-access-token')).toBe(true)
   expect(calls[1]?.body).toEqual({
+    baseDefinitionHash: loaded.questionnaireDefinition.definitionHash,
     edits: [
       {
         target: 'question',

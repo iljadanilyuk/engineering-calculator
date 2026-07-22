@@ -2005,6 +2005,9 @@ Completion notes:
 - Internal Telegram operational notifications now cover quick КП leads, questionnaire start, and questionnaire completion once. They include concise manager-facing facts and admin lead links, do not include raw answers or public/bind/bot tokens, and record disabled/sent/failed status without blocking lead/questionnaire/proposal persistence.
 - Admin V2 now exposes `/app/questionnaire` and enables `Конструктор опросника`. Lead detail now shows questionnaire progress, skipped/missing questions, hidden-branch inactive answers, snapshot metadata, copy-resume-link action only in detail, and Telegram delivery/internal notification statuses.
 - Quick КП HTML V2 generation and detail-page `Поделиться/Сохранить PDF` actions remain intact; Telegram delivery stays optional with web-link fallback.
+- 2026-07-22 follow-up: rebuilt `/app/questionnaire` as a three-pane constructor matching the provided prototype: section list, question list, and right-side inspector. Backend-backed safe controls now cover section/question/option enablement and order changes while still blocking ID, option ID, and branching edits without a migration.
+- 2026-07-22 follow-up: public questionnaire definitions and new session snapshots now use a public-effective definition that excludes disabled/legacy sections, questions, and options. Disabled option answers are marked inactive and cannot drive branch visibility/progress.
+- 2026-07-22 follow-up: admin questionnaire PATCH now requires `baseDefinitionHash`; stale direct saves return `409`, and impossible all-disabled definitions are rejected before publication.
 
 Verification target:
 
@@ -2033,12 +2036,24 @@ Verification notes:
 - 2026-07-21 `bun run build:webapp` - passed; Vite reported existing large chunk-size warnings only.
 - 2026-07-21 browser smoke - passed for `/app/questionnaire` desktop/mobile, public `/questionnaire/` published wording, same-device resume, duplicate-phone no-token-leak response, and backend-down static fallback. Smoke used Node + system Chrome because Bun + Playwright launch hung in this Windows environment; `agent-browser` CLI was unavailable.
 - 2026-07-21 `git diff --check` - passed with Windows LF/CRLF warnings only.
+- 2026-07-22 follow-up `bun run typecheck` - passed across backend, contracts, webapp, and website.
+- 2026-07-22 follow-up `bun run test:contracts` - passed, 36 tests / 910 expects.
+- 2026-07-22 follow-up `bun run test:backend:unit` - passed, 41 tests / 178 expects.
+- 2026-07-22 follow-up `bun run test:backend:integration` - passed sequentially, 43 tests / 655 expects. A prior parallel run with Playwright was discarded because the e2e teardown stopped the shared Docker test DB during integration.
+- 2026-07-22 follow-up `bun run test:webapp` - passed, 46 tests / 135 expects.
+- 2026-07-22 follow-up `bun run build:website` - passed; existing environment warning about `NODE_TLS_REJECT_UNAUTHORIZED=0` remained outside this task.
+- 2026-07-22 follow-up `bun run build:webapp` - passed; existing Vite large chunk-size warning remained.
+- 2026-07-22 follow-up browser smoke `bun run --cwd webapp e2e -- e2e/specs/admin-v2-visual.spec.ts` - passed. The smoke covers `/app/questionnaire` desktop/tablet/mobile no-overflow and backend-backed section, question, and option enable/reorder controls.
+- 2026-07-22 follow-up `git diff --check` - passed with Windows LF/CRLF warnings only.
 
 Review log:
 
 - 2026-07-21 pre-task reviewer Kant, `gpt-5.5 xhigh`: highlighted Boole criteria for text-only MVP, stable IDs/branching, immutable definition snapshots, no phone-only recovery, and completion notification once. Recommendations incorporated.
 - 2026-07-21 post-task reviewer Newton, `gpt-5.5 xhigh`: 9.2/10; blocker found in internal Telegram quick-КП notification because it still included a tokenized public proposal/PDF link. Fixed by removing public proposal URLs from internal operational notifications and adding unit/integration assertions that internal Telegram text does not contain `/api/public/proposals/` or proposal public tokens.
 - 2026-07-21 post-fix reviewer Herschel, `gpt-5.5 xhigh`: 9.6/10; no remaining blocking findings, completion approved. Non-blocking future note: queue operational Telegram sends if bounded inline latency becomes a product issue.
+- 2026-07-22 follow-up reviewer Poincare, `gpt-5.5 xhigh`: 6/10; required disabled option answers not to drive branches, stale-save protection, and publishability guards. Fixes incorporated.
+- 2026-07-22 follow-up reviewer Kant, `gpt-5.5 xhigh`: 8/10; required public legacy-section filtering, mandatory hash precondition, and more UI e2e coverage for section/option controls. Fixes incorporated.
+- 2026-07-22 final follow-up reviewer Mendel, `gpt-5.5 xhigh`: 9.5/10; no remaining blockers, gate cleared.
 
 ### PZK-024 - Public Documentation Screenshot Lightbox
 

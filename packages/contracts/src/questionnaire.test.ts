@@ -5,6 +5,7 @@ import {
   calculateQuestionnaireProgress,
   getQuestionnaireActiveOptions,
   getQuestionnaireActiveQuestions,
+  getQuestionnairePublicDefinition,
   markQuestionnaireAnswersActivity,
   questionnaireAnswersPatchRequestSchema,
   questionnaireDefinitionPatchRequestSchema,
@@ -13,6 +14,7 @@ import {
   technicalQuestionnaireDefinition,
   technicalQuestionnaireQuestionIds,
   technicalQuestionnaireQuestions,
+  type QuestionnaireDefinition,
   type QuestionnaireStoredAnswer,
 } from './questionnaire'
 
@@ -51,7 +53,7 @@ describe('technical questionnaire contracts', () => {
     }
   })
 
-  test('validates published definition records and allows only text edits', () => {
+  test('validates published definition records and allows safe text, ordering, and enablement edits', () => {
     const record = questionnaireDefinitionRecordSchema.parse({
       ...technicalQuestionnaireDefinition,
       status: 'static_fallback',
@@ -60,16 +62,19 @@ describe('technical questionnaire contracts', () => {
       updatedAt: '2026-07-21T00:00:00.000Z',
     })
     const edit = questionnaireDefinitionPatchRequestSchema.parse({
+      baseDefinitionHash: record.definitionHash,
       edits: [
         {
           target: 'section',
           sectionId: record.sections[0].id,
           title: 'Обновленное название раздела',
+          isEnabled: true,
         },
         {
           target: 'question',
           questionId: 'OBJ_DOCS',
           prompt: 'Какие материалы по дому уже есть?',
+          isEnabled: true,
         },
         {
           target: 'option',
@@ -77,14 +82,30 @@ describe('technical questionnaire contracts', () => {
           optionId: 'PARTIAL',
           label: 'Есть часть материалов',
           hint: null,
+          isEnabled: false,
+        },
+        {
+          target: 'section_order',
+          sectionIds: record.sections.map((section) => section.id),
+        },
+        {
+          target: 'question_order',
+          sectionId: record.sections[0].id,
+          questionIds: record.sections[0].questions.map((question) => question.id),
+        },
+        {
+          target: 'option_order',
+          questionId: 'OBJ_DOCS',
+          optionIds: questionById.get('OBJ_DOCS')?.options?.map((option) => option.id) ?? [],
         },
       ],
     })
 
     expect(record.status).toBe('static_fallback')
-    expect(edit.edits).toHaveLength(3)
+    expect(edit.edits).toHaveLength(6)
     expect(() =>
       questionnaireDefinitionPatchRequestSchema.parse({
+        baseDefinitionHash: record.definitionHash,
         edits: [
           {
             target: 'question',
@@ -97,6 +118,7 @@ describe('technical questionnaire contracts', () => {
     ).toThrow()
     expect(() =>
       questionnaireDefinitionPatchRequestSchema.parse({
+        baseDefinitionHash: record.definitionHash,
         edits: [
           {
             target: 'option',
@@ -108,6 +130,76 @@ describe('technical questionnaire contracts', () => {
         ],
       }),
     ).toThrow()
+  })
+
+  test('removes disabled sections, questions, and options from active public flow', () => {
+    const sectionDisabled: QuestionnaireDefinition = {
+      ...technicalQuestionnaireDefinition,
+      sections: technicalQuestionnaireDefinition.sections.map((section) =>
+        section.id === 'object_source' ? { ...section, isEnabled: false } : section,
+      ),
+    }
+    const questionDisabled: QuestionnaireDefinition = {
+      ...technicalQuestionnaireDefinition,
+      sections: technicalQuestionnaireDefinition.sections.map((section) => ({
+        ...section,
+        questions: section.questions.map((question) =>
+          question.id === 'OBJ_DOCS' ? { ...question, isEnabled: false } : question,
+        ),
+      })),
+    }
+    const optionDisabled: QuestionnaireDefinition = {
+      ...technicalQuestionnaireDefinition,
+      sections: technicalQuestionnaireDefinition.sections.map((section) => ({
+        ...section,
+        questions: section.questions.map((question) =>
+          question.id === 'OBJ_DOCS'
+            ? {
+                ...question,
+                options: question.options?.map((option) =>
+                  option.id === 'PARTIAL' ? { ...option, isEnabled: false } : option,
+                ),
+              }
+            : question,
+        ),
+      })),
+    }
+    const legacySection: QuestionnaireDefinition = {
+      ...technicalQuestionnaireDefinition,
+      sections: technicalQuestionnaireDefinition.sections.map((section, index) =>
+        index === 0 ? { ...section, isLegacy: true } : section,
+      ),
+    }
+
+    expect(getQuestionnaireActiveQuestions([], sectionDisabled).map((question) => question.id)).not.toContain('OBJ_DOCS')
+    expect(getQuestionnaireActiveQuestions([], questionDisabled).map((question) => question.id)).not.toContain('OBJ_DOCS')
+    expect(getQuestionnaireActiveOptions(questionById.get('OBJ_DOCS')!, [], optionDisabled).map((option) => option.id)).not.toContain('PARTIAL')
+    expect(getQuestionnairePublicDefinition(legacySection).sections.map((section) => section.id)).not.toContain(
+      technicalQuestionnaireDefinition.sections[0].id,
+    )
+
+    const disabledOptionAnswer = [
+      {
+        questionId: 'OBJ_DOCS',
+        kind: 'option' as const,
+        optionId: 'PARTIAL',
+        updatedAt: '2026-07-21T08:00:00.000Z',
+        isActive: true,
+      },
+    ]
+    const activeQuestionIds = getQuestionnaireActiveQuestions(disabledOptionAnswer, optionDisabled)
+      .map((question) => question.id)
+    const markedAnswers = markQuestionnaireAnswersActivity(disabledOptionAnswer, optionDisabled)
+    const progress = calculateQuestionnaireProgress(markedAnswers, '2026-07-21T08:00:00.000Z', optionDisabled)
+    const publicDefinition = getQuestionnairePublicDefinition(optionDisabled)
+    const publicObjectDocs = publicDefinition.sections
+      .flatMap((section) => section.questions)
+      .find((question) => question.id === 'OBJ_DOCS')
+
+    expect(activeQuestionIds).not.toContain('OBJ_WALL_MATERIAL')
+    expect(markedAnswers.find((answer) => answer.questionId === 'OBJ_DOCS')?.isActive).toBe(false)
+    expect(progress.answeredCount).toBe(0)
+    expect(publicObjectDocs?.options?.map((option) => option.id)).not.toContain('PARTIAL')
   })
 
   test('publishes the updated heating envelope branches while keeping legacy ids hidden', () => {
