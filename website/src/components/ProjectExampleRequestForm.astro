@@ -12,11 +12,11 @@ type Props = {
 
 const {
   id = 'example-request-form',
-  title = 'Получить примеры проектов',
-  description = 'После контакта здесь появятся ссылки на выбранные PDF-примеры.',
+  title = 'Отправим пример вам в Telegram',
+  description = 'Оставьте имя и контакт: менеджер пришлет доступный пример проекта.',
   source = 'example_request',
   selectedSlugs,
-  submitLabel = 'Получить PDF-примеры',
+  submitLabel = 'Получить пример',
 } = Astro.props
 const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectExampleAssets.map((asset) => asset.slug))
 ---
@@ -33,42 +33,37 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     <strong>{title}</strong>
     <span>{description}</span>
   </div>
-  <fieldset class="example-choice-group" aria-describedby={`${id}-choice-error`}>
-    <legend>Какие примеры нужны</legend>
+  <div class="example-hidden-choices" hidden>
     {
       publicProjectExampleAssets.map((example) => (
-        <label class="example-choice" for={`${id}-choice-${example.slug}`}>
-          <input
-            id={`${id}-choice-${example.slug}`}
-            type="checkbox"
-            value={example.slug}
-            data-example-choice
-            checked={selected.has(example.slug)}
-          />
-          <span>{example.code}</span>
-          <strong>{example.title}</strong>
-        </label>
+        <input
+          id={`${id}-choice-${example.slug}`}
+          type="checkbox"
+          value={example.slug}
+          data-example-choice
+          checked={selected.has(example.slug)}
+        />
       ))
     }
-  </fieldset>
+  </div>
   <p class="field-error" id={`${id}-choice-error`} data-example-choice-error hidden>
     Выберите хотя бы один пример проекта.
   </p>
   <div class="example-fields">
     <div class="example-input-grid">
       <label for={`${id}-name`}>
-        <span>Имя</span>
+        <span>Имя или Telegram-ник</span>
         <input
           id={`${id}-name`}
           data-example-name
           type="text"
           autocomplete="name"
-          placeholder="Ваше имя"
+          placeholder="Илья или @username"
           aria-describedby={`${id}-name-error`}
         />
       </label>
       <label for={`${id}-phone`}>
-        <span>Телефон</span>
+        <span>Номер телефона</span>
         <input
           id={`${id}-phone`}
           data-example-phone
@@ -81,21 +76,21 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
       </label>
     </div>
     <p class="field-error" id={`${id}-name-error`} data-example-name-error hidden>
-      Укажите имя: минимум 2 символа.
+      Укажите имя или Telegram-ник: минимум 2 символа.
     </p>
     <p class="field-error" id={`${id}-phone-error`} data-example-phone-error hidden>
       Укажите телефон в белорусском формате или +7.
     </p>
     <label class="consent-line" for={`${id}-consent`}>
       <input id={`${id}-consent`} data-example-consent type="checkbox" checked />
-      <span>Согласен на обработку имени и телефона для выдачи примеров проектов и связи по проектированию.</span>
+      <span>Согласен на обработку контакта для выдачи примеров проектов и связи по проектированию.</span>
     </label>
     <p class="field-error" id={`${id}-consent-error`} data-example-consent-error hidden>
       Нужно согласие на обработку контакта.
     </p>
   </div>
   <button class="primary-btn" type="submit" data-example-trigger>{submitLabel}</button>
-  <p class="form-status" data-example-status>Оставьте контакт, чтобы получить выбранные PDF-примеры.</p>
+  <p class="form-status" data-example-status>Оставьте контакт: пример отправим в Telegram или согласуем удобный способ связи.</p>
   <div class="proposal-success" data-example-success hidden></div>
 </form>
 
@@ -129,7 +124,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     const trigger = form.querySelector<HTMLButtonElement>('[data-example-trigger]')
     const status = form.querySelector<HTMLElement>('[data-example-status]')
     const success = form.querySelector<HTMLElement>('[data-example-success]')
-    const submitLabel = form.dataset.exampleSubmitLabel || 'Получить PDF-примеры'
+    const submitLabel = form.dataset.exampleSubmitLabel || 'Получить пример'
     const source = form.dataset.exampleSource || 'example_request'
     let isSubmitting = false
     let idempotencyKey = createIdempotencyKey()
@@ -172,12 +167,12 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
         updateSubmitState()
         form.scrollIntoView({ behavior: 'smooth', block: 'center' })
         nameInput?.focus({ preventScroll: true })
-        setStatus('Оставьте контакт: выбранный PDF откроется здесь после отправки формы.')
+        setStatus('Оставьте контакт: пример отправим в Telegram или согласуем удобный способ связи.')
       })
     })
 
     if (!apiBaseUrl) {
-      setStatus('Выдача PDF-примеров временно недоступна.')
+      setStatus('Отправка примера временно недоступна.')
     }
     updateSubmitState()
 
@@ -191,15 +186,16 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
       }
 
       if (!apiBaseUrl) {
-        setStatus('Выдача PDF сейчас недоступна. Попробуйте позже.', 'error')
+        setStatus('Отправка примера сейчас недоступна. Попробуйте позже.', 'error')
         return
       }
 
       isSubmitting = true
       updateSubmitState()
-      setStatus('Сохраняю контакт и подготавливаю PDF-примеры...', 'loading')
+      setStatus('Сохраняю контакт и готовлю выдачу примера...', 'loading')
 
       try {
+        // TODO(PZK): deliver project examples through Telegram bot as the primary channel.
         const response = await fetch(`${apiBaseUrl}/api/public/project-example-requests`, {
           method: 'POST',
           headers: {
@@ -228,7 +224,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
         showSuccess(parsed.request, response.status === 200)
       } catch (error) {
         setStatus(
-          error instanceof Error ? error.message : 'Не удалось выдать PDF-примеры. Попробуйте еще раз.',
+          error instanceof Error ? error.message : 'Не удалось отправить пример. Попробуйте еще раз.',
           'error',
         )
       } finally {
@@ -270,7 +266,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
       if (!trigger) return
       const unavailable = isSubmitting || !apiBaseUrl || selectedSlugs().length === 0
       trigger.disabled = unavailable
-      trigger.textContent = isSubmitting ? 'Готовлю выдачу...' : submitLabel
+      trigger.textContent = isSubmitting ? 'Готовлю отправку...' : submitLabel
     }
 
     function showSuccess(
@@ -291,7 +287,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
                 target="_blank"
                 rel="noopener"
               >
-                ${escapeHtml(example.code)} · открыть PDF-пример
+                ${escapeHtml(example.code)} · открыть пример
               </a>
             `,
           )
@@ -312,8 +308,8 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
         returnedExisting
           ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
           : request.telegramDelivery?.deepLinkUrl
-            ? 'Запрос принят. PDF-примеры готовы; Telegram доступен как дополнительный способ получения.'
-            : 'Запрос принят. PDF-примеры готовы по персональным ссылкам.',
+            ? 'Запрос принят. Откройте Telegram, чтобы получить пример.'
+            : 'Запрос принят. Пример подготовлен по персональным ссылкам.',
         'ready',
       )
     }
@@ -351,7 +347,7 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
       if (statusCode === 400) return 'Проверьте имя, телефон и согласие.'
       if (statusCode === 409) return 'Выбранный пример временно недоступен. Обновите страницу и попробуйте еще раз.'
       if (statusCode === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-      return 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
+      return 'Не удалось отправить пример. Попробуйте еще раз.'
     }
 
     function setStatus(message: string, state?: 'ready' | 'error' | 'loading') {
@@ -443,39 +439,8 @@ const selected = new Set(selectedSlugs?.length ? selectedSlugs : publicProjectEx
     line-height: 1.55;
   }
 
-  .example-choice-group {
-    display: grid;
-    gap: 8px;
-    border: 0;
-    padding: 0;
-  }
-
-  .example-choice-group legend {
-    margin-bottom: 2px;
-    color: var(--ink);
-    font-size: 13px;
-    font-weight: 800;
-  }
-
-  .example-choice {
-    display: grid;
-    grid-template-columns: 18px 38px minmax(0, 1fr);
-    gap: 8px;
-    align-items: center;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px;
-  }
-
-  .example-choice span {
-    color: var(--blue);
-    font-weight: 800;
-  }
-
-  .example-choice strong {
-    min-width: 0;
-    color: var(--ink);
-    font-size: 13px;
+  .example-hidden-choices {
+    display: none;
   }
 
   .example-fields,

@@ -1,6 +1,7 @@
 ---
 import ProjectExampleRequestForm from '../../components/ProjectExampleRequestForm.astro'
 import PublicFontLinks from '../../components/PublicFontLinks.astro'
+import SiteIcons from '../../components/SiteIcons.astro'
 import SiteHeader from '../../components/SiteHeader.astro'
 import { loadProjectCases } from '../../lib/project-cases'
 import { createPageMeta, serializeJsonLd, siteName } from '../../lib/seo'
@@ -11,7 +12,7 @@ const pageMeta = createPageMeta({
   path: '/projects/',
   title: 'Реализованные проекты инженерных систем | ИП Позняк',
   description:
-    'Обезличенные кейсы проектов отопления, вентиляции, водоснабжения и канализации с фрагментами документации и выдачей PDF-примеров после контакта.',
+    'Обезличенные кейсы проектов отопления, вентиляции, водоснабжения и канализации с фрагментами документации и выдачей примеров после контакта.',
 })
 const structuredData = {
   '@context': 'https://schema.org',
@@ -41,8 +42,7 @@ const structuredData = {
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
+    <SiteIcons />
     <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
@@ -79,7 +79,7 @@ const structuredData = {
             <p class="eyebrow">Реализованные проекты</p>
             <h1>Кейсы с фрагментами рабочей документации</h1>
             <p>
-              Показываем обезличенные задачи, состав инженерии и отдельные листы. Полный PDF-пример
+              Показываем обезличенные задачи, состав инженерии и отдельные листы. Полный пример
               отправим после контактной заявки.
             </p>
           </div>
@@ -119,15 +119,6 @@ const structuredData = {
                     </div>
                     <div class="case-actions">
                       <a class="secondary-btn" href={`/projects/${projectCase.slug}/`}>Смотреть кейс</a>
-                      <button
-                        class="text-button"
-                        type="button"
-                        data-example-select
-                        data-example-slug={projectCase.exampleSlugs[0] ?? 'ov'}
-                        aria-controls="project-cases-request-form"
-                      >
-                        Получить PDF-пример
-                      </button>
                     </div>
                   </div>
                 </article>
@@ -141,13 +132,13 @@ const structuredData = {
         <div class="shell narrow">
           <div class="section-head">
             <p class="eyebrow">Выдача документов</p>
-            <h2 id="project-delivery-title">Получить полный PDF-пример</h2>
-            <p>После отправки формы мы сохраним запрос и покажем доступный способ получения документов.</p>
+            <h2 id="project-delivery-title">Получить пример проекта</h2>
+            <p>После отправки формы мы сохраним запрос и покажем доступный способ получения примера.</p>
           </div>
           <ProjectExampleRequestForm
             id="project-cases-request-form"
             source="project_cases_listing"
-            submitLabel="Получить PDF-примеры"
+            submitLabel="Получить пример"
           />
         </div>
       </section>

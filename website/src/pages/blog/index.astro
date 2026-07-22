@@ -1,5 +1,6 @@
 ---
 import PublicFontLinks from '../../components/PublicFontLinks.astro'
+import SiteIcons from '../../components/SiteIcons.astro'
 import SiteHeader from '../../components/SiteHeader.astro'
 import {
   blogCoverImageUrl,
@@ -44,8 +45,7 @@ const structuredData = {
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
+    <SiteIcons />
     <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />

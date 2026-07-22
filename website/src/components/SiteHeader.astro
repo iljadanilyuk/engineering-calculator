@@ -39,10 +39,6 @@ function isCurrent(item: NavItem) {
   <div class="site-shell site-header-inner">
     <a class="brand" href="/" aria-label="ИП Позняк, на главную">
       <BrandMark />
-      <span class="brand-copy">
-        <strong>ИП Позняк</strong>
-        <span>Инженерные системы</span>
-      </span>
     </a>
 
     <nav class="nav desktop-nav" aria-label="Навигация">
@@ -142,51 +138,21 @@ function isCurrent(item: NavItem) {
   .site-header-inner {
     min-height: 74px;
     display: grid;
-    grid-template-columns: minmax(220px, 240px) 1fr auto;
+    grid-template-columns: minmax(230px, 270px) 1fr auto;
     align-items: center;
     gap: 28px;
   }
 
   .brand {
-    --brand-mark-size: 44px;
+    --brand-logo-width: 236px;
     display: inline-flex;
     align-items: center;
-    gap: 11px;
     width: fit-content;
     min-width: 0;
     color: inherit;
     text-decoration: none;
   }
 
-  .brand-copy {
-    min-width: 0;
-    display: grid;
-    gap: 3px;
-  }
-
-  .brand-copy strong,
-  .brand-copy > span {
-    display: block;
-  }
-
-  .brand-copy strong {
-    font-family: var(--font-heading, inherit);
-    font-size: 19px;
-    font-weight: 800;
-    line-height: 1.1;
-  }
-
-  .brand-copy > span {
-    color: var(--muted, #6b7785);
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  .brand:hover {
-    --brand-mark-fill: var(--blue, #0b5fb5);
-  }
-
-  .brand:hover .brand-copy strong,
   .nav a:hover,
   .mobile-nav a:hover,
   .nav a[aria-current="page"],
@@ -330,7 +296,7 @@ function isCurrent(item: NavItem) {
 
   @media (max-width: 1100px) {
     .site-header-inner {
-      grid-template-columns: minmax(220px, 240px) auto;
+      grid-template-columns: minmax(196px, 236px) auto;
     }
 
     .desktop-nav {
@@ -354,18 +320,7 @@ function isCurrent(item: NavItem) {
     }
 
     .brand {
-      --brand-mark-size: 38px;
-      gap: 9px;
-    }
-
-    .brand-copy strong {
-      font-size: 16px;
-    }
-
-    .brand-copy > span {
-      max-width: 150px;
-      font-size: 10px;
-      line-height: 1.25;
+      --brand-logo-width: clamp(154px, 36vw, 202px);
     }
 
     .top-cta {
@@ -385,12 +340,8 @@ function isCurrent(item: NavItem) {
       width: min(100% - 20px, var(--shell, 1160px));
     }
 
-    .brand-copy strong {
-      font-size: 14px;
-    }
-
-    .brand-copy > span {
-      display: none;
+    .brand {
+      --brand-logo-width: 148px;
     }
 
     .top-cta {

@@ -26,17 +26,47 @@ export function validatePublicContactPhone(rawPhone: string): PublicPhoneValidat
 export function maskPublicContactPhoneInput(input: HTMLInputElement | null) {
   if (!input) return
 
-  const raw = input.value
+  const formatted = formatPublicContactPhoneInputValue(input.value)
+  if (formatted !== input.value) input.value = formatted
+}
+
+export function formatPublicContactPhoneInputValue(raw: string) {
   const digits = raw.replace(/\D/g, '')
 
-  if (raw.trim().startsWith('+375') || digits.startsWith('375')) {
-    input.value = formatBelarusPhone(digits.startsWith('375') ? digits : `375${digits.slice(0, 9)}`)
-    return
+  const belarusDigits = phoneInputBelarusDigits(raw.trim(), digits)
+  if (belarusDigits) return formatBelarusPhone(belarusDigits)
+
+  const russianDigits = phoneInputRussianDigits(raw.trim(), digits)
+  if (russianDigits) return formatRussianPhone(russianDigits)
+
+  return raw
+}
+
+function phoneInputBelarusDigits(trimmed: string, digits: string) {
+  if (trimmed.startsWith('+375')) {
+    return digits.startsWith('375') ? digits : `375${digits.slice(0, 9)}`
   }
 
-  if (raw.trim().startsWith('+7') || digits.startsWith('7')) {
-    input.value = formatRussianPhone(digits.startsWith('7') ? digits : `7${digits.slice(0, 10)}`)
+  if (digits.startsWith('00375')) return `375${digits.slice(5)}`
+  if (digits.startsWith('375')) return digits
+  if (digits.startsWith('80')) return `375${digits.slice(2)}`
+  if (digits.startsWith('0') && isBelarusMobilePrefix(digits.slice(1, 3))) {
+    return `375${digits.slice(1)}`
   }
+  if (isBelarusMobilePrefix(digits.slice(0, 2))) return `375${digits}`
+
+  return null
+}
+
+function phoneInputRussianDigits(trimmed: string, digits: string) {
+  if (trimmed.startsWith('+7')) {
+    return digits.startsWith('7') ? digits : `7${digits.slice(0, 10)}`
+  }
+
+  if (digits.startsWith('007')) return `7${digits.slice(3)}`
+  if (digits.startsWith('7')) return digits
+
+  return null
 }
 
 function normalizedPhoneDigits(digits: string) {
@@ -52,6 +82,10 @@ function normalizedPhoneDigits(digits: string) {
 
 function hasLongRepeatedDigitRun(value: string) {
   return /(\d)\1{5,}/.test(value)
+}
+
+function isBelarusMobilePrefix(value: string) {
+  return value === '25' || value === '29' || value === '33' || value === '44'
 }
 
 function formatBelarusPhone(digits: string) {

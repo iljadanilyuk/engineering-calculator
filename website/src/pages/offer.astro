@@ -12,6 +12,7 @@ import {
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
 import PublicFontLinks from '../components/PublicFontLinks.astro'
+import SiteIcons from '../components/SiteIcons.astro'
 import SiteHeader from '../components/SiteHeader.astro'
 
 const initialCalculation = calculateEngineeringOffer({
@@ -88,8 +89,7 @@ const structuredData = {
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
+    <SiteIcons />
     <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
@@ -331,7 +331,7 @@ const structuredData = {
     validatePublicContactPhone,
   } from '../lib/public-contact-validation'
 
-  type ProjectType = 'private' | 'commercial'
+  type ProjectType = 'private' | 'apartment' | 'commercial'
   type CalculatorService = EngineeringService & { isPublic?: boolean }
   type OfferData = {
     defaultAreaSqm: string
@@ -381,6 +381,7 @@ const structuredData = {
   const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
   const projectTypeLabels: Record<ProjectType, string> = {
     private: 'Частный дом',
+    apartment: 'Квартира',
     commercial: 'Коммерческий объект',
   }
   const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
@@ -424,6 +425,7 @@ const structuredData = {
 
     questionnaireButton?.addEventListener('click', () => {
       persistOfferChoiceState('questionnaire')
+      // TODO(PZK): route private/apartment/commercial to separate questionnaire definitions.
       const params = new URLSearchParams()
       params.set('area', currentCalculation?.areaSqm ?? areaSqm)
       params.set('services', (currentCalculation?.selectedServiceIds ?? [...selectedServiceIds]).join(','))
@@ -517,7 +519,7 @@ const structuredData = {
     const queryState: OfferChoiceState = {
       areaSqm: searchParams.get('area') ?? undefined,
       selectedServiceIds: hasServicesQuery ? servicesFromQuery : undefined,
-      projectType: typeFromQuery === 'commercial' ? 'commercial' : typeFromQuery === 'private' ? 'private' : undefined,
+      projectType: isProjectType(typeFromQuery) ? typeFromQuery : undefined,
     }
 
     if (queryState.areaSqm || queryState.selectedServiceIds || queryState.projectType) {
@@ -533,7 +535,7 @@ const structuredData = {
         selectedServiceIds: Array.isArray(parsed.selectedServiceIds)
           ? parsed.selectedServiceIds.filter((serviceId) => typeof serviceId === 'string')
           : undefined,
-        projectType: parsed.projectType === 'commercial' || parsed.projectType === 'private'
+        projectType: isProjectType(parsed.projectType)
           ? parsed.projectType
           : undefined,
       }
@@ -898,6 +900,10 @@ const structuredData = {
     }
 
     return { valid: true, canonical }
+  }
+
+  function isProjectType(value: unknown): value is ProjectType {
+    return value === 'private' || value === 'apartment' || value === 'commercial'
   }
 
   function setStateStatus(message: string, state?: 'error') {

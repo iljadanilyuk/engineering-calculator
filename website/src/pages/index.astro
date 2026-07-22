@@ -13,6 +13,7 @@ import {
 } from '../lib/public-calculator'
 import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
 import PublicFontLinks from '../components/PublicFontLinks.astro'
+import SiteIcons from '../components/SiteIcons.astro'
 import SiteHeader from '../components/SiteHeader.astro'
 
 const selectedServiceIds = defaultSelectedServiceIds
@@ -292,7 +293,7 @@ const structuredData = {
       name: siteName,
       url: pageMeta.siteUrl,
       image: pageMeta.imageUrl,
-      logo: `${pageMeta.siteUrl}/favicon.svg`,
+      logo: `${pageMeta.siteUrl}/brand/poznyak-logo-mark.svg`,
       description: pageMeta.description,
       areaServed: {
         '@type': 'Country',
@@ -370,8 +371,7 @@ function serviceRublesMap(calculation: CalculationResult) {
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
+    <SiteIcons />
     <PublicFontLinks />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
@@ -510,16 +510,16 @@ function serviceRublesMap(calculation: CalculationResult) {
               />
               <div class="range-labels" aria-hidden="true">
                 <span>50</span>
-                <span>150</span>
-                <span>250</span>
-                <span>350</span>
                 <span>500</span>
+                <span>1000</span>
+                <span>1500</span>
+                <span>2000</span>
               </div>
               <p class="field-help" id="area-help">
-                Введите площадь от 50 до 500 м² или настройте ползунок.
+                Введите площадь от 50 до 2000 м² или настройте ползунок.
               </p>
               <p class="field-error" id="area-error" data-area-error hidden>
-                Укажите площадь от 50 до 500 м², максимум с двумя знаками после запятой.
+                Укажите площадь от 50 до 2000 м², максимум с двумя знаками после запятой.
               </p>
 
               <div class="type-block">
@@ -535,6 +535,17 @@ function serviceRublesMap(calculation: CalculationResult) {
                       {lucideIcons.home.paths?.map((path) => <path d={path} />)}
                     </svg>
                     <span>Частный дом</span>
+                  </button>
+                  <button
+                    class="type-button"
+                    type="button"
+                    data-project-type="apartment"
+                    aria-pressed="false"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      {lucideIcons.building2.paths?.map((path) => <path d={path} />)}
+                    </svg>
+                    <span>Квартира</span>
                   </button>
                   <button
                     class="type-button"
@@ -639,7 +650,6 @@ function serviceRublesMap(calculation: CalculationResult) {
               <a class="button primary result-cta" href="/offer/" data-offer-link>
                 Получить коммерческое предложение
               </a>
-              <div class="result-note">Ответим в течение рабочего дня.</div>
             </aside>
           </div>
         </div>
@@ -684,72 +694,80 @@ function serviceRublesMap(calculation: CalculationResult) {
           <div class="section-head">
             <div class="section-kicker">Результат работы</div>
             <h2 id="documents-title">Реализованные проекты и фрагменты документации</h2>
-            <p>Краткие фрагменты можно посмотреть сразу, а полный PDF-пример отправим после контактной заявки.</p>
+            <p>Краткие фрагменты можно посмотреть сразу, а полный пример отправим после контактной заявки.</p>
             <a class="section-more-link" href="/projects/">Открыть каталог кейсов</a>
           </div>
           <div class="docs-grid">
             {
               documentationExamples.map((example) => (
                 <article class="doc-card">
-                  <img class="doc-image" src={example.image} alt={example.imageAlt} />
+                  <button
+                    class="doc-image-button"
+                    type="button"
+                    data-doc-preview
+                    data-doc-image={example.image}
+                    data-doc-title={example.title}
+                    data-doc-description={example.description}
+                    data-doc-alt={example.imageAlt}
+                    aria-label={`Открыть фрагмент крупно: ${example.title}`}
+                  >
+                    <img class="doc-image" src={example.image} alt={example.imageAlt} />
+                  </button>
                   <div class="doc-body">
                     <strong>{example.title}</strong>
                     <p>{example.description}</p>
-                    <button
-                      class="text-button"
-                      type="button"
-                      data-example-select
-                      data-example-slug={example.slug}
-                      aria-controls="example-request-form"
-                    >
-                      Получить PDF
-                    </button>
                   </div>
                 </article>
               ))
             }
           </div>
+          <div class="doc-lightbox" data-doc-lightbox role="dialog" aria-modal="true" aria-labelledby="doc-lightbox-title" hidden>
+            <button class="doc-lightbox-backdrop" type="button" data-doc-lightbox-close aria-label="Закрыть просмотр"></button>
+            <figure class="doc-lightbox-panel">
+              <button class="doc-lightbox-close" type="button" data-doc-lightbox-close aria-label="Закрыть просмотр">×</button>
+              <img data-doc-lightbox-image alt="" />
+              <figcaption>
+                <strong id="doc-lightbox-title" data-doc-lightbox-title></strong>
+                <span data-doc-lightbox-description></span>
+              </figcaption>
+            </figure>
+          </div>
           <form class="example-request-form" id="example-request-form" data-example-form novalidate>
             <div class="example-form-copy">
-              <strong>Получить примеры проектов</strong>
-              <span>После контакта здесь появятся ссылки на выбранные PDF.</span>
+              <strong>Отправим пример вам в Telegram</strong>
+              <span>Оставьте имя и контакт: менеджер пришлет доступный пример проекта.</span>
             </div>
-            <fieldset class="example-choice-group" aria-describedby="example-choice-error">
-              <legend>Какие примеры нужны</legend>
+            <div class="example-hidden-choices" hidden>
               {
                 publicProjectExampleAssets.map((example) => (
-                  <label class="example-choice" for={`example-choice-${example.slug}`}>
-                    <input
-                      id={`example-choice-${example.slug}`}
-                      type="checkbox"
-                      value={example.slug}
-                      data-example-choice
-                      checked
-                    />
-                    <span>{example.code}</span>
-                    <strong>{example.title}</strong>
-                  </label>
+                  <input
+                    id={`example-choice-${example.slug}`}
+                    type="checkbox"
+                    value={example.slug}
+                    data-example-choice
+                    checked
+                  />
                 ))
               }
-            </fieldset>
+            </div>
             <p class="field-error" id="example-choice-error" data-example-choice-error hidden>
               Выберите хотя бы один пример проекта.
             </p>
             <div class="example-fields">
               <div class="example-input-grid">
                 <label for="example-name">
-                  <span>Имя</span>
+                  <span>Имя или Telegram-ник</span>
                   <input
                     id="example-name"
                     data-example-name
                     type="text"
                     autocomplete="name"
-                    placeholder="Ваше имя"
+                    placeholder="Илья или @username"
                     aria-describedby="example-name-error"
                   />
                 </label>
                 <label for="example-phone">
-                  <span>Телефон</span>
+                  <span>Номер телефона</span>
                   <input
                     id="example-phone"
                     data-example-phone
@@ -762,7 +780,7 @@ function serviceRublesMap(calculation: CalculationResult) {
                 </label>
               </div>
               <p class="field-error" id="example-name-error" data-example-name-error hidden>
-                Укажите имя: минимум 2 символа.
+                Укажите имя или Telegram-ник: минимум 2 символа.
               </p>
               <p class="field-error" id="example-phone-error" data-example-phone-error hidden>
                 Укажите телефон в белорусском формате или +7.
@@ -775,17 +793,17 @@ function serviceRublesMap(calculation: CalculationResult) {
                   checked
                   aria-describedby="example-consent-error"
                 />
-                <span>Согласен на обработку имени и телефона для выдачи примеров проектов.</span>
+                <span>Согласен на обработку контакта для выдачи примеров проектов.</span>
               </label>
               <p class="field-error" id="example-consent-error" data-example-consent-error hidden>
                 Подтвердите согласие перед отправкой.
               </p>
               <div class="example-action-row">
                 <button class="button primary" type="submit" data-example-trigger>
-                  Получить PDF-примеры
+                  Получить пример
                 </button>
                 <p data-example-status role="status">
-                  Оставьте контакт: выбранные PDF будут доступны после отправки формы.
+                  Оставьте контакт: пример отправим в Telegram или согласуем удобный способ связи.
                 </p>
               </div>
               <div class="lead-success" data-example-success hidden></div>
@@ -969,7 +987,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     validatePublicContactPhone,
   } from '../lib/public-contact-validation'
 
-  type ProjectType = 'private' | 'commercial'
+  type ProjectType = 'private' | 'apartment' | 'commercial'
   type CalculatorService = EngineeringService & { isPublic?: boolean }
   type CalculatorData = {
     defaultAreaSqm: string
@@ -1015,6 +1033,11 @@ function serviceRublesMap(calculation: CalculationResult) {
   const exampleTrigger = document.querySelector<HTMLButtonElement>('[data-example-trigger]')
   const exampleStatus = document.querySelector<HTMLElement>('[data-example-status]')
   const exampleSuccess = document.querySelector<HTMLElement>('[data-example-success]')
+  const docLightbox = document.querySelector<HTMLElement>('[data-doc-lightbox]')
+  const docLightboxImage = document.querySelector<HTMLImageElement>('[data-doc-lightbox-image]')
+  const docLightboxTitle = document.querySelector<HTMLElement>('[data-doc-lightbox-title]')
+  const docLightboxDescription = document.querySelector<HTMLElement>('[data-doc-lightbox-description]')
+  let lastDocPreviewTrigger: HTMLButtonElement | null = null
 
   const numberFormatter = new Intl.NumberFormat('ru-RU')
   const supportedPricingTypes = new Set(['fixed', 'per_sqm'])
@@ -1054,24 +1077,30 @@ function serviceRublesMap(calculation: CalculationResult) {
     projectTypeButtons.forEach((button) => {
       button.addEventListener('click', () => {
         const nextType = button.dataset.projectType
-        if (nextType !== 'private' && nextType !== 'commercial') return
+        if (!isProjectType(nextType)) return
         selectedProjectType = nextType
         updateProjectTypeButtons()
         updateOfferLink()
       })
     })
 
-    offerLinks.forEach((offerLink) => {
-      offerLink.addEventListener('click', () => {
-        persistOfferChoiceState()
+    document.querySelectorAll<HTMLButtonElement>('[data-doc-preview]').forEach((button) => {
+      button.addEventListener('click', () => {
+        openDocLightbox(button)
       })
     })
 
-    document.querySelectorAll<HTMLButtonElement>('[data-example-select]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const slug = button.dataset.exampleSlug
-        if (!slug) return
-        selectExampleForRequest(slug)
+    document.querySelectorAll<HTMLButtonElement>('[data-doc-lightbox-close]').forEach((button) => {
+      button.addEventListener('click', closeDocLightbox)
+    })
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && docLightbox && !docLightbox.hidden) closeDocLightbox()
+    })
+
+    offerLinks.forEach((offerLink) => {
+      offerLink.addEventListener('click', () => {
+        persistOfferChoiceState()
       })
     })
 
@@ -1121,7 +1150,7 @@ function serviceRublesMap(calculation: CalculationResult) {
   async function loadPublicConfig() {
     if (!apiBaseUrl) {
       setSourceMessage('Базовые тарифы для быстрого расчета.')
-      setExampleStatus('Выдача PDF-примеров временно недоступна.')
+      setExampleStatus('Отправка примера временно недоступна.')
       updateOfferLink()
       updateExampleSubmitState()
       return
@@ -1154,9 +1183,9 @@ function serviceRublesMap(calculation: CalculationResult) {
       reconcileSelectedServices(!hasUserChangedServices)
       setSourceMessage('Актуальные тарифы временно недоступны, показаны базовые значения.')
       if (error instanceof Error && error.message.includes('failed: 409')) {
-        setExampleStatus('Калькулятор ожидает актуальные тарифы, но PDF-примеры можно запросить после контакта.')
+        setExampleStatus('Калькулятор ожидает актуальные тарифы, но пример можно запросить после контакта.')
       } else {
-        setExampleStatus('PDF-примеры сейчас нельзя выдать. Попробуйте позже.', 'error')
+        setExampleStatus('Пример сейчас нельзя отправить. Попробуйте позже.', 'error')
       }
       render()
     }
@@ -1326,15 +1355,16 @@ function serviceRublesMap(calculation: CalculationResult) {
     }
 
     if (!apiBaseUrl) {
-      setExampleStatus('Выдача PDF сейчас недоступна. Попробуйте позже.', 'error')
+      setExampleStatus('Отправка примера сейчас недоступна. Попробуйте позже.', 'error')
       return
     }
 
     isExampleSubmitting = true
     updateExampleSubmitState()
-    setExampleStatus('Сохраняю контакт и готовлю ссылки на PDF-примеры...', 'loading')
+    setExampleStatus('Сохраняю контакт и готовлю выдачу примера...', 'loading')
 
     try {
+      // TODO(PZK): deliver project examples through Telegram bot as the primary channel.
       const response = await fetch(`${apiBaseUrl}/api/public/project-example-requests`, {
         method: 'POST',
         headers: {
@@ -1363,7 +1393,7 @@ function serviceRublesMap(calculation: CalculationResult) {
       showExampleSuccess(parsed.request, response.status === 200)
     } catch (error) {
       setExampleStatus(
-        error instanceof Error ? error.message : 'Не удалось выдать PDF-примеры. Попробуйте еще раз.',
+        error instanceof Error ? error.message : 'Не удалось отправить пример. Попробуйте еще раз.',
         'error',
       )
     } finally {
@@ -1421,18 +1451,7 @@ function serviceRublesMap(calculation: CalculationResult) {
 
     const unavailable = isExampleSubmitting || !apiBaseUrl || selectedExampleSlugs().length === 0
     exampleTrigger.disabled = unavailable
-    exampleTrigger.textContent = isExampleSubmitting ? 'Готовлю ссылки...' : 'Получить PDF-примеры'
-  }
-
-  function selectExampleForRequest(slug: string) {
-    exampleChoices.forEach((choice) => {
-      choice.checked = choice.value === slug
-    })
-    resetExampleRequestState()
-    updateExampleSubmitState()
-    exampleForm?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    exampleNameInput?.focus({ preventScroll: true })
-    setExampleStatus('Оставьте контакт: выбранный PDF откроется здесь после отправки формы.')
+    exampleTrigger.textContent = isExampleSubmitting ? 'Готовлю отправку...' : 'Получить пример'
   }
 
   function showExampleSuccess(
@@ -1480,8 +1499,8 @@ function serviceRublesMap(calculation: CalculationResult) {
       returnedExisting
         ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
         : request.telegramDelivery?.deepLinkUrl
-          ? 'Запрос принят. PDF-примеры готовы; Telegram доступен как дополнительный способ получения.'
-          : 'Запрос принят. PDF-примеры готовы по персональным ссылкам.',
+          ? 'Запрос принят. Откройте Telegram, чтобы получить пример.'
+          : 'Запрос принят. Пример подготовлен по персональным ссылкам.',
       'ready',
     )
   }
@@ -1537,7 +1556,7 @@ function serviceRublesMap(calculation: CalculationResult) {
     if (status === 400) return 'Проверьте имя, телефон и согласие.'
     if (status === 409) return 'Выбранный пример временно недоступен. Обновите страницу и попробуйте еще раз.'
     if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-    return 'Не удалось выдать PDF-примеры. Попробуйте еще раз.'
+    return 'Не удалось отправить пример. Попробуйте еще раз.'
   }
 
   function selectedExampleSlugs() {
@@ -1601,6 +1620,39 @@ function serviceRublesMap(calculation: CalculationResult) {
       button.classList.toggle('active', isSelected)
       button.setAttribute('aria-pressed', String(isSelected))
     })
+  }
+
+  function isProjectType(value: string | undefined): value is ProjectType {
+    return value === 'private' || value === 'apartment' || value === 'commercial'
+  }
+
+  function openDocLightbox(trigger: HTMLButtonElement) {
+    if (!docLightbox || !docLightboxImage || !docLightboxTitle || !docLightboxDescription) return
+
+    const image = trigger.dataset.docImage
+    const title = trigger.dataset.docTitle ?? ''
+    const description = trigger.dataset.docDescription ?? ''
+    const alt = trigger.dataset.docAlt ?? ''
+    if (!image) return
+
+    lastDocPreviewTrigger = trigger
+    docLightboxImage.src = image
+    docLightboxImage.alt = alt || (title ? `Фрагмент документации: ${title}` : 'Фрагмент документации')
+    docLightboxTitle.textContent = title
+    docLightboxDescription.textContent = description
+    docLightbox.hidden = false
+    document.documentElement.classList.add('has-doc-lightbox')
+    docLightbox.querySelector<HTMLButtonElement>('[data-doc-lightbox-close]')?.focus({ preventScroll: true })
+  }
+
+  function closeDocLightbox() {
+    if (!docLightbox || !docLightboxImage) return
+
+    docLightbox.hidden = true
+    docLightboxImage.removeAttribute('src')
+    document.documentElement.classList.remove('has-doc-lightbox')
+    lastDocPreviewTrigger?.focus({ preventScroll: true })
+    lastDocPreviewTrigger = null
   }
 
   function updateOfferLink() {
@@ -2462,13 +2514,6 @@ function serviceRublesMap(calculation: CalculationResult) {
     margin-top: 20px;
   }
 
-  .result-note {
-    margin-top: 18px;
-    color: var(--muted);
-    font-size: 12px;
-    text-align: center;
-  }
-
   .benefits-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -2514,6 +2559,15 @@ function serviceRublesMap(calculation: CalculationResult) {
     min-width: 0;
   }
 
+  .doc-image-button {
+    width: 100%;
+    display: block;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: zoom-in;
+  }
+
   .doc-image {
     width: 100%;
     aspect-ratio: 1.43;
@@ -2522,6 +2576,99 @@ function serviceRublesMap(calculation: CalculationResult) {
     background: #ffffff;
     object-fit: cover;
     object-position: center;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .doc-image-button:hover .doc-image {
+    border-color: rgba(11, 95, 181, 0.34);
+    box-shadow: 0 16px 34px rgba(16, 32, 51, 0.12);
+    transform: translateY(-2px);
+  }
+
+  .doc-lightbox[hidden] {
+    display: none;
+  }
+
+  .doc-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: grid;
+    place-items: center;
+    padding: clamp(14px, 4vw, 42px);
+  }
+
+  .doc-lightbox-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(8, 26, 47, 0.76);
+    backdrop-filter: blur(10px);
+    cursor: zoom-out;
+  }
+
+  .doc-lightbox-panel {
+    position: relative;
+    z-index: 1;
+    width: min(1120px, 100%);
+    max-height: min(820px, calc(100vh - 32px));
+    display: grid;
+    gap: 14px;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 12px;
+    background: #ffffff;
+    padding: clamp(10px, 2vw, 16px);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+  }
+
+  .doc-lightbox-panel img {
+    width: 100%;
+    max-height: min(680px, calc(100vh - 170px));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    object-fit: contain;
+    background: #ffffff;
+  }
+
+  .doc-lightbox-panel figcaption {
+    display: grid;
+    gap: 4px;
+    padding: 0 4px 2px;
+  }
+
+  .doc-lightbox-panel figcaption strong {
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-size: 18px;
+  }
+
+  .doc-lightbox-panel figcaption span {
+    color: var(--body);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .doc-lightbox-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(16, 32, 51, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.94);
+    color: var(--ink);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .has-doc-lightbox,
+  .has-doc-lightbox body {
+    overflow: hidden;
   }
 
   .doc-body {
@@ -2568,7 +2715,7 @@ function serviceRublesMap(calculation: CalculationResult) {
 
   .example-request-form {
     display: grid;
-    grid-template-columns: minmax(230px, 0.78fr) minmax(320px, 1fr) minmax(430px, 1.22fr);
+    grid-template-columns: minmax(230px, 0.58fr) minmax(460px, 1fr);
     gap: 28px;
     align-items: stretch;
     margin-top: 34px;
@@ -2595,6 +2742,10 @@ function serviceRublesMap(calculation: CalculationResult) {
     line-height: 1.18;
   }
 
+  .example-hidden-choices {
+    display: none;
+  }
+
   .example-form-copy span,
   .example-request-form p,
   .lead-form p {
@@ -2603,16 +2754,6 @@ function serviceRublesMap(calculation: CalculationResult) {
     font-weight: 650;
   }
 
-  .example-choice-group {
-    display: grid;
-    align-content: start;
-    gap: 10px;
-    margin: 0;
-    border: 0;
-    padding: 0;
-  }
-
-  .example-choice-group legend,
   .example-request-form label span,
   .lead-form label span {
     margin-bottom: 7px;
@@ -2621,42 +2762,10 @@ function serviceRublesMap(calculation: CalculationResult) {
     font-weight: 800;
   }
 
-  .example-choice {
-    display: grid;
-    grid-template-columns: 20px 40px minmax(0, 1fr);
-    align-items: center;
-    gap: 11px;
-    min-height: 48px;
-    border: 1px solid rgba(219, 227, 235, 0.85);
-    border-radius: 10px;
-    background: #f8fbfe;
-    padding: 9px 11px;
-  }
-
-  .example-choice input,
   .consent-row input {
     width: 18px;
     height: 18px;
     accent-color: var(--blue);
-  }
-
-  .example-choice span {
-    display: inline-grid;
-    place-items: center;
-    width: 36px;
-    min-height: 26px;
-    border-radius: 999px;
-    background: #e7f1fb;
-    color: var(--blue);
-    font-family: var(--font-heading);
-    font-size: 12px;
-    font-weight: 800;
-  }
-
-  .example-choice strong {
-    min-width: 0;
-    font-size: 13px;
-    line-height: 1.3;
   }
 
   .example-fields {
@@ -3058,6 +3167,8 @@ function serviceRublesMap(calculation: CalculationResult) {
   .button:focus-visible,
   .top-cta:focus-visible,
   .text-button:focus-visible,
+  .doc-image-button:focus-visible,
+  .doc-lightbox-close:focus-visible,
   .faq-question:focus-visible,
   input:focus-visible,
   textarea:focus-visible {

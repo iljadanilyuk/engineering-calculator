@@ -4,7 +4,7 @@ export const defaultAreaSqm = '180'
 
 export const areaLimits = {
   min: 50,
-  max: 500,
+  max: 2000,
   step: 5,
 }
 

@@ -1,43 +1,62 @@
-<svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
-  <rect class="brand-mark-bg" width="48" height="48" rx="14" />
-  <path class="brand-mark-p" d="M15 34V14h10.2c5.1 0 8.8 3.2 8.8 8s-3.7 8-8.8 8H20" />
-  <path class="brand-mark-flow" d="M15 34c7-1.2 10.8-4.2 12.7-8.2" />
-  <circle class="brand-mark-node" cx="13" cy="25" r="2.2" />
-  <circle class="brand-mark-node" cx="25.8" cy="19" r="2.2" />
-</svg>
+---
+type BrandLogoVariant = 'horizontal' | 'compact' | 'mark'
+
+type BrandLogoAsset = {
+  src: string
+  srcset?: string
+  width: number
+  height: number
+}
+
+const assets: Record<BrandLogoVariant, BrandLogoAsset> = {
+  horizontal: {
+    src: '/brand/poznyak-logo-horizontal.png',
+    srcset: '/brand/poznyak-logo-horizontal@2x.png 2x',
+    width: 1200,
+    height: 390,
+  },
+  compact: {
+    src: '/brand/poznyak-logo-compact.svg',
+    width: 1120,
+    height: 360,
+  },
+  mark: {
+    src: '/brand/poznyak-logo-mark.svg',
+    width: 512,
+    height: 512,
+  },
+}
+
+const {
+  variant = 'horizontal',
+  class: className = 'brand-logo',
+  loading = 'eager',
+} = Astro.props as {
+  variant?: BrandLogoVariant
+  class?: string
+  loading?: 'eager' | 'lazy'
+}
+const asset = assets[variant]
+---
+
+<img
+  class:list={[className, `brand-logo-${variant}`]}
+  src={asset.src}
+  srcset={asset.srcset}
+  width={asset.width}
+  height={asset.height}
+  alt=""
+  aria-hidden="true"
+  loading={loading}
+  decoding="async"
+/>
 
 <style>
-  .brand-mark {
-    width: var(--brand-mark-size, 44px);
-    height: var(--brand-mark-size, 44px);
-    flex: 0 0 var(--brand-mark-size, 44px);
-    overflow: visible;
-  }
-
-  .brand-mark-bg {
-    fill: var(--brand-mark-fill, var(--navy, var(--ink, #102033)));
-  }
-
-  .brand-mark-p,
-  .brand-mark-flow {
-    fill: none;
-    stroke: #ffffff;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .brand-mark-p {
-    stroke-width: 3.2;
-  }
-
-  .brand-mark-flow {
-    stroke: #85c2ff;
-    stroke-width: 2.4;
-  }
-
-  .brand-mark-node {
-    fill: #ffffff;
-    stroke: #85c2ff;
-    stroke-width: 1.6;
+  .brand-logo {
+    display: block;
+    width: var(--brand-logo-width, 210px);
+    max-width: 100%;
+    height: auto;
+    flex: 0 1 auto;
   }
 </style>
