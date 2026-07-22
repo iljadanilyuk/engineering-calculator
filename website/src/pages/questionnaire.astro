@@ -477,6 +477,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     selectedServiceIds?: string[]
     projectType?: ProjectType
   }
+  type QuestionnaireContactPrefill = {
+    clientName?: string
+    clientPhone?: string
+    objectName?: string
+    savedAt?: string
+  }
 
   const dataElement = document.querySelector<HTMLScriptElement>('#questionnaire-data')
   const data = JSON.parse(dataElement?.textContent ?? '{}') as QuestionnaireData
@@ -533,6 +539,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
   const offerStateStorageKey = 'pzk-offer-choice-state-v1'
   const questionnaireSessionStorageKey = 'pzk-questionnaire-resume-v2'
+  const questionnaireContactPrefillStorageKey = 'pzk-questionnaire-contact-prefill-v1'
 
   const initialChoiceState = readOfferChoiceState()
   const hasExplicitServiceSelection = Array.isArray(initialChoiceState.selectedServiceIds)
@@ -555,6 +562,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const draftOptionByQuestionId = new Map<string, string>()
 
   attachHandlers()
+  applyQuestionnaireContactPrefill()
   renderStaticShell()
   void bootstrap()
 
@@ -1386,6 +1394,30 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
   function resumeTokenFromUrl() {
     return new URLSearchParams(window.location.search).get('token')?.trim() || null
+  }
+
+  function applyQuestionnaireContactPrefill() {
+    if (resumeTokenFromUrl()) return
+
+    try {
+      const parsed = JSON.parse(
+        sessionStorage.getItem(questionnaireContactPrefillStorageKey) ?? '{}',
+      ) as QuestionnaireContactPrefill
+      const savedAt = parsed.savedAt ? new Date(parsed.savedAt).getTime() : 0
+      if (!Number.isFinite(savedAt) || Date.now() - savedAt > 24 * 60 * 60 * 1_000) return
+
+      if (clientNameInput && !clientNameInput.value.trim() && typeof parsed.clientName === 'string') {
+        clientNameInput.value = parsed.clientName.slice(0, 120)
+      }
+      if (clientPhoneInput && !clientPhoneInput.value.trim() && typeof parsed.clientPhone === 'string') {
+        clientPhoneInput.value = parsed.clientPhone.slice(0, 40)
+      }
+      if (objectNameInput && !objectNameInput.value.trim() && typeof parsed.objectName === 'string') {
+        objectNameInput.value = parsed.objectName.slice(0, 160)
+      }
+    } catch {
+      // Prefill is only a convenience after the quick КП flow.
+    }
   }
 
   function storeQuestionnaireResume(token: string, clientName?: string, clientPhone?: string) {

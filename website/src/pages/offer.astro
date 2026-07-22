@@ -321,7 +321,6 @@ const structuredData = {
   import {
     calculateEngineeringOffer,
     publicCalculatorConfigResponseSchema,
-    publicCalculationSaveResponseSchema,
     type CalculationResult,
     type EngineeringService,
     type ServiceRecord,
@@ -353,6 +352,27 @@ const structuredData = {
     areaSqm?: string
     selectedServiceIds?: string[]
     projectType?: ProjectType
+  }
+  type PendingPreliminaryOfferSubmission = {
+    idempotencyKey: string
+    clientName: string
+    clientPhone: string
+    objectName: string
+    objectComment: string
+    calculation: {
+      areaSqm: string
+      selectedServiceIds: string[]
+    }
+    offerChoice: {
+      areaSqm: string
+      selectedServiceIds: string[]
+      projectType: ProjectType
+    }
+    consentAccepted: true
+    source: 'public_offer_preliminary'
+    referrer?: string
+    utm?: Record<string, string>
+    createdAt: string
   }
 
   const dataElement = document.querySelector<HTMLScriptElement>('#offer-data')
@@ -386,6 +406,7 @@ const structuredData = {
   }
   const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
   const offerStateStorageKey = 'pzk-offer-choice-state-v1'
+  const pendingPreliminaryOfferStorageKey = 'pzk-preliminary-offer-pending-v1'
 
   const initialChoiceState = readOfferChoiceState()
   const hasExplicitServiceSelection = Array.isArray(initialChoiceState.selectedServiceIds)
@@ -643,50 +664,20 @@ const structuredData = {
       return
     }
 
-    isSubmitting = true
-    updateSubmitState()
-    setLeadStatus('Сохраняю контакт и пересчитываю КП...', 'loading')
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/public/calculations`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          idempotencyKey: submissionIdempotencyKey,
-          clientName: validation.clientName,
-          clientPhone: validation.clientPhone,
-          objectName: leadObjectName(),
-          calculation: {
-            areaSqm: currentCalculation.areaSqm,
-            selectedServiceIds: currentCalculation.selectedServiceIds,
-          },
-          consentAccepted: true,
-          source: 'public_offer_preliminary',
-          referrer: document.referrer || undefined,
-          utm: readAttributionMetadata(),
-        }),
-      })
-      const payload = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        applyServerValidationErrors(payload)
-        throw new Error(publicSubmitErrorMessage(response.status, payload))
-      }
-
-      const parsed = publicCalculationSaveResponseSchema.parse(payload)
-      showLeadSuccess(parsed.calculation, response.status === 200)
-    } catch (error) {
+    const pendingSubmission = createPendingPreliminaryOfferSubmission(validation)
+    if (!storePendingPreliminaryOfferSubmission(pendingSubmission)) {
       setLeadStatus(
-        error instanceof Error ? error.message : 'Не удалось подготовить КП. Попробуйте еще раз.',
+        'Не удалось открыть страницу подготовки КП. Проверьте настройки приватности браузера и попробуйте еще раз.',
         'error',
       )
-    } finally {
-      isSubmitting = false
-      updateSubmitState()
+      return
     }
+
+    persistOfferChoiceState('preliminary')
+    isSubmitting = true
+    updateSubmitState()
+    setLeadStatus('Открываю страницу подготовки КП...', 'loading')
+    window.location.href = offerReadyUrl()
   }
 
   function validateLeadForm(showErrors: boolean) {
@@ -732,6 +723,59 @@ const structuredData = {
     hideLeadSuccess()
   }
 
+  function createPendingPreliminaryOfferSubmission(validation: {
+    clientName: string
+    clientPhone: string
+  }): PendingPreliminaryOfferSubmission {
+    const selectedIds = currentCalculation?.selectedServiceIds ?? [...selectedServiceIds]
+    const resolvedArea = currentCalculation?.areaSqm ?? areaSqm
+    const objectComment = leadObjectInput?.value.trim() ?? ''
+
+    return {
+      idempotencyKey: submissionIdempotencyKey,
+      clientName: validation.clientName,
+      clientPhone: validation.clientPhone,
+      objectName: leadObjectName(),
+      objectComment,
+      calculation: {
+        areaSqm: resolvedArea,
+        selectedServiceIds: selectedIds,
+      },
+      offerChoice: {
+        areaSqm: resolvedArea,
+        selectedServiceIds: selectedIds,
+        projectType: selectedProjectType,
+      },
+      consentAccepted: true,
+      source: 'public_offer_preliminary',
+      referrer: window.location.href,
+      utm: readAttributionMetadata(),
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  function storePendingPreliminaryOfferSubmission(payload: PendingPreliminaryOfferSubmission) {
+    try {
+      sessionStorage.setItem(pendingPreliminaryOfferStorageKey, JSON.stringify(payload))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  function offerReadyUrl() {
+    const params = new URLSearchParams()
+    params.set('flow', 'preliminary')
+
+    for (const [key, value] of new URLSearchParams(window.location.search)) {
+      if (/^(utm_[a-z0-9_]+|gclid|yclid|fbclid)$/i.test(key)) {
+        params.set(key, value)
+      }
+    }
+
+    return `/offer-ready/?${params.toString()}`
+  }
+
   function persistOfferChoiceState(selectedFlow: 'questionnaire' | 'preliminary') {
     try {
       sessionStorage.setItem(
@@ -774,93 +818,10 @@ const structuredData = {
     submitTrigger.textContent = isSubmitting ? 'Готовлю КП...' : 'Получить коммерческое предложение'
   }
 
-  function showLeadSuccess(
-    calculation: {
-      publicToken: string
-      clientPhone: string
-      totalUsdCents: number
-      totalBynRoundedRubles: number
-      proposal:
-        | { status: 'ready'; offerNumber: string; urlPath: string; pdfUrlPath: string }
-        | { status: 'html_only'; offerNumber: string; urlPath: string }
-        | null
-      telegramDelivery: {
-        status: 'disabled' | 'pending_start' | 'sent' | 'failed'
-        deepLinkUrl: string | null
-      } | null
-    },
-    returnedExisting: boolean,
-  ) {
-    if (leadSuccess) {
-      const proposal = calculation.proposal
-      const proposalStateText =
-        proposal?.status === 'ready'
-          ? `КП ${escapeHtml(proposal.offerNumber)} готово по web-ссылке.`
-          : proposal?.status === 'html_only'
-            ? `КП ${escapeHtml(proposal.offerNumber)} доступно как страница.`
-            : 'КП сохранено.'
-      leadSuccess.hidden = false
-      leadSuccess.innerHTML = `
-        <strong>${returnedExisting ? 'Этот расчет уже сохранен' : 'Контакт сохранен'}</strong>
-        <span>Итог проверен: ${formatRubles(calculation.totalBynRoundedRubles)} ${currencyMarkup()}</span>
-        <span>Телефон сохранен как ${escapeHtml(calculation.clientPhone)}.</span>
-        <span>${proposalStateText}</span>
-        ${
-          proposal
-            ? `<div class="proposal-actions">
-                <a class="proposal-link" href="${apiBaseUrl}${escapeHtml(proposal.urlPath)}" target="_blank" rel="noopener">Открыть КП</a>
-                ${
-                  calculation.telegramDelivery?.deepLinkUrl
-                    ? `<a class="proposal-link" href="${escapeHtml(calculation.telegramDelivery.deepLinkUrl)}" target="_blank" rel="noopener">Получить в Telegram</a>`
-                    : ''
-                }
-              </div>`
-            : ''
-        }
-      `
-    }
-
-    setLeadStatus(
-      returnedExisting
-        ? 'Повторная отправка распознана: новая дубль-заявка не создана.'
-        : calculation.telegramDelivery?.deepLinkUrl
-          ? 'Заявка принята. КП готово по ссылке, Telegram доступен как дополнительный способ получения.'
-          : calculation.proposal?.status === 'ready'
-          ? 'Заявка принята. Коммерческое предложение готово по web-ссылке.'
-          : 'Заявка принята. Коммерческое предложение сохранено по ссылке.',
-      'ready',
-    )
-  }
-
   function hideLeadSuccess() {
     if (!leadSuccess) return
     leadSuccess.hidden = true
     leadSuccess.innerHTML = ''
-  }
-
-  function applyServerValidationErrors(payload: unknown) {
-    if (!payload || typeof payload !== 'object' || !('error' in payload)) return
-    const details = (payload as { error?: { details?: unknown } }).error?.details
-    if (!Array.isArray(details)) return
-
-    const phoneIssue = details.find((issue) =>
-      Array.isArray((issue as { path?: unknown }).path)
-        ? ((issue as { path: unknown[] }).path ?? []).includes('clientPhone')
-        : false,
-    )
-
-    if (phoneIssue) {
-      setFieldValidity(leadPhoneInput, leadPhoneError, false, true)
-    }
-  }
-
-  function publicSubmitErrorMessage(status: number, payload: unknown) {
-    void payload
-
-    if (status === 400) return 'Проверьте имя, телефон и согласие.'
-    if (status === 409) return 'Тарифы изменились. Вернитесь к калькулятору и повторите расчет.'
-    if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
-    return 'Не удалось подготовить КП. Попробуйте еще раз.'
   }
 
   function readAttributionMetadata() {

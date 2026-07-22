@@ -1,0 +1,930 @@
+---
+import { createPageMeta, serializeJsonLd, siteName } from '../lib/seo'
+import PublicFontLinks from '../components/PublicFontLinks.astro'
+import SiteFooter from '../components/SiteFooter.astro'
+import SiteHeader from '../components/SiteHeader.astro'
+
+const pageMeta = createPageMeta({
+  siteUrl: import.meta.env.PUBLIC_WEBSITE_URL,
+  path: '/offer-ready/',
+  title: 'Коммерческое предложение готовится - ИП Позняк',
+  description:
+    'Страница подготовки и выдачи персональной ссылки на коммерческое предложение по инженерному проекту.',
+  robots: 'noindex,nofollow',
+})
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  url: pageMeta.canonicalUrl,
+  name: pageMeta.title,
+  description: pageMeta.description,
+  inLanguage: 'ru-BY',
+  isPartOf: {
+    '@id': `${pageMeta.siteUrl}/#website`,
+  },
+}
+---
+
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <PublicFontLinks />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{pageMeta.title}</title>
+    <meta name="description" content={pageMeta.description} />
+    <meta name="robots" content={pageMeta.robots} />
+    <link rel="canonical" href={pageMeta.canonicalUrl} />
+    <meta property="og:locale" content="ru_BY" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={pageMeta.title} />
+    <meta property="og:description" content={pageMeta.description} />
+    <meta property="og:url" content={pageMeta.canonicalUrl} />
+    <meta property="og:image" content={pageMeta.imageUrl} />
+    <meta property="og:image:secure_url" content={pageMeta.imageUrl} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={pageMeta.imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageMeta.title} />
+    <meta name="twitter:description" content={pageMeta.description} />
+    <meta name="twitter:image" content={pageMeta.imageUrl} />
+    <meta name="twitter:image:alt" content={pageMeta.imageAlt} />
+    <script type="application/ld+json" is:inline set:html={serializeJsonLd(structuredData)} />
+  </head>
+  <body>
+    <SiteHeader />
+
+    <main class="ready-page">
+      <section class="ready-hero" aria-labelledby="ready-title">
+        <div class="shell ready-layout">
+          <div class="ready-copy">
+            <div class="eyebrow">Быстрое КП</div>
+            <h1 id="ready-title" data-ready-title>Ваше коммерческое предложение готовится</h1>
+            <p data-ready-copy>
+              Мы сохраняем контакт, пересчитываем выбранные разделы по актуальным тарифам
+              и формируем персональную ссылку на КП.
+            </p>
+
+            <div class="stage-list" aria-label="Статус подготовки КП">
+              <div class="stage-item is-active" data-stage="saving">
+                <span></span>
+                <strong>Контакт</strong>
+                <small>Сохраняем заявку</small>
+              </div>
+              <div class="stage-item" data-stage="recalculating">
+                <span></span>
+                <strong>Расчет</strong>
+                <small>Проверяем тарифы</small>
+              </div>
+              <div class="stage-item" data-stage="building">
+                <span></span>
+                <strong>КП</strong>
+                <small>Готовим ссылку</small>
+              </div>
+              <div class="stage-item" data-stage="ready">
+                <span></span>
+                <strong>Готово</strong>
+                <small>Можно открыть</small>
+              </div>
+            </div>
+          </div>
+
+          <aside class="result-panel" aria-label="Результат подготовки коммерческого предложения">
+            <div class="panel-state" data-panel-state>
+              <div class="spinner" aria-hidden="true"></div>
+              <strong data-status-heading>Подготовка КП</strong>
+              <p data-status-text>Обычно это занимает около 15 секунд. Оставьте вкладку открытой.</p>
+            </div>
+
+            <dl class="result-summary" data-result-summary hidden>
+              <div>
+                <dt>Номер КП</dt>
+                <dd data-offer-number>-</dd>
+              </div>
+              <div>
+                <dt>Итог по расчету</dt>
+                <dd data-offer-total>-</dd>
+              </div>
+              <div>
+                <dt>Телефон</dt>
+                <dd data-client-phone>-</dd>
+              </div>
+            </dl>
+
+            <div class="result-actions" data-result-actions hidden>
+              <a class="button primary" href="/offer/" target="_blank" rel="noopener" data-proposal-link hidden>
+                Открыть КП
+              </a>
+              <a class="button secondary" href="/offer/" target="_blank" rel="noopener" data-pdf-link hidden>
+                Скачать PDF
+              </a>
+              <a class="text-link" href="/offer/" target="_blank" rel="noopener" data-telegram-link hidden>
+                Получить в Telegram
+              </a>
+              <a class="text-link" href="/questionnaire/" data-questionnaire-link>
+                Продолжить подробный опросник
+              </a>
+            </div>
+
+            <div class="fallback-actions" data-fallback-actions hidden>
+              <a class="button primary" href="/offer/">Вернуться к форме</a>
+              <button class="button secondary" type="button" data-retry-trigger hidden>
+                Попробовать еще раз
+              </button>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <SiteFooter />
+  </body>
+</html>
+
+<script>
+  import {
+    publicCalculationSaveResponseSchema,
+    type PublicCalculationRecord,
+  } from '@poznyak-engineering-calculator/contracts'
+
+  type ProjectType = 'private' | 'apartment' | 'commercial'
+  type PendingPreliminaryOfferSubmission = {
+    idempotencyKey: string
+    clientName: string
+    clientPhone: string
+    objectName: string
+    objectComment?: string
+    calculation: {
+      areaSqm: string
+      selectedServiceIds: string[]
+    }
+    offerChoice: {
+      areaSqm: string
+      selectedServiceIds: string[]
+      projectType: ProjectType
+    }
+    consentAccepted: true
+    source: 'public_offer_preliminary'
+    referrer?: string
+    utm?: Record<string, string>
+    createdAt: string
+  }
+  type CachedOfferResult = {
+    calculation: PublicCalculationRecord
+    returnedExisting: boolean
+    submittedAt: string
+    pending: PendingPreliminaryOfferSubmission
+  }
+
+  declare global {
+    interface Window {
+      dataLayer?: Array<Record<string, unknown>>
+    }
+  }
+
+  const pendingStorageKey = 'pzk-preliminary-offer-pending-v1'
+  const resultStorageKey = 'pzk-preliminary-offer-result-v1'
+  const offerStateStorageKey = 'pzk-offer-choice-state-v1'
+  const questionnaireContactPrefillStorageKey = 'pzk-questionnaire-contact-prefill-v1'
+  const apiBaseUrl = (import.meta.env.PUBLIC_API_URL ?? '').trim().replace(/\/$/, '')
+
+  const readyTitle = document.querySelector<HTMLElement>('[data-ready-title]')
+  const readyCopy = document.querySelector<HTMLElement>('[data-ready-copy]')
+  const statusHeading = document.querySelector<HTMLElement>('[data-status-heading]')
+  const statusText = document.querySelector<HTMLElement>('[data-status-text]')
+  const panelState = document.querySelector<HTMLElement>('[data-panel-state]')
+  const resultSummary = document.querySelector<HTMLElement>('[data-result-summary]')
+  const resultActions = document.querySelector<HTMLElement>('[data-result-actions]')
+  const fallbackActions = document.querySelector<HTMLElement>('[data-fallback-actions]')
+  const retryTrigger = document.querySelector<HTMLButtonElement>('[data-retry-trigger]')
+  const offerNumber = document.querySelector<HTMLElement>('[data-offer-number]')
+  const offerTotal = document.querySelector<HTMLElement>('[data-offer-total]')
+  const clientPhone = document.querySelector<HTMLElement>('[data-client-phone]')
+  const proposalLink = document.querySelector<HTMLAnchorElement>('[data-proposal-link]')
+  const pdfLink = document.querySelector<HTMLAnchorElement>('[data-pdf-link]')
+  const telegramLink = document.querySelector<HTMLAnchorElement>('[data-telegram-link]')
+  const questionnaireLink = document.querySelector<HTMLAnchorElement>('[data-questionnaire-link]')
+
+  const numberFormatter = new Intl.NumberFormat('ru-RU')
+  let activePendingSubmission: PendingPreliminaryOfferSubmission | null = null
+  let statusTimers: number[] = []
+
+  retryTrigger?.addEventListener('click', () => {
+    if (!activePendingSubmission) return
+    void submitPendingOffer(activePendingSubmission)
+  })
+
+  bootstrap()
+
+  function bootstrap() {
+    const pending = readPendingSubmission()
+    const cachedResult = readCachedResult()
+
+    if (pending) {
+      activePendingSubmission = pending
+      storeOfferChoice(pending)
+      storeQuestionnaireContactPrefill(pending)
+      void submitPendingOffer(pending)
+      return
+    }
+
+    if (cachedResult) {
+      activePendingSubmission = cachedResult.pending
+      storeOfferChoice(cachedResult.pending)
+      storeQuestionnaireContactPrefill(cachedResult.pending)
+      renderReady(cachedResult, true)
+      return
+    }
+
+    renderMissingSubmission()
+  }
+
+  async function submitPendingOffer(pending: PendingPreliminaryOfferSubmission) {
+    if (!apiBaseUrl) {
+      renderError('Не удалось подключиться к сервису подготовки КП. Попробуйте вернуться к форме позже.')
+      return
+    }
+
+    renderLoading()
+    startStatusTimers()
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/calculations`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          idempotencyKey: pending.idempotencyKey,
+          clientName: pending.clientName,
+          clientPhone: pending.clientPhone,
+          objectName: pending.objectName,
+          calculation: pending.calculation,
+          consentAccepted: true,
+          source: pending.source,
+          referrer: pending.referrer,
+          utm: pending.utm,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(publicSubmitErrorMessage(response.status))
+      }
+
+      const parsed = publicCalculationSaveResponseSchema.parse(payload)
+      const result: CachedOfferResult = {
+        calculation: parsed.calculation,
+        returnedExisting: response.status === 200,
+        submittedAt: new Date().toISOString(),
+        pending,
+      }
+
+      storeCachedResult(result)
+      clearPendingSubmission()
+      storeQuestionnaireContactPrefill(pending)
+      renderReady(result, false)
+    } catch (error) {
+      renderError(error instanceof Error ? error.message : 'Не удалось подготовить КП. Попробуйте еще раз.')
+    } finally {
+      clearStatusTimers()
+    }
+  }
+
+  function renderLoading() {
+    setStage('saving')
+    setText(
+      'Ваше коммерческое предложение готовится',
+      'Мы сохраняем контакт, пересчитываем выбранные разделы по актуальным тарифам и формируем персональную ссылку на КП.',
+    )
+    setPanelState('loading', 'Подготовка КП', 'Обычно это занимает около 15 секунд. Оставьте вкладку открытой.')
+    if (resultSummary) resultSummary.hidden = true
+    if (resultActions) resultActions.hidden = true
+    if (fallbackActions) fallbackActions.hidden = true
+    if (retryTrigger) retryTrigger.hidden = true
+  }
+
+  function renderReady(result: CachedOfferResult, fromCache: boolean) {
+    const proposal = result.calculation.proposal
+    setStage('ready')
+    setText(
+      'Ваше КП готово',
+      fromCache
+        ? 'Ссылка на коммерческое предложение уже была сформирована. Можно открыть КП или продолжить подробный опросник.'
+        : 'Контакт сохранен, расчет проверен, персональная ссылка на КП готова.',
+    )
+    setPanelState(
+      'ready',
+      result.returnedExisting ? 'Этот расчет уже сохранен' : 'КП готово',
+      result.returnedExisting
+        ? 'Повторная отправка распознана, новая дубль-заявка не создана.'
+        : 'Откройте страницу КП или PDF в удобном формате.',
+    )
+
+    if (offerNumber) offerNumber.textContent = proposal?.offerNumber ?? 'КП сохранено'
+    if (offerTotal) offerTotal.textContent = `${numberFormatter.format(result.calculation.totalBynRoundedRubles)} BYN`
+    if (clientPhone) clientPhone.textContent = result.calculation.clientPhone
+    if (resultSummary) resultSummary.hidden = false
+
+    if (proposalLink) {
+      proposalLink.hidden = !proposal
+      if (proposal) proposalLink.href = `${apiBaseUrl}${proposal.urlPath}`
+    }
+    if (pdfLink) {
+      if (proposal?.status === 'ready') {
+        pdfLink.href = `${apiBaseUrl}${proposal.pdfUrlPath}`
+        pdfLink.hidden = false
+      } else {
+        pdfLink.hidden = true
+      }
+    }
+    if (telegramLink) {
+      const deepLinkUrl = result.calculation.telegramDelivery?.deepLinkUrl
+      telegramLink.hidden = !deepLinkUrl
+      if (deepLinkUrl) telegramLink.href = deepLinkUrl
+    }
+    if (questionnaireLink) {
+      questionnaireLink.href = buildQuestionnaireUrl(result.pending)
+    }
+    if (resultActions) resultActions.hidden = false
+    if (fallbackActions) fallbackActions.hidden = true
+
+    window.dataLayer?.push({
+      event: 'public_offer_preliminary_ready',
+      offer_number: proposal?.offerNumber ?? null,
+      lead_public_token: result.calculation.publicToken,
+      value_byn: result.calculation.totalBynRoundedRubles,
+      returned_existing: result.returnedExisting,
+    })
+  }
+
+  function renderError(message: string) {
+    setStage('building')
+    setText(
+      'КП не удалось подготовить автоматически',
+      'Контакт не потерян в этой вкладке. Можно повторить отправку или вернуться к форме и проверить данные.',
+    )
+    setPanelState('error', 'Нужна повторная попытка', message)
+    if (resultSummary) resultSummary.hidden = true
+    if (resultActions) resultActions.hidden = true
+    if (fallbackActions) fallbackActions.hidden = false
+    if (retryTrigger) retryTrigger.hidden = false
+  }
+
+  function renderMissingSubmission() {
+    setStage('saving')
+    setText(
+      'Заявка на КП не найдена',
+      'Эта страница открывается после отправки формы быстрого КП. Вернитесь к расчету и отправьте контакт еще раз.',
+    )
+    setPanelState('error', 'Нет данных формы', 'Мы не нашли сохраненный черновик отправки в этой вкладке.')
+    if (resultSummary) resultSummary.hidden = true
+    if (resultActions) resultActions.hidden = true
+    if (fallbackActions) fallbackActions.hidden = false
+    if (retryTrigger) retryTrigger.hidden = true
+  }
+
+  function setText(title: string, copy: string) {
+    if (readyTitle) readyTitle.textContent = title
+    if (readyCopy) readyCopy.textContent = copy
+  }
+
+  function setPanelState(state: 'loading' | 'ready' | 'error', heading: string, text: string) {
+    if (panelState) panelState.dataset.state = state
+    if (statusHeading) statusHeading.textContent = heading
+    if (statusText) statusText.textContent = text
+  }
+
+  function setStage(stage: 'saving' | 'recalculating' | 'building' | 'ready') {
+    const stages = ['saving', 'recalculating', 'building', 'ready']
+    const currentIndex = stages.indexOf(stage)
+    document.querySelectorAll<HTMLElement>('[data-stage]').forEach((item) => {
+      const itemIndex = stages.indexOf(item.dataset.stage ?? '')
+      item.classList.toggle('is-active', itemIndex === currentIndex)
+      item.classList.toggle('is-complete', itemIndex > -1 && itemIndex < currentIndex)
+    })
+  }
+
+  function startStatusTimers() {
+    clearStatusTimers()
+    statusTimers = [
+      window.setTimeout(() => {
+        setStage('recalculating')
+        setPanelState('loading', 'Проверяем тарифы', 'Сверяем выбранные разделы и актуальный курс для расчета в BYN.')
+      }, 1_200),
+      window.setTimeout(() => {
+        setStage('building')
+        setPanelState('loading', 'Формируем КП', 'Собираем страницу КП и PDF-файл по сохраненному расчету.')
+      }, 6_000),
+      window.setTimeout(() => {
+        setPanelState('loading', 'Почти готово', 'Файл может готовиться чуть дольше обычного, ссылка появится автоматически.')
+      }, 14_000),
+    ]
+  }
+
+  function clearStatusTimers() {
+    statusTimers.forEach((timer) => window.clearTimeout(timer))
+    statusTimers = []
+  }
+
+  function readPendingSubmission(): PendingPreliminaryOfferSubmission | null {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(pendingStorageKey) ?? 'null') as unknown
+      if (!isPendingSubmission(parsed)) return null
+      const createdAt = new Date(parsed.createdAt).getTime()
+      if (!Number.isFinite(createdAt) || Date.now() - createdAt > 60 * 60 * 1_000) {
+        clearPendingSubmission()
+        return null
+      }
+      return parsed
+    } catch {
+      return null
+    }
+  }
+
+  function isPendingSubmission(value: unknown): value is PendingPreliminaryOfferSubmission {
+    if (!value || typeof value !== 'object') return false
+    const record = value as PendingPreliminaryOfferSubmission
+    return (
+      typeof record.idempotencyKey === 'string' &&
+      typeof record.clientName === 'string' &&
+      typeof record.clientPhone === 'string' &&
+      typeof record.objectName === 'string' &&
+      record.consentAccepted === true &&
+      record.source === 'public_offer_preliminary' &&
+      typeof record.calculation?.areaSqm === 'string' &&
+      Array.isArray(record.calculation.selectedServiceIds) &&
+      typeof record.offerChoice?.areaSqm === 'string' &&
+      Array.isArray(record.offerChoice.selectedServiceIds) &&
+      isProjectType(record.offerChoice.projectType) &&
+      typeof record.createdAt === 'string'
+    )
+  }
+
+  function readCachedResult(): CachedOfferResult | null {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(resultStorageKey) ?? 'null') as CachedOfferResult | null
+      if (!parsed?.pending || !isPendingSubmission(parsed.pending)) return null
+      const calculation = publicCalculationSaveResponseSchema.parse({ calculation: parsed.calculation }).calculation
+      return {
+        calculation,
+        returnedExisting: parsed.returnedExisting === true,
+        submittedAt: typeof parsed.submittedAt === 'string' ? parsed.submittedAt : new Date().toISOString(),
+        pending: parsed.pending,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function storeCachedResult(result: CachedOfferResult) {
+    try {
+      sessionStorage.setItem(resultStorageKey, JSON.stringify(result))
+    } catch {
+      // Reload recovery is helpful, but the visible ready state is enough.
+    }
+  }
+
+  function clearPendingSubmission() {
+    try {
+      sessionStorage.removeItem(pendingStorageKey)
+    } catch {
+      // Nothing to clear.
+    }
+  }
+
+  function storeOfferChoice(pending: PendingPreliminaryOfferSubmission) {
+    try {
+      sessionStorage.setItem(
+        offerStateStorageKey,
+        JSON.stringify({
+          areaSqm: pending.offerChoice.areaSqm,
+          selectedServiceIds: pending.offerChoice.selectedServiceIds,
+          projectType: pending.offerChoice.projectType,
+          selectedFlow: 'preliminary',
+          savedAt: new Date().toISOString(),
+        }),
+      )
+    } catch {
+      // The result page still works without restoring calculator context.
+    }
+  }
+
+  function storeQuestionnaireContactPrefill(pending: PendingPreliminaryOfferSubmission) {
+    try {
+      sessionStorage.setItem(
+        questionnaireContactPrefillStorageKey,
+        JSON.stringify({
+          clientName: pending.clientName,
+          clientPhone: pending.clientPhone,
+          objectName: pending.objectComment ?? '',
+          savedAt: new Date().toISOString(),
+        }),
+      )
+    } catch {
+      // Prefill is a convenience only.
+    }
+  }
+
+  function buildQuestionnaireUrl(pending: PendingPreliminaryOfferSubmission) {
+    const params = new URLSearchParams()
+    params.set('area', pending.offerChoice.areaSqm)
+    params.set('services', pending.offerChoice.selectedServiceIds.join(','))
+    params.set('type', pending.offerChoice.projectType)
+
+    for (const [key, value] of new URLSearchParams(window.location.search)) {
+      if (/^(utm_[a-z0-9_]+|gclid|yclid|fbclid)$/i.test(key)) {
+        params.set(key, value)
+      }
+    }
+
+    return `/questionnaire/?${params.toString()}`
+  }
+
+  function isProjectType(value: unknown): value is ProjectType {
+    return value === 'private' || value === 'apartment' || value === 'commercial'
+  }
+
+  function publicSubmitErrorMessage(status: number) {
+    if (status === 400) return 'Проверьте имя, телефон и согласие на форме.'
+    if (status === 409) return 'Тарифы изменились. Вернитесь к калькулятору и повторите расчет.'
+    if (status === 429) return 'Слишком много отправок подряд. Попробуйте немного позже.'
+    return 'Не удалось подготовить КП. Попробуйте еще раз.'
+  }
+</script>
+
+<style is:global>
+  :root {
+    color-scheme: light;
+    --navy: #081a2f;
+    --navy-2: #0d2b4c;
+    --blue: #0b5fb5;
+    --blue-2: #084d93;
+    --blue-soft: #edf5fc;
+    --ink: #102033;
+    --body: #4d5b6a;
+    --muted: #7a8794;
+    --line: #dbe3eb;
+    --line-strong: #c5d0db;
+    --surface: #ffffff;
+    --danger: #b6401a;
+    --success: #0b5f46;
+    --success-soft: #eaf7f1;
+    --shadow: 0 18px 50px rgba(16, 32, 51, 0.1);
+    --shell: 1160px;
+    --font-body: Inter, "Segoe UI", Arial, sans-serif;
+    --font-heading: Nunito, Inter, "Segoe UI", Arial, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  h1,
+  p,
+  dl,
+  dd {
+    margin: 0;
+  }
+
+  h1 {
+    font-family: var(--font-heading);
+    letter-spacing: 0;
+  }
+
+  .shell {
+    width: min(var(--shell), calc(100% - 48px));
+    margin-inline: auto;
+  }
+
+  .ready-page {
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.82)),
+      url("/landing-v4/project-preview-spec-10.jpg") center / cover;
+  }
+
+  .ready-hero {
+    min-height: calc(100dvh - 74px);
+    display: grid;
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    padding: clamp(46px, 7vw, 82px) 0;
+  }
+
+  .ready-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
+    gap: clamp(36px, 6vw, 72px);
+    align-items: center;
+  }
+
+  .eyebrow {
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    max-width: 690px;
+    margin-top: 14px;
+    font-size: clamp(36px, 4vw, 58px);
+    line-height: 1.04;
+    font-weight: 850;
+  }
+
+  .ready-copy p {
+    max-width: 650px;
+    margin-top: 20px;
+    color: var(--body);
+    font-size: 18px;
+  }
+
+  .stage-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 34px;
+  }
+
+  .stage-item {
+    min-width: 0;
+    border: 1px solid rgba(219, 227, 235, 0.9);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.82);
+    padding: 13px 12px;
+  }
+
+  .stage-item span {
+    width: 14px;
+    height: 14px;
+    display: block;
+    border: 2px solid var(--line-strong);
+    border-radius: 50%;
+    background: #ffffff;
+  }
+
+  .stage-item strong,
+  .stage-item small {
+    display: block;
+  }
+
+  .stage-item strong {
+    margin-top: 10px;
+    color: var(--navy);
+    font-size: 13px;
+    font-weight: 850;
+  }
+
+  .stage-item small {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .stage-item.is-active {
+    border-color: rgba(11, 95, 181, 0.36);
+    background: var(--blue-soft);
+  }
+
+  .stage-item.is-active span {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 5px rgba(11, 95, 181, 0.1);
+  }
+
+  .stage-item.is-complete span {
+    border-color: var(--success);
+    background: var(--success);
+  }
+
+  .result-panel {
+    display: grid;
+    gap: 18px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+
+  .panel-state {
+    display: grid;
+    gap: 8px;
+    border: 1px solid rgba(11, 95, 181, 0.18);
+    border-radius: 12px;
+    background: var(--blue-soft);
+    padding: 18px;
+  }
+
+  .panel-state[data-state="ready"] {
+    border-color: rgba(11, 95, 70, 0.2);
+    background: var(--success-soft);
+  }
+
+  .panel-state[data-state="error"] {
+    border-color: rgba(182, 64, 26, 0.24);
+    background: #fff8f4;
+  }
+
+  .spinner {
+    width: 34px;
+    height: 34px;
+    border: 3px solid rgba(11, 95, 181, 0.14);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+
+  .panel-state[data-state="ready"] .spinner {
+    border-color: var(--success);
+    background: var(--success);
+    animation: none;
+  }
+
+  .panel-state[data-state="error"] .spinner {
+    border-color: var(--danger);
+    background: transparent;
+    animation: none;
+  }
+
+  .panel-state strong {
+    color: var(--navy);
+    font-family: var(--font-heading);
+    font-size: 22px;
+    line-height: 1.15;
+    font-weight: 850;
+  }
+
+  .panel-state p {
+    color: var(--body);
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .result-summary {
+    overflow: hidden;
+    display: grid;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+
+  .result-summary div {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 13px 14px;
+  }
+
+  .result-summary div + div {
+    border-top: 1px solid var(--line);
+  }
+
+  dt {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  dd {
+    overflow-wrap: anywhere;
+    color: var(--navy);
+    font-weight: 850;
+  }
+
+  .result-actions,
+  .fallback-actions {
+    display: grid;
+    gap: 10px;
+  }
+
+  .button {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 18px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: center;
+    transition: 0.18s ease;
+  }
+
+  .button.primary {
+    background: var(--blue);
+    color: #ffffff;
+    box-shadow: 0 10px 26px rgba(11, 95, 181, 0.16);
+  }
+
+  .button.primary:hover {
+    background: var(--blue-2);
+  }
+
+  .button.secondary {
+    border-color: var(--line-strong);
+    background: #ffffff;
+    color: var(--ink);
+  }
+
+  .button.secondary:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  .text-link {
+    width: fit-content;
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 850;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .button:focus-visible,
+  .text-link:focus-visible {
+    outline: 3px solid rgba(11, 95, 181, 0.35);
+    outline-offset: 2px;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .ready-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .stage-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .shell {
+      width: min(100% - 28px, var(--shell));
+    }
+
+    .ready-hero {
+      min-height: auto;
+      padding: 42px 0;
+    }
+
+    h1 {
+      font-size: clamp(29px, 9vw, 38px);
+    }
+
+    .ready-copy p {
+      font-size: 15px;
+    }
+
+    .stage-list,
+    .result-summary div {
+      grid-template-columns: 1fr;
+    }
+
+    .result-panel {
+      padding: 18px;
+    }
+  }
+</style>
