@@ -528,8 +528,9 @@ test('ApiClient sends authenticated questionnaire definition requests', async ()
     edits: [
       {
         target: 'question',
-        questionId: 'OBJ_DOCS',
-        prompt: 'Какие материалы по дому уже есть?',
+        questionId: 'client_email',
+        prompt: 'Контактный email',
+        answerType: 'text',
       },
     ],
   })
@@ -546,8 +547,9 @@ test('ApiClient sends authenticated questionnaire definition requests', async ()
     edits: [
       {
         target: 'question',
-        questionId: 'OBJ_DOCS',
-        prompt: 'Какие материалы по дому уже есть?',
+        questionId: 'client_email',
+        prompt: 'Контактный email',
+        answerType: 'text',
       },
     ],
   })

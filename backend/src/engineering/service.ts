@@ -2693,6 +2693,10 @@ function applyQuestionnaireDefinitionTextEdits(
       if (!question) throw new AppError(404, 'NOT_FOUND', 'Questionnaire question not found')
       if (edit.prompt !== undefined) question.prompt = edit.prompt
       if (edit.isEnabled !== undefined) question.isEnabled = edit.isEnabled
+      if (edit.answerType !== undefined) {
+        assertQuestionnaireAnswerTypeEditAllowed(question, edit.answerType)
+        question.answerType = edit.answerType
+      }
       continue
     }
 
@@ -2737,6 +2741,49 @@ function applyQuestionnaireDefinitionTextEdits(
   return questionnaireDefinitionSchema.parse(next)
 }
 
+function assertQuestionnaireAnswerTypeEditAllowed(
+  question: { options?: readonly unknown[] },
+  answerType: 'single_option' | 'text' | 'number',
+) {
+  const hasOptions = Boolean(question.options?.length)
+
+  if (hasOptions && answerType !== 'single_option') {
+    throw new AppError(
+      400,
+      'BAD_REQUEST',
+      'Questions with existing options can only use the single option type in this editor version',
+    )
+  }
+
+  if (!hasOptions && answerType === 'single_option') {
+    throw new AppError(
+      400,
+      'BAD_REQUEST',
+      'Single option type requires existing option ids and must be created in a versioned migration',
+    )
+  }
+}
+
+function assertQuestionnaireAnswerTypeIsCoherent(question: { options?: readonly unknown[]; answerType?: string }) {
+  const hasOptions = Boolean(question.options?.length)
+
+  if (hasOptions && question.answerType && question.answerType !== 'single_option') {
+    throw new AppError(
+      400,
+      'BAD_REQUEST',
+      'Questions with existing options can only use the single option type in this editor version',
+    )
+  }
+
+  if (!hasOptions && question.answerType === 'single_option') {
+    throw new AppError(
+      400,
+      'BAD_REQUEST',
+      'Single option type requires existing option ids and must be created in a versioned migration',
+    )
+  }
+}
+
 function assertQuestionnaireDefinitionPublishable(definition: QuestionnaireDefinition) {
   const publicDefinition = getQuestionnairePublicDefinition(definition)
   const startingQuestions = getQuestionnaireActiveQuestions([], publicDefinition)
@@ -2751,6 +2798,7 @@ function assertQuestionnaireDefinitionPublishable(definition: QuestionnaireDefin
 
   for (const section of definition.sections.filter((item) => item.isEnabled !== false)) {
     for (const question of section.questions.filter((item) => item.isEnabled !== false && !item.isLegacy)) {
+      assertQuestionnaireAnswerTypeIsCoherent(question)
       if ((question.options?.length ?? 0) > 0 && !question.options?.some((option) => option.isEnabled !== false)) {
         throw new AppError(
           400,

@@ -107,6 +107,11 @@ async function exerciseQuestionnaireControls(page: Page) {
   await enableQuestion.click()
   await expect(page.getByRole('switch', { name: 'Отключить вопрос client_email' }).first()).toBeVisible()
 
+  await page.getByLabel('Тип вопроса').selectOption('number')
+  await expect(page.getByLabel('Тип вопроса')).toHaveValue('number')
+  await page.getByLabel('Тип вопроса').selectOption('text')
+  await expect(page.getByLabel('Тип вопроса')).toHaveValue('text')
+
   await page.getByRole('button', { name: 'Опустить вопрос client_email' }).click()
   await expect(page.getByRole('button', { name: 'Поднять вопрос client_email' })).toBeEnabled()
   await page.getByRole('button', { name: 'Поднять вопрос client_email' }).click()

@@ -2170,6 +2170,11 @@ maybeDescribe('engineering API integration', () => {
             prompt: editedQuestionPrompt,
           },
           {
+            target: 'question',
+            questionId: 'client_email',
+            answerType: 'number',
+          },
+          {
             target: 'option',
             questionId: 'OBJ_DOCS',
             optionId: 'PARTIAL',
@@ -2180,6 +2185,20 @@ maybeDescribe('engineering API integration', () => {
       }),
     })
     const patchBody = await patch.json()
+    const blockedQuestionTypePatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: patchBody.questionnaireDefinition.definitionHash,
+        edits: [
+          {
+            target: 'question',
+            questionId: 'OBJ_DOCS',
+            answerType: 'text',
+          },
+        ],
+      }),
+    })
     const blockedBranchPatch = await app.request('/api/admin/questionnaire-definition', {
       method: 'PATCH',
       headers: jsonAuthHeaders(accessToken),
@@ -2356,10 +2375,12 @@ maybeDescribe('engineering API integration', () => {
     expect(patchBody.questionnaireDefinition.status).toBe('published')
     expect(definitionSectionTitle(patchBody.questionnaireDefinition, 'object_source')).toBe(editedSectionTitle)
     expect(definitionQuestionPrompt(patchBody.questionnaireDefinition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
+    expect(definitionQuestion(patchBody.questionnaireDefinition, 'client_email')?.answerType).toBe('number')
     expect(definitionOption(patchBody.questionnaireDefinition, 'OBJ_DOCS', 'PARTIAL')).toMatchObject({
       label: editedOptionLabel,
       hint: editedOptionHint,
     })
+    expect(blockedQuestionTypePatch.status).toBe(400)
     expect(blockedBranchPatch.status).toBe(400)
     expect(missingEdit.status).toBe(404)
     expect(orderAndEnablementPatch.status).toBe(200)
@@ -3145,9 +3166,13 @@ function definitionSection(definition: QuestionnaireDefinitionRecord, sectionId:
 }
 
 function definitionQuestionPrompt(definition: QuestionnaireDefinitionRecord, questionId: string) {
+  return definitionQuestion(definition, questionId)?.prompt ?? null
+}
+
+function definitionQuestion(definition: QuestionnaireDefinitionRecord, questionId: string) {
   return definition.sections
     .flatMap((section) => section.questions)
-    .find((question) => question.id === questionId)?.prompt ?? null
+    .find((question) => question.id === questionId) ?? null
 }
 
 function definitionOption(

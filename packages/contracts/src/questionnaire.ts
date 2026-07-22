@@ -16,6 +16,7 @@ export type QuestionnaireQuestion = {
   id: string
   prompt: string
   sourceRow: number
+  answerType?: QuestionnaireQuestionAnswerType
   options?: readonly QuestionnaireOption[]
   showIf?: QuestionnaireVisibilityRule
   isLegacy?: boolean
@@ -59,6 +60,7 @@ export type QuestionnaireVisibilityRule =
     }
 
 export type QuestionnaireDefinitionStatus = 'published' | 'static_fallback'
+export type QuestionnaireQuestionAnswerType = z.infer<typeof questionnaireQuestionAnswerTypeSchema>
 
 const yesNoOptions = [
   { id: 'yes', label: 'да' },
@@ -74,6 +76,7 @@ const yesNoUnknownOptions = [
 const questionnaireIdSchema = z.string().trim().min(1).max(120)
 const questionnaireTextSchema = (max: number) => z.string().trim().min(1).max(max)
 const optionalQuestionnaireHintSchema = z.union([questionnaireTextSchema(500), z.null()])
+export const questionnaireQuestionAnswerTypeSchema = z.enum(['single_option', 'text', 'number'])
 
 export const questionnaireVisibilityRuleSchema: z.ZodType<QuestionnaireVisibilityRule> = z.lazy(() =>
   z.union([
@@ -105,11 +108,29 @@ export const questionnaireQuestionSchema = z.object({
   id: questionnaireIdSchema,
   prompt: questionnaireTextSchema(700),
   sourceRow: z.number().int().positive(),
+  answerType: questionnaireQuestionAnswerTypeSchema.optional(),
   options: z.array(questionnaireOptionSchema).optional(),
   showIf: questionnaireVisibilityRuleSchema.optional(),
   isLegacy: z.boolean().optional(),
   isEnabled: z.boolean().optional(),
-}).strict()
+}).strict().superRefine((value, context) => {
+  const hasOptions = Boolean(value.options?.length)
+  if (hasOptions && value.answerType && value.answerType !== 'single_option') {
+    context.addIssue({
+      code: 'custom',
+      path: ['answerType'],
+      message: 'Questions with options must keep single_option answerType',
+    })
+  }
+
+  if (!hasOptions && value.answerType === 'single_option') {
+    context.addIssue({
+      code: 'custom',
+      path: ['answerType'],
+      message: 'single_option answerType requires existing options',
+    })
+  }
+})
 
 export const questionnaireSectionSchema = z.object({
   id: questionnaireIdSchema,
@@ -152,9 +173,10 @@ const questionnaireQuestionPromptEditSchema = z.object({
   questionId: questionnaireIdSchema,
   prompt: questionnaireTextSchema(700).optional(),
   isEnabled: z.boolean().optional(),
+  answerType: questionnaireQuestionAnswerTypeSchema.optional(),
 }).strict().refine(
-  (value) => value.prompt !== undefined || value.isEnabled !== undefined,
-  'At least prompt or isEnabled is required',
+  (value) => value.prompt !== undefined || value.isEnabled !== undefined || value.answerType !== undefined,
+  'At least prompt, isEnabled, or answerType is required',
 )
 
 const questionnaireOptionTextEditSchema = z.object({
@@ -1436,6 +1458,12 @@ export function getQuestionnaireQuestion(
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
 ) {
   return getQuestionnaireDefinitionQuestions(definition).find((question) => question.id === questionId) ?? null
+}
+
+export function getQuestionnaireQuestionAnswerType(question: QuestionnaireQuestion): QuestionnaireQuestionAnswerType {
+  if ((question.options ?? []).length > 0) return 'single_option'
+  if (question.answerType) return question.answerType
+  return question.id.toLowerCase().includes('area') ? 'number' : 'text'
 }
 
 export function getQuestionnairePublicDefinition(

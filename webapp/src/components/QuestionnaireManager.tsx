@@ -15,9 +15,11 @@ import type {
   QuestionnaireDefinitionTextEdit,
   QuestionnaireOption,
   QuestionnaireQuestion,
+  QuestionnaireQuestionAnswerType,
   QuestionnaireSection,
   QuestionnaireVisibilityRule,
 } from '@poznyak-engineering-calculator/contracts'
+import { getQuestionnaireQuestionAnswerType } from '@poznyak-engineering-calculator/contracts'
 import { type DragEvent, type FormEvent, type PointerEvent, useMemo, useRef, useState } from 'react'
 
 import {
@@ -935,7 +937,7 @@ function QuestionPromptEditor({
           <FieldLabel htmlFor={`question-id-${question.id}`}>ID вопроса</FieldLabel>
           <Input id={`question-id-${question.id}`} value={question.id} disabled readOnly />
         </Field>
-        <QuestionTypeField question={question} />
+        <QuestionTypeField question={question} isSaving={isSaving} onSave={onSave} />
       </div>
 
       <Field>
@@ -959,9 +961,25 @@ function QuestionPromptEditor({
   )
 }
 
-function QuestionTypeField({ question }: { question: QuestionnaireQuestion }) {
+function QuestionTypeField({
+  question,
+  isSaving,
+  onSave,
+}: {
+  question: QuestionnaireQuestion
+  isSaving: boolean
+  onSave: SaveDefinitionEdit
+}) {
   const type = questionTypeKind(question)
   const hintId = `question-type-hint-${question.id}`
+  const hasOptions = (question.options ?? []).length > 0
+  const canEditType = !hasOptions
+
+  async function changeType(value: string) {
+    const answerType = value as QuestionnaireQuestionAnswerType
+    if (!canEditType || answerType === type || answerType === 'single_option') return
+    await onSave({ target: 'question', questionId: question.id, answerType })
+  }
 
   return (
     <Field>
@@ -970,16 +988,21 @@ function QuestionTypeField({ question }: { question: QuestionnaireQuestion }) {
         className="admin-qb-select"
         id={`question-type-${question.id}`}
         value={type}
-        disabled
+        disabled={isSaving || !canEditType}
         aria-describedby={hintId}
-        title="Изменение типа требует новой версии опросника и миграции старых ответов"
+        title={canEditType
+          ? 'Можно переключать текстовый и числовой ответ'
+          : 'Изменение option-вопроса требует новой версии и миграции ветвлений'}
+        onChange={(event) => void changeType(event.currentTarget.value)}
       >
-        <option value="single_option">Один вариант</option>
+        <option value="single_option" disabled={!hasOptions}>Один вариант</option>
         <option value="number">Число</option>
         <option value="text">Свободный ответ</option>
       </select>
       <Typography id={hintId} variant="caption" tone="muted">
-        Тип зафиксирован текущей версией, чтобы старые ответы и ветвления не поменяли смысл.
+        {canEditType
+          ? 'Можно менять между текстом и числом. Варианты ответа создаются отдельной версией.'
+          : 'У вопроса уже есть option IDs, поэтому тип защищен от случайной поломки ветвлений.'}
       </Typography>
     </Field>
   )
@@ -1220,9 +1243,7 @@ function questionTypeLabel(question: QuestionnaireQuestion) {
 }
 
 function questionTypeKind(question: QuestionnaireQuestion) {
-  if ((question.options ?? []).length > 0) return 'single_option'
-  if (question.id.toLowerCase().includes('area')) return 'number'
-  return 'text'
+  return getQuestionnaireQuestionAnswerType(question)
 }
 
 function definitionStats(record: QuestionnaireDefinitionRecord) {

@@ -6,6 +6,7 @@ import {
   getQuestionnaireActiveOptions,
   getQuestionnaireActiveQuestions,
   getQuestionnairePublicDefinition,
+  getQuestionnaireQuestionAnswerType,
   markQuestionnaireAnswersActivity,
   questionnaireAnswersPatchRequestSchema,
   questionnaireDefinitionPatchRequestSchema,
@@ -72,9 +73,10 @@ describe('technical questionnaire contracts', () => {
         },
         {
           target: 'question',
-          questionId: 'OBJ_DOCS',
-          prompt: 'Какие материалы по дому уже есть?',
+          questionId: 'client_email',
+          prompt: 'Электронная почта для связи',
           isEnabled: true,
+          answerType: 'text',
         },
         {
           target: 'option',
@@ -103,6 +105,9 @@ describe('technical questionnaire contracts', () => {
 
     expect(record.status).toBe('static_fallback')
     expect(edit.edits).toHaveLength(6)
+    expect(getQuestionnaireQuestionAnswerType(questionById.get('OBJ_DOCS')!)).toBe('single_option')
+    expect(getQuestionnaireQuestionAnswerType(questionById.get('client_email')!)).toBe('text')
+    expect(getQuestionnaireQuestionAnswerType(questionById.get('total_area')!)).toBe('number')
     expect(() =>
       questionnaireDefinitionPatchRequestSchema.parse({
         baseDefinitionHash: record.definitionHash,

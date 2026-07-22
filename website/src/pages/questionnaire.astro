@@ -311,7 +311,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
               </p>
               <div class="option-grid" data-option-list></div>
               <label class="custom-answer" for="custom-answer">
-                <span>Если нужно, уточните</span>
+                <span data-custom-answer-label>Если нужно, уточните</span>
                 <textarea
                   id="custom-answer"
                   data-custom-answer
@@ -435,6 +435,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     getQuestionnaireActiveOptions,
     getQuestionnaireActiveQuestions,
     getQuestionnaireActiveSections,
+    getQuestionnaireQuestionAnswerType,
     publicCalculatorConfigResponseSchema,
     publicQuestionnaireDefinitionResponseSchema,
     publicQuestionnaireSessionResponseSchema,
@@ -524,6 +525,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const skippedNote = document.querySelector<HTMLElement>('[data-skipped-note]')
   const optionList = document.querySelector<HTMLElement>('[data-option-list]')
   const customAnswer = document.querySelector<HTMLTextAreaElement>('[data-custom-answer]')
+  const customAnswerLabelText = document.querySelector<HTMLElement>('[data-custom-answer-label]')
   const answerSkipped = document.querySelector<HTMLButtonElement>('[data-answer-skipped]')
   const prevQuestion = document.querySelector<HTMLButtonElement>('[data-prev-question]')
   const nextQuestion = document.querySelector<HTMLButtonElement>('[data-next-question]')
@@ -1052,6 +1054,8 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     const section = currentSection()
     const answer = answersByQuestionId().get(question.id)
     const draftOptionId = draftOptionByQuestionId.get(question.id)
+    const answerType = getQuestionnaireQuestionAnswerType(question)
+    const options = visibleQuestionOptions(question)
     questionCard.hidden = false
     if (questionTitle) questionTitle.textContent = question.prompt
     if (questionMeta) {
@@ -1069,11 +1073,22 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     if (skippedNote) skippedNote.hidden = answer?.kind !== 'skipped'
     if (customAnswer) {
       customAnswer.value = answer?.kind === 'custom' ? answer.customText ?? '' : ''
+      customAnswer.inputMode = answerType === 'number' ? 'decimal' : 'text'
+      customAnswer.maxLength = answerType === 'number' ? 40 : 2000
+      customAnswer.placeholder = answerType === 'number'
+        ? 'Например: 180 или 180,5'
+        : 'Например: какие работы уже выполнены, какие решения еще можно изменить'
       customAnswer.removeAttribute('aria-invalid')
+    }
+    if (customAnswerLabelText) {
+      customAnswerLabelText.textContent = answerType === 'number'
+        ? 'Введите число'
+        : options.length > 0
+          ? 'Если нужно, уточните'
+          : 'Ваш ответ'
     }
 
     if (optionList) {
-      const options = visibleQuestionOptions(question)
       optionList.innerHTML = options.length
         ? options
           .map(
@@ -1094,7 +1109,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
             `,
           )
           .join('')
-        : '<p class="empty-options">Для этого вопроса нужен короткий текстовый ответ.</p>'
+        : answerType === 'number'
+          ? '<p class="empty-options">Для этого вопроса нужно числовое значение.</p>'
+          : '<p class="empty-options">Для этого вопроса нужен короткий текстовый ответ.</p>'
 
       optionList.querySelectorAll<HTMLButtonElement>('button[data-option-id]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -1171,6 +1188,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     const draftOptionId = draftOptionByQuestionId.get(question.id)
     const text = customAnswer?.value.trim() ?? ''
     const existingAnswer = answersByQuestionId().get(question.id)
+    const answerType = getQuestionnaireQuestionAnswerType(question)
 
     if (draftOptionId) {
       await saveAnswer({
@@ -1182,11 +1200,18 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     if (text) {
+      const customText = answerType === 'number' ? parseQuestionnaireNumber(text) : text
+      if (!customText) {
+        setWizardStatus('Введите число, например 180 или 180,5.', 'error')
+        customAnswer?.setAttribute('aria-invalid', 'true')
+        return
+      }
+
       customAnswer?.removeAttribute('aria-invalid')
       await saveAnswer({
         questionId: question.id,
         kind: 'custom',
-        customText: text,
+        customText,
       }, { advance: true })
       return
     }
@@ -1197,7 +1222,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       return
     }
 
-    setWizardStatus('Выберите вариант, введите свой ответ или нажмите «Пропустить».', 'error')
+    setWizardStatus(
+      answerType === 'number'
+        ? 'Введите число или нажмите «Пропустить».'
+        : 'Выберите вариант, введите свой ответ или нажмите «Пропустить».',
+      'error',
+    )
     customAnswer?.setAttribute('aria-invalid', 'true')
   }
 
@@ -1346,6 +1376,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     return { valid: true, canonical }
+  }
+
+  function parseQuestionnaireNumber(value: string) {
+    const canonical = value.trim().replace(',', '.')
+    if (!/^-?(?:0|[1-9]\d{0,7})(?:\.\d{1,3})?$/.test(canonical)) return null
+    return canonical
   }
 
   async function loadPublicQuestionnaireDefinition() {
