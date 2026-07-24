@@ -15,13 +15,14 @@ import type {
   QuestionnaireDefinitionRecord,
   QuestionnaireDefinitionTextEdit,
   QuestionnaireOption,
+  QuestionnaireProjectType,
   QuestionnaireQuestion,
   QuestionnaireQuestionAnswerType,
   QuestionnaireSection,
   QuestionnaireVisibilityRule,
 } from '@poznyak-engineering-calculator/contracts'
 import { getQuestionnaireQuestionAnswerType } from '@poznyak-engineering-calculator/contracts'
-import { type DragEvent, type FormEvent, type PointerEvent, useMemo, useRef, useState } from 'react'
+import { type DragEvent, type FormEvent, type KeyboardEvent, type PointerEvent, useMemo, useRef, useState } from 'react'
 
 import {
   ErrorBlock,
@@ -45,11 +46,47 @@ import { useAuth } from '@/lib/use-auth'
 import { cn } from '@/lib/utils'
 
 type SaveDefinitionEdit = (edit: QuestionnaireDefinitionTextEdit) => Promise<void>
+type QuestionnaireBuilderTab = 'structure' | 'logic' | 'settings' | 'publication'
 
 type BuilderDragState =
   | { kind: 'section'; sectionId: string }
   | { kind: 'question'; sectionId: string; questionId: string }
   | { kind: 'option'; questionId: string; optionId: string }
+
+const questionnaireBuilderTabs: Array<{ id: QuestionnaireBuilderTab; label: string }> = [
+  { id: 'structure', label: 'Структура' },
+  { id: 'logic', label: 'Логика (ветвления)' },
+  { id: 'settings', label: 'Настройки' },
+  { id: 'publication', label: 'Публикация' },
+]
+
+const questionnaireAnswerTypeOptions: Array<{
+  id: QuestionnaireQuestionAnswerType
+  label: string
+  detail: string
+}> = [
+  { id: 'single_option', label: 'Один вариант', detail: 'Radio-варианты с возможностью уточнения' },
+  { id: 'text', label: 'Короткий текст', detail: 'Одна строка: адрес, модель, короткое уточнение' },
+  { id: 'textarea', label: 'Длинный текст', detail: 'Несколько строк для описаний и комментариев' },
+  { id: 'number', label: 'Число', detail: 'Площадь, толщина, количество или размер' },
+  { id: 'phone', label: 'Телефон', detail: 'Контактный номер внутри вопроса' },
+  { id: 'email', label: 'Email', detail: 'Почта клиента или ответственного' },
+  { id: 'date', label: 'Дата', detail: 'Срок, дата замера или дедлайн' },
+]
+
+const questionnaireProjectTypeOptions: Array<{ id: QuestionnaireProjectType; label: string }> = [
+  { id: 'private', label: 'Частный дом' },
+  { id: 'apartment', label: 'Квартира' },
+  { id: 'commercial', label: 'Коммерческий объект' },
+]
+
+function questionnaireBuilderTabId(tabId: QuestionnaireBuilderTab) {
+  return `questionnaire-builder-tab-${tabId}`
+}
+
+function questionnaireBuilderPanelId(tabId: QuestionnaireBuilderTab) {
+  return `questionnaire-builder-panel-${tabId}`
+}
 
 export function QuestionnaireManager() {
   const auth = useAuth()
@@ -62,6 +99,7 @@ export function QuestionnaireManager() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<QuestionnaireBuilderTab>('structure')
   const [dragState, setDragState] = useState<BuilderDragState | null>(null)
   const dragStateRef = useRef<BuilderDragState | null>(null)
   const record = definitionQuery.data?.questionnaireDefinition ?? null
@@ -77,6 +115,31 @@ export function QuestionnaireManager() {
       ?? null
   }, [selectedQuestionId, selectedSection])
   const isSaving = updateDefinition.isPending
+
+  function selectBuilderTab(tabId: QuestionnaireBuilderTab, options: { focus?: boolean } = {}) {
+    setActiveTab(tabId)
+    if (options.focus) {
+      window.requestAnimationFrame(() => document.getElementById(questionnaireBuilderTabId(tabId))?.focus())
+    }
+  }
+
+  function handleBuilderTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, tabId: QuestionnaireBuilderTab) {
+    const currentIndex = questionnaireBuilderTabs.findIndex((tab) => tab.id === tabId)
+    const lastIndex = questionnaireBuilderTabs.length - 1
+    const nextIndex = event.key === 'ArrowRight'
+      ? Math.min(currentIndex + 1, lastIndex)
+      : event.key === 'ArrowLeft'
+        ? Math.max(currentIndex - 1, 0)
+        : event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? lastIndex
+            : -1
+
+    if (nextIndex === -1) return
+    event.preventDefault()
+    selectBuilderTab(questionnaireBuilderTabs[nextIndex]?.id ?? tabId, { focus: true })
+  }
 
   async function saveEdit(edit: QuestionnaireDefinitionTextEdit) {
     setActionError(null)
@@ -223,6 +286,18 @@ export function QuestionnaireManager() {
     setSelectedQuestionId(section.questions[0]?.id ?? null)
   }
 
+  function promptCreateSection() {
+    const title = window.prompt('Название нового раздела')
+    const trimmedTitle = title?.trim()
+    if (!trimmedTitle) return
+    void saveEdit({
+      target: 'section_create',
+      title: trimmedTitle,
+      questionPrompt: 'Новый вопрос',
+      answerType: 'text',
+    })
+  }
+
   function promptCreateQuestion(section: QuestionnaireSection) {
     const prompt = window.prompt('Текст нового вопроса')
     const trimmedPrompt = prompt?.trim()
@@ -292,18 +367,22 @@ export function QuestionnaireManager() {
       </div>
 
       <div className="admin-questionnaire-tabs" role="tablist" aria-label="Разделы конструктора">
-        <button className="admin-questionnaire-tab is-active" type="button" role="tab" aria-selected="true">
-          Структура
-        </button>
-        <button className="admin-questionnaire-tab" type="button" role="tab" aria-selected="false" disabled>
-          Логика (ветвления)
-        </button>
-        <button className="admin-questionnaire-tab" type="button" role="tab" aria-selected="false" disabled>
-          Настройки
-        </button>
-        <button className="admin-questionnaire-tab" type="button" role="tab" aria-selected="false" disabled>
-          Публикация
-        </button>
+        {questionnaireBuilderTabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={cn('admin-questionnaire-tab', activeTab === tab.id && 'is-active')}
+            id={questionnaireBuilderTabId(tab.id)}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={questionnaireBuilderPanelId(tab.id)}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            onClick={() => selectBuilderTab(tab.id)}
+            onKeyDown={(event) => handleBuilderTabKeyDown(event, tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {actionError && (
@@ -320,7 +399,14 @@ export function QuestionnaireManager() {
         </Alert>
       )}
 
-      <div className="admin-questionnaire-builder" data-busy={isSaving ? 'true' : 'false'}>
+      {activeTab === 'structure' ? (
+      <div
+        className="admin-questionnaire-builder"
+        data-busy={isSaving ? 'true' : 'false'}
+        id={questionnaireBuilderPanelId('structure')}
+        role="tabpanel"
+        aria-labelledby={questionnaireBuilderTabId('structure')}
+      >
         <aside className="admin-qb-panel admin-qb-sections" aria-label="Структура опросника">
           <div className="admin-qb-panel-head">
             <div>
@@ -331,7 +417,7 @@ export function QuestionnaireManager() {
           </div>
 
           <div className="admin-qb-action-row">
-            <Button type="button" variant="outline" size="sm" disabled title="Добавление разделов будет отдельной версией опросника">
+            <Button type="button" variant="outline" size="sm" disabled={isSaving} onClick={promptCreateSection}>
               <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
               Добавить раздел
             </Button>
@@ -511,7 +597,308 @@ export function QuestionnaireManager() {
           stats={stats}
         />
       </div>
+      ) : (
+        <QuestionnaireSecondaryPanel
+          activeTab={activeTab}
+          record={record}
+          selectedQuestion={selectedQuestion}
+          isSaving={isSaving}
+          onSave={saveEdit}
+          onSelectQuestion={(sectionId, questionId) => {
+            setSelectedSectionId(sectionId)
+            setSelectedQuestionId(questionId)
+          }}
+        />
+      )}
     </section>
+  )
+}
+
+function QuestionnaireSecondaryPanel({
+  activeTab,
+  record,
+  selectedQuestion,
+  isSaving,
+  onSave,
+  onSelectQuestion,
+}: {
+  activeTab: Exclude<QuestionnaireBuilderTab, 'structure'>
+  record: QuestionnaireDefinitionRecord
+  selectedQuestion: QuestionnaireQuestion | null
+  isSaving: boolean
+  onSave: SaveDefinitionEdit
+  onSelectQuestion: (sectionId: string, questionId: string) => void
+}) {
+  if (activeTab === 'logic') {
+    return (
+      <QuestionnaireLogicPanel
+        record={record}
+        selectedQuestion={selectedQuestion}
+        isSaving={isSaving}
+        onSave={onSave}
+        onSelectQuestion={onSelectQuestion}
+      />
+    )
+  }
+
+  if (activeTab === 'settings') {
+    return (
+      <QuestionnaireSettingsPanel
+        record={record}
+        selectedQuestion={selectedQuestion}
+        isSaving={isSaving}
+        onSave={onSave}
+      />
+    )
+  }
+
+  return <QuestionnairePublicationPanel record={record} />
+}
+
+function QuestionnaireLogicPanel({
+  record,
+  selectedQuestion,
+  isSaving,
+  onSave,
+  onSelectQuestion,
+}: {
+  record: QuestionnaireDefinitionRecord
+  selectedQuestion: QuestionnaireQuestion | null
+  isSaving: boolean
+  onSave: SaveDefinitionEdit
+  onSelectQuestion: (sectionId: string, questionId: string) => void
+}) {
+  const questions = questionnaireQuestionsWithSections(record)
+  const operationalQuestions = questions.filter(({ section, question }) =>
+    itemIsEnabled(section) && !section.isLegacy && itemIsEnabled(question) && !question.isLegacy,
+  )
+  const selected = selectedQuestion
+    ? questions.find((item) => item.question.id === selectedQuestion.id) ?? questions[0]
+    : questions[0]
+  const projectTypeRows = questionnaireProjectTypeOptions.map((projectType) => ({
+    ...projectType,
+    questions: operationalQuestions.filter((item) =>
+      visibilityTargetsProjectType(item.question.showIf, projectType.id),
+    ),
+  }))
+  const conditionalQuestions = operationalQuestions.filter((item) => item.question.showIf)
+
+  return (
+    <div
+      className="admin-questionnaire-tab-panel logic"
+      data-busy={isSaving ? 'true' : 'false'}
+      id={questionnaireBuilderPanelId('logic')}
+      role="tabpanel"
+      aria-labelledby={questionnaireBuilderTabId('logic')}
+    >
+      <section className="admin-qb-panel admin-qb-wide-panel">
+        <div className="admin-qb-panel-head">
+          <div>
+            <Typography variant="caption" tone="muted">Логика показа</Typography>
+            <Typography variant="bodySmMedium">{conditionalQuestions.length} вопросов с условиями</Typography>
+          </div>
+          <StatusPill tone="blue">Тип объекта активен</StatusPill>
+        </div>
+
+        <div className="admin-qb-project-type-grid" aria-label="Влияние типа объекта">
+          {projectTypeRows.map((row) => (
+            <article key={row.id} className="admin-qb-info-tile">
+              <Typography variant="bodySmMedium">{row.label}</Typography>
+              <Typography variant="h6">{row.questions.length}</Typography>
+              <Typography variant="caption" tone="muted">вопросов с отдельным показом</Typography>
+            </article>
+          ))}
+        </div>
+
+        <div className="admin-qb-rule-list" aria-label="Условия вопросов">
+          {questions.map(({ section, question }) => (
+            <button
+              key={question.id}
+              className={cn(
+                'admin-qb-rule-row',
+                selected?.question.id === question.id && 'is-active',
+                !itemIsEnabled(question) && 'is-disabled',
+              )}
+              type="button"
+              onClick={() => onSelectQuestion(section.id, question.id)}
+            >
+              <span>
+                <Typography variant="bodySmMedium">{question.prompt}</Typography>
+                <Typography variant="caption" tone="muted">{section.title} · {question.id}</Typography>
+              </span>
+              <span className="admin-qb-card-meta">
+                <StatusPill tone="gray">{questionTypeLabel(question)}</StatusPill>
+                <StatusPill tone={question.showIf ? 'violet' : 'gray'}>{visibilitySummary(question.showIf)}</StatusPill>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <aside className="admin-qb-panel admin-qb-wide-side">
+        {selected ? (
+          <>
+            <div className="admin-qb-panel-head">
+              <div>
+                <Typography variant="caption" tone="muted">Выбранный вопрос</Typography>
+                <Typography variant="bodySmMedium">{selected.question.prompt}</Typography>
+              </div>
+            </div>
+            <div className="admin-qb-logic-box">
+              <HugeiconsIcon icon={GitBranchIcon} strokeWidth={2} />
+              <Typography variant="caption" tone="muted">{visibilitySummary(selected.question.showIf)}</Typography>
+            </div>
+            <QuestionVisibilityEditor
+              key={`${record.definitionHash}-${selected.question.id}-${JSON.stringify(selected.question.showIf ?? null)}`}
+              record={record}
+              question={selected.question}
+              isSaving={isSaving}
+              onSave={onSave}
+            />
+            <div className="admin-qb-side-section compact">
+              <Typography variant="bodySmMedium">Тип объекта клиента</Typography>
+              {questionnaireProjectTypeOptions.map((projectType) => (
+                <DefinitionMeta
+                  key={projectType.id}
+                  label={projectType.label}
+                  value={visibilityProjectTypeSummary(selected.question.showIf, projectType.id)}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="admin-qb-empty">
+            <Typography variant="h6">Вопросы не найдены</Typography>
+          </div>
+        )}
+      </aside>
+    </div>
+  )
+}
+
+function QuestionnaireSettingsPanel({
+  record,
+  selectedQuestion,
+  isSaving,
+  onSave,
+}: {
+  record: QuestionnaireDefinitionRecord
+  selectedQuestion: QuestionnaireQuestion | null
+  isSaving: boolean
+  onSave: SaveDefinitionEdit
+}) {
+  const stats = definitionStats(record)
+
+  return (
+    <div
+      className="admin-questionnaire-tab-panel settings"
+      data-busy={isSaving ? 'true' : 'false'}
+      id={questionnaireBuilderPanelId('settings')}
+      role="tabpanel"
+      aria-labelledby={questionnaireBuilderTabId('settings')}
+    >
+      <section className="admin-qb-panel admin-qb-wide-panel">
+        <div className="admin-qb-panel-head">
+          <div>
+            <Typography variant="caption" tone="muted">Настройки опросника</Typography>
+            <Typography variant="bodySmMedium">{stats.sectionCount} разделов · {stats.questionCount} вопросов · {stats.optionCount} вариантов</Typography>
+          </div>
+          <StatusPill tone={record.status === 'published' ? 'green' : 'gray'}>{definitionStatusLabel(record.status)}</StatusPill>
+        </div>
+
+        <div className="admin-qb-type-grid" aria-label="Доступные типы вопросов">
+          {questionnaireAnswerTypeOptions.map((type) => (
+            <article key={type.id} className="admin-qb-info-tile">
+              <Typography variant="bodySmMedium">{type.label}</Typography>
+              <Typography variant="caption" tone="muted">{type.detail}</Typography>
+            </article>
+          ))}
+        </div>
+
+        <div className="admin-definition-meta-grid">
+          <DefinitionMeta label="Активные разделы" value={`${stats.sectionCount - stats.disabledSectionCount} из ${stats.sectionCount}`} />
+          <DefinitionMeta label="Отключенные вопросы" value={stats.disabledQuestionCount} />
+          <DefinitionMeta label="Отключенные варианты" value={stats.disabledOptionCount} />
+          <DefinitionMeta label="Версия" value={record.version} />
+        </div>
+      </section>
+
+      <aside className="admin-qb-panel admin-qb-wide-side">
+        {selectedQuestion ? (
+          <>
+            <div className="admin-qb-panel-head">
+              <div>
+                <Typography variant="caption" tone="muted">Текущий вопрос</Typography>
+                <Typography variant="bodySmMedium">{selectedQuestion.prompt}</Typography>
+              </div>
+            </div>
+            <QuestionTypeField question={selectedQuestion} isSaving={isSaving} onSave={onSave} />
+            <DefinitionMeta label="ID" value={selectedQuestion.id} code />
+            <DefinitionMeta label="Source row" value={selectedQuestion.sourceRow} />
+            <DefinitionMeta label="Показ" value={visibilitySummary(selectedQuestion.showIf)} />
+          </>
+        ) : (
+          <div className="admin-qb-empty">
+            <Typography variant="h6">Выберите вопрос</Typography>
+          </div>
+        )}
+      </aside>
+    </div>
+  )
+}
+
+function QuestionnairePublicationPanel({
+  record,
+}: {
+  record: QuestionnaireDefinitionRecord
+}) {
+  const stats = definitionStats(record)
+
+  return (
+    <div
+      className="admin-questionnaire-tab-panel publication"
+      id={questionnaireBuilderPanelId('publication')}
+      role="tabpanel"
+      aria-labelledby={questionnaireBuilderTabId('publication')}
+    >
+      <section className="admin-qb-panel admin-qb-wide-panel">
+        <div className="admin-qb-panel-head">
+          <div>
+            <Typography variant="caption" tone="muted">Публикация</Typography>
+            <Typography variant="bodySmMedium">Активная backend-версия для /questionnaire/</Typography>
+          </div>
+          <StatusPill tone={record.status === 'published' ? 'green' : 'gray'}>{definitionStatusLabel(record.status)}</StatusPill>
+        </div>
+
+        <div className="admin-definition-meta-grid">
+          <DefinitionMeta label="Версия" value={record.version} />
+          <DefinitionMeta label="Hash" value={record.definitionHash} code />
+          <DefinitionMeta label="Источник" value={record.sourceBrief} />
+          <DefinitionMeta label="Workbook" value={record.sourceWorkbook} />
+          <DefinitionMeta label="Worksheet" value={record.sourceWorksheet} />
+          <DefinitionMeta label="Source updated" value={record.sourceUpdatedAt} />
+          <DefinitionMeta label="Backend updated" value={formatDefinitionDate(record.updatedAt)} />
+          <DefinitionMeta label="Published at" value={record.publishedAt ? formatDateTime(record.publishedAt) : 'Static fallback'} />
+        </div>
+      </section>
+
+      <aside className="admin-qb-panel admin-qb-wide-side">
+        <Typography variant="bodySmMedium">Срез публикации</Typography>
+        <DefinitionMeta label="Разделы" value={stats.sectionCount} />
+        <DefinitionMeta label="Вопросы" value={stats.questionCount} />
+        <DefinitionMeta label="Варианты" value={stats.optionCount} />
+        <DefinitionMeta label="Политика источника" value={record.sourcePolicy} />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => window.open('/questionnaire/', '_blank', 'noopener,noreferrer')}
+        >
+          <HugeiconsIcon icon={FileViewIcon} strokeWidth={2} data-icon="inline-start" />
+          Открыть публичный опросник
+        </Button>
+      </aside>
+    </div>
   )
 }
 
@@ -790,13 +1177,11 @@ function QuestionInspector({
 
   return (
     <aside className="admin-qb-inspector" aria-label="Редактор вопроса">
-      <div className="admin-qb-inspector-tabs" role="tablist" aria-label="Панель вопроса">
-        <button className="admin-qb-inspector-tab is-active" type="button" role="tab" aria-selected="true">
-          Редактор вопроса
-        </button>
-        <button className="admin-qb-inspector-tab" type="button" role="tab" aria-selected="false" disabled>
-          Настройки логики
-        </button>
+      <div className="admin-qb-inspector-heading">
+        <div>
+          <Typography variant="caption" tone="muted">Редактор вопроса</Typography>
+          <Typography variant="bodySmMedium">Текст, варианты, тип ответа и логика показа</Typography>
+        </div>
       </div>
 
       <div className="admin-qb-inspector-grid">
@@ -1043,18 +1428,19 @@ function QuestionTypeField({
         title="Смена типа публикует новую версию опросника; начатые анкеты остаются на своем snapshot"
         onChange={(event) => void changeType(event.currentTarget.value)}
       >
-        <option value="single_option">Один вариант</option>
-        <option value="number">Число</option>
-        <option value="text">Свободный ответ</option>
+        {questionnaireAnswerTypeOptions.map((option) => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
       </select>
       <Typography id={hintId} variant="caption" tone="muted">
-        Тип можно менять. При переходе с вариантов на текст/число варианты убираются из новой версии, старые анкеты остаются без изменений.
+        Тип можно менять. При переходе с вариантов на свободное поле варианты убираются из новой версии, старые анкеты остаются без изменений.
       </Typography>
     </Field>
   )
 }
 
 type VisibilityEditorMode = 'always' | 'exists' | 'equals'
+type DirectVisibilityRule = Extract<QuestionnaireVisibilityRule, { questionId: string }>
 
 function QuestionVisibilityEditor({
   record,
@@ -1067,43 +1453,51 @@ function QuestionVisibilityEditor({
   isSaving: boolean
   onSave: SaveDefinitionEdit
 }) {
-  const allQuestions = record.sections.flatMap((section) => section.questions)
-  const sourceQuestions = allQuestions.filter((item) => item.id !== question.id)
-  const optionQuestions = sourceQuestions.filter((item) => (item.options ?? []).length > 0)
-  const initialState = simpleVisibilityEditorState(question.showIf, sourceQuestions)
+  const orderedQuestions = record.sections
+    .flatMap((section) => section.questions)
+    .filter((item) => item.id === question.id || (itemIsEnabled(item) && !item.isLegacy))
+  const questionIndex = orderedQuestions.findIndex((item) => item.id === question.id)
+  const sourceQuestions = questionIndex > 0 ? orderedQuestions.slice(0, questionIndex) : []
+  const optionQuestions = sourceQuestions.filter((item) =>
+    (item.options ?? []).some((option) => itemIsEnabled(option)),
+  )
+  const initialState = visibilityEditorState(question.showIf, sourceQuestions)
   const [mode, setMode] = useState<VisibilityEditorMode>(initialState.mode)
   const [sourceQuestionId, setSourceQuestionId] = useState(initialState.sourceQuestionId)
   const [optionQuestionId, setOptionQuestionId] = useState(initialState.optionQuestionId)
   const selectedOptionQuestion = optionQuestions.find((item) => item.id === optionQuestionId) ?? optionQuestions[0]
+  const selectedOptionQuestionOptions = selectedOptionQuestion?.options?.filter((option) => itemIsEnabled(option)) ?? []
   const [optionId, setOptionId] = useState(
-    initialState.optionId ?? selectedOptionQuestion?.options?.[0]?.id ?? '',
+    initialState.optionId ?? selectedOptionQuestionOptions[0]?.id ?? '',
   )
+  const [projectTypes, setProjectTypes] = useState<readonly QuestionnaireProjectType[]>(
+    initialState.projectTypes,
+  )
+  const optionIdIsAvailable = selectedOptionQuestionOptions.some((option) => option.id === optionId)
+  const effectiveOptionId = optionIdIsAvailable ? optionId : selectedOptionQuestionOptions[0]?.id || ''
+  const isAdvanced = initialState.isAdvanced
   const canSave =
-    mode === 'always' ||
-    (mode === 'exists' && Boolean(sourceQuestionId)) ||
-    (mode === 'equals' && Boolean(selectedOptionQuestion && optionId))
+    !isAdvanced &&
+    projectTypes.length > 0 &&
+    (
+      mode === 'always' ||
+      (mode === 'exists' && Boolean(sourceQuestionId)) ||
+      (mode === 'equals' && Boolean(selectedOptionQuestion && effectiveOptionId))
+    )
 
   async function saveVisibility() {
     if (!canSave) return
 
-    if (mode === 'always') {
-      await onSave({ target: 'question', questionId: question.id, showIf: null })
-      return
-    }
-
-    if (mode === 'exists') {
-      await onSave({
-        target: 'question',
-        questionId: question.id,
-        showIf: { questionId: sourceQuestionId, exists: true },
-      })
-      return
-    }
-
     await onSave({
       target: 'question',
       questionId: question.id,
-      showIf: { questionId: selectedOptionQuestion.id, equals: [optionId] },
+      showIf: buildVisibilityRule({
+        mode,
+        sourceQuestionId,
+        optionQuestionId: selectedOptionQuestion?.id ?? '',
+        optionId: effectiveOptionId,
+        projectTypes,
+      }),
     })
   }
 
@@ -1115,7 +1509,7 @@ function QuestionVisibilityEditor({
           className="admin-qb-select"
           id={`question-show-mode-${question.id}`}
           value={mode}
-          disabled={isSaving}
+          disabled={isSaving || isAdvanced}
           onChange={(event) => setMode(event.currentTarget.value as VisibilityEditorMode)}
         >
           <option value="always">Всегда</option>
@@ -1124,6 +1518,42 @@ function QuestionVisibilityEditor({
         </select>
       </Field>
 
+      <div className="admin-qb-visibility-scope">
+        <Typography variant="bodySmMedium">Тип объекта</Typography>
+        <div className="admin-qb-checkbox-grid" role="group" aria-label="Типы объекта для показа вопроса">
+          {questionnaireProjectTypeOptions.map((projectType) => (
+            <label key={projectType.id} className="admin-qb-checkbox-row">
+              <input
+                type="checkbox"
+                checked={projectTypes.includes(projectType.id)}
+                disabled={isSaving || isAdvanced}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked
+                  setProjectTypes((current) =>
+                    checked
+                      ? [...new Set([...current, projectType.id])]
+                      : current.filter((item) => item !== projectType.id),
+                  )
+                }}
+              />
+              <span>{projectType.label}</span>
+            </label>
+          ))}
+        </div>
+        <Typography variant="caption" tone="muted">
+          Все три типа означают общий вопрос без отдельного ограничения по объекту.
+        </Typography>
+      </div>
+
+      {isAdvanced && (
+        <div className="admin-qb-advanced-rule" role="status">
+          <Typography variant="bodySmMedium">Сложное правило защищено</Typography>
+          <Typography variant="caption" tone="muted">
+            {initialState.advancedReason}
+          </Typography>
+        </div>
+      )}
+
       {mode === 'exists' && (
         <Field>
           <FieldLabel htmlFor={`question-show-source-${question.id}`}>Вопрос-источник</FieldLabel>
@@ -1131,9 +1561,10 @@ function QuestionVisibilityEditor({
             className="admin-qb-select"
             id={`question-show-source-${question.id}`}
             value={sourceQuestionId}
-            disabled={isSaving || sourceQuestions.length === 0}
+            disabled={isSaving || isAdvanced || sourceQuestions.length === 0}
             onChange={(event) => setSourceQuestionId(event.currentTarget.value)}
           >
+            {sourceQuestions.length === 0 && <option value="">Нет доступных предыдущих вопросов</option>}
             {sourceQuestions.map((item) => (
               <option key={item.id} value={item.id}>{item.prompt}</option>
             ))}
@@ -1149,13 +1580,14 @@ function QuestionVisibilityEditor({
               className="admin-qb-select"
               id={`question-show-option-source-${question.id}`}
               value={selectedOptionQuestion?.id ?? ''}
-              disabled={isSaving || optionQuestions.length === 0}
+              disabled={isSaving || isAdvanced || optionQuestions.length === 0}
               onChange={(event) => {
                 const nextQuestion = optionQuestions.find((item) => item.id === event.currentTarget.value)
                 setOptionQuestionId(event.currentTarget.value)
-                setOptionId(nextQuestion?.options?.[0]?.id ?? '')
+                setOptionId(nextQuestion?.options?.find((option) => itemIsEnabled(option))?.id ?? '')
               }}
             >
+              {optionQuestions.length === 0 && <option value="">Нет предыдущих вопросов с вариантами</option>}
               {optionQuestions.map((item) => (
                 <option key={item.id} value={item.id}>{item.prompt}</option>
               ))}
@@ -1166,11 +1598,11 @@ function QuestionVisibilityEditor({
             <select
               className="admin-qb-select"
               id={`question-show-option-${question.id}`}
-              value={optionId}
-              disabled={isSaving || !selectedOptionQuestion}
+              value={effectiveOptionId}
+              disabled={isSaving || isAdvanced || !selectedOptionQuestion}
               onChange={(event) => setOptionId(event.currentTarget.value)}
             >
-              {(selectedOptionQuestion?.options ?? []).map((option) => (
+              {selectedOptionQuestionOptions.map((option) => (
                 <option key={option.id} value={option.id}>{option.label}</option>
               ))}
             </select>
@@ -1425,48 +1857,177 @@ function sectionIndexLabel(sections: readonly QuestionnaireSection[], selectedSe
 
 function questionTypeLabel(question: QuestionnaireQuestion) {
   const kind = questionTypeKind(question)
-  if (kind === 'single_option') return 'Один вариант'
-  if (kind === 'number') return 'Число'
-  return 'Свободный ответ'
+  return questionnaireAnswerTypeOptions.find((option) => option.id === kind)?.label ?? kind
 }
 
 function questionTypeKind(question: QuestionnaireQuestion) {
   return getQuestionnaireQuestionAnswerType(question)
 }
 
-function simpleVisibilityEditorState(
+function visibilityEditorState(
   rule: QuestionnaireVisibilityRule | undefined,
   sourceQuestions: readonly QuestionnaireQuestion[],
 ) {
   const fallbackQuestion = sourceQuestions[0]
   const fallbackOptionQuestion = sourceQuestions.find((question) => (question.options ?? []).length > 0)
+  const fallbackState = {
+    mode: 'always' as VisibilityEditorMode,
+    sourceQuestionId: fallbackQuestion?.id ?? '',
+    optionQuestionId: fallbackOptionQuestion?.id ?? '',
+    optionId: fallbackOptionQuestion?.options?.find((option) => itemIsEnabled(option))?.id ?? '',
+    projectTypes: questionnaireProjectTypeOptions.map((item) => item.id),
+    isAdvanced: false,
+    advancedReason: '',
+  }
+  const parsedRule = supportedVisibilityRuleParts(rule)
 
-  if (rule && 'questionId' in rule) {
-    if (rule.equals?.[0]) {
+  if (!parsedRule.supported) {
+    return {
+      ...fallbackState,
+      isAdvanced: true,
+      advancedReason: parsedRule.reason,
+    }
+  }
+
+  const projectTypes = parsedRule.projectTypes ?? fallbackState.projectTypes
+
+  if (parsedRule.answerRule) {
+    const answerRule = parsedRule.answerRule
+    const sourceQuestion = sourceQuestions.find((question) => question.id === answerRule.questionId)
+    if (!sourceQuestion) {
       return {
-        mode: 'equals' as VisibilityEditorMode,
-        sourceQuestionId: fallbackQuestion?.id ?? '',
-        optionQuestionId: rule.questionId,
-        optionId: rule.equals[0],
+        ...fallbackState,
+        projectTypes,
+        isAdvanced: true,
+        advancedReason: 'Это условие зависит от вопроса ниже, отключенного или удаленного вопроса. Сохранение заблокировано, чтобы не сломать прохождение.',
       }
     }
 
-    if (rule.exists) {
+    if (answerRule.equals?.[0]) {
+      const optionId = answerRule.equals[0]
+      const optionExists = sourceQuestion.options?.some((option) =>
+        option.id === optionId && itemIsEnabled(option),
+      )
+      if (!optionExists) {
+        return {
+          ...fallbackState,
+          projectTypes,
+          isAdvanced: true,
+          advancedReason: 'Это условие ссылается на отключенный или удаленный вариант. Сохранение заблокировано, чтобы не потерять исходную логику.',
+        }
+      }
+
       return {
+        ...fallbackState,
+        mode: 'equals' as VisibilityEditorMode,
+        optionQuestionId: answerRule.questionId,
+        optionId,
+        projectTypes,
+      }
+    }
+
+    if (answerRule.exists) {
+      return {
+        ...fallbackState,
         mode: 'exists' as VisibilityEditorMode,
-        sourceQuestionId: rule.questionId,
-        optionQuestionId: fallbackOptionQuestion?.id ?? '',
-        optionId: fallbackOptionQuestion?.options?.[0]?.id ?? '',
+        sourceQuestionId: answerRule.questionId,
+        projectTypes,
       }
     }
   }
 
   return {
-    mode: 'always' as VisibilityEditorMode,
-    sourceQuestionId: fallbackQuestion?.id ?? '',
-    optionQuestionId: fallbackOptionQuestion?.id ?? '',
-    optionId: fallbackOptionQuestion?.options?.[0]?.id ?? '',
+    ...fallbackState,
+    projectTypes,
   }
+}
+
+function supportedVisibilityRuleParts(rule: QuestionnaireVisibilityRule | undefined): {
+  supported: boolean
+  projectTypes?: readonly QuestionnaireProjectType[]
+  answerRule?: DirectVisibilityRule
+  reason: string
+} {
+  if (!rule) return { supported: true, reason: '' }
+  if ('never' in rule) {
+    return {
+      supported: false,
+      reason: 'Это служебное правило скрытия после удаления вопроса. Его можно изменить только через отдельную миграцию.',
+    }
+  }
+  if ('any' in rule) {
+    return {
+      supported: false,
+      reason: 'Правило содержит альтернативные ветки. Текущий редактор показывает его, но не перезаписывает.',
+    }
+  }
+  if ('projectTypes' in rule) return { supported: true, projectTypes: rule.projectTypes, reason: '' }
+  if ('questionId' in rule) {
+    if (rule.notEquals || (rule.equals && rule.equals.length !== 1)) {
+      return {
+        supported: false,
+        reason: 'Правило содержит несколько вариантов или исключение. Текущий редактор показывает его, но не перезаписывает.',
+      }
+    }
+    return { supported: true, answerRule: rule, reason: '' }
+  }
+
+  let projectTypes: readonly QuestionnaireProjectType[] | undefined
+  let answerRule: DirectVisibilityRule | undefined
+
+  for (const condition of rule.all) {
+    const parsed = supportedVisibilityRuleParts(condition)
+    if (!parsed.supported) return parsed
+    if (parsed.projectTypes) {
+      if (projectTypes) {
+        return {
+          supported: false,
+          reason: 'Правило содержит несколько ограничений по типу объекта. Текущий редактор показывает его, но не перезаписывает.',
+        }
+      }
+      projectTypes = parsed.projectTypes
+    }
+    if (parsed.answerRule) {
+      if (answerRule) {
+        return {
+          supported: false,
+          reason: 'Правило зависит от нескольких ответов. Текущий редактор показывает его, но не перезаписывает.',
+        }
+      }
+      answerRule = parsed.answerRule
+    }
+  }
+
+  return { supported: true, projectTypes, answerRule, reason: '' }
+}
+
+function buildVisibilityRule(input: {
+  mode: VisibilityEditorMode
+  sourceQuestionId: string
+  optionQuestionId: string
+  optionId: string
+  projectTypes: readonly QuestionnaireProjectType[]
+}): QuestionnaireVisibilityRule | null {
+  const selectedProjectTypes = questionnaireProjectTypeOptions
+    .map((item) => item.id)
+    .filter((projectType) => input.projectTypes.includes(projectType))
+  const rules: QuestionnaireVisibilityRule[] = []
+
+  if (selectedProjectTypes.length > 0 && selectedProjectTypes.length < questionnaireProjectTypeOptions.length) {
+    rules.push({ projectTypes: selectedProjectTypes })
+  }
+
+  if (input.mode === 'exists') {
+    rules.push({ questionId: input.sourceQuestionId, exists: true })
+  }
+
+  if (input.mode === 'equals') {
+    rules.push({ questionId: input.optionQuestionId, equals: [input.optionId] })
+  }
+
+  if (rules.length === 0) return null
+  if (rules.length === 1) return rules[0] ?? null
+  return { all: rules }
 }
 
 function definitionStats(record: QuestionnaireDefinitionRecord) {
@@ -1512,11 +2073,76 @@ function visibilitySummary(rule: QuestionnaireVisibilityRule | undefined): strin
   if ('never' in rule) return 'Никогда'
   if ('all' in rule) return rule.all.map(visibilitySummary).join(' + ')
   if ('any' in rule) return rule.any.map(visibilitySummary).join(' / ')
+  if ('projectTypes' in rule) {
+    return `Тип объекта: ${rule.projectTypes.map(projectTypeLabel).join(', ')}`
+  }
 
   if (rule.exists) return `${rule.questionId}: заполнен`
   if (rule.equals?.length) return `${rule.questionId}: ${rule.equals.join(', ')}`
   if (rule.notEquals?.length) return `${rule.questionId}: не ${rule.notEquals.join(', ')}`
   return rule.questionId
+}
+
+function projectTypeLabel(projectType: QuestionnaireProjectType) {
+  return questionnaireProjectTypeOptions.find((option) => option.id === projectType)?.label ?? projectType
+}
+
+function questionnaireQuestionsWithSections(record: QuestionnaireDefinitionRecord) {
+  return record.sections.flatMap((section) =>
+    section.questions.map((question) => ({
+      section,
+      question,
+    })),
+  )
+}
+
+function visibilityTargetsProjectType(
+  rule: QuestionnaireVisibilityRule | undefined,
+  projectType: QuestionnaireProjectType,
+): boolean {
+  if (!rule) return false
+  if ('never' in rule) return false
+  if ('projectTypes' in rule) return rule.projectTypes.includes(projectType)
+  if ('all' in rule) return rule.all.some((condition) => visibilityTargetsProjectType(condition, projectType))
+  if ('any' in rule) return rule.any.some((condition) => visibilityTargetsProjectType(condition, projectType))
+  return false
+}
+
+function visibilityProjectTypeSummary(
+  rule: QuestionnaireVisibilityRule | undefined,
+  projectType: QuestionnaireProjectType,
+): string {
+  const state = visibilityProjectTypeState(rule, projectType)
+  if (state === 'visible') return 'Показывается'
+  if (state === 'hidden') return 'Скрыт'
+  if (state === 'conditional') return 'Зависит от ответа'
+  return 'Без ограничения'
+}
+
+function visibilityProjectTypeState(
+  rule: QuestionnaireVisibilityRule | undefined,
+  projectType: QuestionnaireProjectType,
+): 'unrestricted' | 'visible' | 'hidden' | 'conditional' {
+  if (!rule) return 'unrestricted'
+  if ('never' in rule) return 'hidden'
+  if ('projectTypes' in rule) return rule.projectTypes.includes(projectType) ? 'visible' : 'hidden'
+  if ('all' in rule) {
+    let hasProjectScope = false
+    let hasAnswerCondition = false
+
+    for (const condition of rule.all) {
+      const state = visibilityProjectTypeState(condition, projectType)
+      if (state === 'hidden') return 'hidden'
+      if (state === 'visible') hasProjectScope = true
+      if (state === 'conditional') hasAnswerCondition = true
+    }
+
+    if (hasProjectScope && hasAnswerCondition) return 'conditional'
+    if (hasProjectScope) return 'visible'
+    return hasAnswerCondition ? 'conditional' : 'unrestricted'
+  }
+  if ('any' in rule) return 'conditional'
+  return 'conditional'
 }
 
 function errorMessage(error: unknown) {

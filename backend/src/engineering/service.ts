@@ -47,16 +47,19 @@ import {
   type PublicProjectExampleRecord,
   type PublicProjectExampleRequestRecord,
   type PublicQuestionnaireSession,
+  type QuestionnaireAnswerInput,
   type QuestionnaireDefinition,
   type QuestionnaireDefinitionPatchRequest,
   type QuestionnaireDefinitionRecord,
   type QuestionnaireOption,
+  type QuestionnaireProjectType,
   type QuestionnaireQuestion,
   type QuestionnaireQuestionAnswerType,
   type QuestionnaireAnswersPatchRequest,
   type QuestionnaireStartRequest,
   type QuestionnaireStoredAnswer,
   type QuestionnaireVisibilityRule,
+  type QuestionnaireVisibilityContext,
   type ServiceCreateRequest,
   type ServiceRecord,
   type ServiceReorderRequest,
@@ -100,6 +103,8 @@ const projectExampleRequestConsentText =
 const questionnaireConsentVersion = 'pzk-questionnaire-consent-v1'
 const questionnaireConsentText =
   'Согласен на обработку имени, телефона, параметров расчета и ответов опросника для подготовки черновика технического задания и обратной связи.'
+const questionnaireProjectTypeMetadataKey = 'pzk_project_type'
+const questionnaireProjectTypes = ['private', 'apartment', 'commercial'] as const satisfies readonly QuestionnaireProjectType[]
 const staticQuestionnaireDefinitionUpdatedAt = `${technicalQuestionnaireDefinition.sourceUpdatedAt}T00:00:00.000Z`
 const cyrillicSlugMap: Record<string, string> = {
   а: 'a',
@@ -738,6 +743,9 @@ export class EngineeringDataService {
     const normalizedPhone = normalizeLeadPhone(parsedInput.clientPhone)
     const referrer = normalizeOptionalText(parsedInput.referrer ?? metadata.referrer, 2_048)
     const source = normalizeOptionalText(parsedInput.source, 80) ?? defaultQuestionnaireSource
+    const projectType = parsedInput.projectType ?? questionnaireProjectTypeFromObjectName(parsedInput.objectName)
+    const questionnaireUtm = questionnaireUtmWithProjectType(parsedInput.utm, projectType)
+    const visibilityContext = questionnaireVisibilityContext(projectType)
     const requestFingerprintHash = questionnaireStartFingerprintHash({
       input: parsedInput,
       normalizedPhone,
@@ -793,6 +801,7 @@ export class EngineeringDataService {
       normalizedPhone,
       calculation,
       duplicateWindowStartedAt,
+      projectType,
     })
     const duplicateCalculation = await this.findCalculationByDuplicateFingerprintHash(duplicateFingerprintHash)
 
@@ -807,10 +816,12 @@ export class EngineeringDataService {
     const activeDefinition = publicQuestionnaireDefinitionRecord(await this.activeQuestionnaireDefinition())
     const publicToken = await this.createUniqueCalculationToken()
     const consentAcceptedAt = new Date()
+    assertQuestionnaireAnswersMatchDefinition(parsedInput.initialAnswers ?? [], activeDefinition)
     const initialAnswers = storedQuestionnaireAnswers(
       parsedInput.initialAnswers ?? [],
       consentAcceptedAt,
       activeDefinition,
+      visibilityContext,
     )
 
     try {
@@ -841,7 +852,7 @@ export class EngineeringDataService {
             statusUpdatedAt: new Date(),
             source,
             referrer,
-            utm: parsedInput.utm === undefined ? undefined : toJson(parsedInput.utm),
+            utm: questionnaireUtm === undefined ? undefined : toJson(questionnaireUtm),
             consentAcceptedAt,
             consentVersion: questionnaireConsentVersion,
             consentText: questionnaireConsentText,
@@ -860,7 +871,7 @@ export class EngineeringDataService {
             answersSnapshot: toJson(initialAnswers),
             source,
             referrer,
-            utm: parsedInput.utm === undefined ? undefined : toJson(parsedInput.utm),
+            utm: questionnaireUtm === undefined ? undefined : toJson(questionnaireUtm),
             consentAcceptedAt,
             consentVersion: questionnaireConsentVersion,
             consentText: questionnaireConsentText,
@@ -964,20 +975,27 @@ export class EngineeringDataService {
     }
 
     const definition = questionnaireDefinitionForSession(calculation.questionnaire)
+    const visibilityContext = questionnaireVisibilityContext(
+      questionnaireProjectTypeFromSession(calculation.questionnaire),
+    )
+    assertQuestionnaireAnswersMatchDefinition(parsedInput.answers, definition)
     const existingAnswers = questionnaireAnswersFromJson(
       calculation.questionnaire.answersSnapshot,
       definition,
+      visibilityContext,
     )
     const previousProgress = calculateQuestionnaireProgress(
       existingAnswers,
       calculation.questionnaire.updatedAt.toISOString(),
       definition,
+      visibilityContext,
     )
     const answers = mergeStoredQuestionnaireAnswers(
       existingAnswers,
       parsedInput.answers,
       new Date(),
       definition,
+      visibilityContext,
     )
     const questionnaire = await this.db.calculationQuestionnaire.update({
       where: { calculationId: calculation.id },
@@ -986,9 +1004,10 @@ export class EngineeringDataService {
       },
     })
     const nextProgress = calculateQuestionnaireProgress(
-      questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition),
+      questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition, visibilityContext),
       questionnaire.updatedAt.toISOString(),
       definition,
+      visibilityContext,
     )
 
     if (!previousProgress.completedAt && nextProgress.completedAt) {
@@ -2440,14 +2459,22 @@ function questionnaireToPublicSession(
 ): PublicQuestionnaireSession {
   const calculationSnapshot = calculationResultSchema.parse(calculation.calculationSnapshot)
   const definition = questionnaireDefinitionForSession(questionnaire)
-  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition)
+  const projectType = questionnaireProjectTypeFromSession(questionnaire)
+  const visibilityContext = questionnaireVisibilityContext(projectType)
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition, visibilityContext)
 
   return {
     publicToken: calculation.publicToken,
     questionnaireVersion: questionnaire.questionnaireVersion,
     definitionHash: definition.definitionHash,
     definition,
-    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString(), definition),
+    projectType,
+    progress: calculateQuestionnaireProgress(
+      answers,
+      questionnaire.updatedAt.toISOString(),
+      definition,
+      visibilityContext,
+    ),
     calculation: {
       areaSqm: calculationSnapshot.areaSqm,
       selectedServiceIds: calculationSnapshot.selectedServiceIds,
@@ -2467,10 +2494,11 @@ function questionnaireToAdminDraft(
   publicWebsiteUrl?: string,
 ): AdminQuestionnaireDraft {
   const definition = questionnaireDefinitionForSession(questionnaire)
-  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition)
+  const visibilityContext = questionnaireVisibilityContext(questionnaireProjectTypeFromSession(questionnaire))
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition, visibilityContext)
   const answersByQuestionId = new Map(answers.map((answer) => [answer.questionId, answer]))
   const activeQuestionIds = new Set(
-    getQuestionnaireActiveQuestions(answers, definition).map((question) => question.id),
+    getQuestionnaireActiveQuestions(answers, definition, visibilityContext).map((question) => question.id),
   )
 
   return {
@@ -2482,7 +2510,12 @@ function questionnaireToAdminDraft(
     definitionSource: definition.sourceBrief,
     definitionUpdatedAt: definition.sourceUpdatedAt,
     sourcePolicy: definition.sourcePolicy,
-    progress: calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString(), definition),
+    progress: calculateQuestionnaireProgress(
+      answers,
+      questionnaire.updatedAt.toISOString(),
+      definition,
+      visibilityContext,
+    ),
     consentAcceptedAt: questionnaire.consentAcceptedAt?.toISOString() ?? null,
     consentVersion: questionnaire.consentVersion,
     consentText: questionnaire.consentText,
@@ -2501,7 +2534,7 @@ function questionnaireToAdminDraft(
           sourceRow: question.sourceRow,
           isActive,
           isLegacy: question.isLegacy ?? section.isLegacy ?? false,
-          options: [...getQuestionnaireActiveOptions(question, answers, definition)],
+          options: [...getQuestionnaireActiveOptions(question, answers, definition, visibilityContext)],
           answer: answer
             ? {
                 ...answer,
@@ -2520,8 +2553,14 @@ function questionnaireToAdminSummary(
   if (!questionnaire) return null
 
   const definition = questionnaireDefinitionForSession(questionnaire)
-  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition)
-  const progress = calculateQuestionnaireProgress(answers, questionnaire.updatedAt.toISOString(), definition)
+  const visibilityContext = questionnaireVisibilityContext(questionnaireProjectTypeFromSession(questionnaire))
+  const answers = questionnaireAnswersFromJson(questionnaire.answersSnapshot, definition, visibilityContext)
+  const progress = calculateQuestionnaireProgress(
+    answers,
+    questionnaire.updatedAt.toISOString(),
+    definition,
+    visibilityContext,
+  )
 
   return {
     questionnaireVersion: questionnaire.questionnaireVersion,
@@ -2538,14 +2577,16 @@ function questionnaireToAdminSummary(
 function questionnaireAnswersFromJson(
   value: Prisma.JsonValue,
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ): QuestionnaireStoredAnswer[] {
-  return markQuestionnaireAnswersActivity(questionnaireStoredAnswerSchema.array().parse(value), definition)
+  return markQuestionnaireAnswersActivity(questionnaireStoredAnswerSchema.array().parse(value), definition, context)
 }
 
 function storedQuestionnaireAnswers(
   answers: NonNullable<QuestionnaireStartRequest['initialAnswers']>,
   updatedAt: Date,
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ): QuestionnaireStoredAnswer[] {
   return markQuestionnaireAnswersActivity(sortQuestionnaireAnswers(
     answers.map((answer) => ({
@@ -2554,7 +2595,7 @@ function storedQuestionnaireAnswers(
       isActive: true,
     })),
     definition,
-  ), definition)
+  ), definition, context)
 }
 
 function mergeStoredQuestionnaireAnswers(
@@ -2562,6 +2603,7 @@ function mergeStoredQuestionnaireAnswers(
   nextAnswers: QuestionnaireAnswersPatchRequest['answers'],
   updatedAt: Date,
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ) {
   const answersByQuestionId = new Map(existingAnswers.map((answer) => [answer.questionId, answer]))
 
@@ -2576,6 +2618,7 @@ function mergeStoredQuestionnaireAnswers(
   return markQuestionnaireAnswersActivity(
     sortQuestionnaireAnswers([...answersByQuestionId.values()], definition),
     definition,
+    context,
   )
 }
 
@@ -2606,6 +2649,161 @@ function questionnaireAnswerLabel(
 
   const question = questionnaireQuestionByIdForDefinition(definition).get(questionId)
   return question?.options?.find((option) => option.id === answer.optionId)?.label ?? null
+}
+
+function assertQuestionnaireAnswersMatchDefinition(
+  answers: readonly QuestionnaireAnswerInput[],
+  definition: QuestionnaireDefinition,
+) {
+  const questionById = questionnaireQuestionByIdForDefinition(definition)
+
+  for (const answer of answers) {
+    const question = questionById.get(answer.questionId)
+    if (!question) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Questionnaire answer references unknown question', {
+        questionId: answer.questionId,
+      })
+    }
+
+    const answerType = getQuestionnaireQuestionAnswerType(question)
+
+    if (answer.kind === 'custom') {
+      assertQuestionnaireCustomAnswerValue(answer, answerType)
+      continue
+    }
+
+    if (answer.kind !== 'option') continue
+
+    if (!questionnaireAnswerTypeNeedsOptions(answerType)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Questionnaire option answer is not allowed for this question type', {
+        questionId: answer.questionId,
+      })
+    }
+
+    if (!question.options?.some((option) => option.id === answer.optionId && option.isEnabled !== false)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Questionnaire answer references unknown option', {
+        questionId: answer.questionId,
+        optionId: answer.optionId,
+      })
+    }
+  }
+}
+
+function assertQuestionnaireCustomAnswerValue(
+  answer: QuestionnaireAnswerInput,
+  answerType: QuestionnaireQuestionAnswerType,
+) {
+  const value = answer.customText ?? ''
+
+  if (answerType === 'number' && !isQuestionnaireNumberValue(value)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Questionnaire number answer has invalid format', {
+      questionId: answer.questionId,
+    })
+  }
+
+  if (answerType === 'phone' && !isQuestionnairePhoneValue(value)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Questionnaire phone answer has invalid format', {
+      questionId: answer.questionId,
+    })
+  }
+
+  if (answerType === 'email' && !isQuestionnaireEmailValue(value)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Questionnaire email answer has invalid format', {
+      questionId: answer.questionId,
+    })
+  }
+
+  if (answerType === 'date' && !isQuestionnaireDateValue(value)) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Questionnaire date answer has invalid format', {
+      questionId: answer.questionId,
+    })
+  }
+}
+
+function isQuestionnaireNumberValue(value: string) {
+  const canonical = value.trim().replace(',', '.')
+  return /^-?(?:0|[1-9]\d{0,7})(?:\.\d{1,3})?$/.test(canonical) && Number.isFinite(Number(canonical))
+}
+
+function isQuestionnairePhoneValue(value: string) {
+  try {
+    normalizeLeadPhone(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isQuestionnaireEmailValue(value: string) {
+  return value.length <= 160 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+function isQuestionnaireDateValue(value: string) {
+  const trimmed = value.trim()
+  const dmy = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(trimmed)
+  const ymd = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed)
+  const day = dmy ? Number(dmy[1]) : ymd ? Number(ymd[3]) : NaN
+  const month = dmy ? Number(dmy[2]) : ymd ? Number(ymd[2]) : NaN
+  const year = dmy ? Number(dmy[3]) : ymd ? Number(ymd[1]) : NaN
+  const date = new Date(year, month - 1, day)
+
+  return (
+    Number.isInteger(day) &&
+    Number.isInteger(month) &&
+    Number.isInteger(year) &&
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  )
+}
+
+function questionnaireVisibilityContext(
+  projectType: QuestionnaireProjectType | null | undefined,
+): QuestionnaireVisibilityContext {
+  return projectType ? { projectType } : {}
+}
+
+function questionnaireProjectTypeFromSession(
+  questionnaire: Pick<CalculationQuestionnaireRow, 'utm'>,
+): QuestionnaireProjectType | null {
+  const utm = objectRecord(questionnaire.utm)
+  return asQuestionnaireProjectType(utm?.[questionnaireProjectTypeMetadataKey])
+}
+
+function questionnaireUtmWithProjectType(
+  utm: QuestionnaireStartRequest['utm'] | undefined,
+  projectType: QuestionnaireProjectType | null | undefined,
+) {
+  const sanitizedUtm = questionnaireUtmWithoutReservedMetadata(utm)
+  if (!projectType) return sanitizedUtm
+  return {
+    ...(sanitizedUtm ?? {}),
+    [questionnaireProjectTypeMetadataKey]: projectType,
+  }
+}
+
+function questionnaireUtmWithoutReservedMetadata(utm: QuestionnaireStartRequest['utm'] | undefined) {
+  if (!utm) return undefined
+  const entries = Object.entries(utm)
+    .filter(([key]) => key !== questionnaireProjectTypeMetadataKey)
+  if (entries.length === 0) return undefined
+  return Object.fromEntries(entries)
+}
+
+function questionnaireProjectTypeFromObjectName(
+  objectName: string | undefined,
+): QuestionnaireProjectType | null {
+  const normalized = objectName?.toLowerCase() ?? ''
+  if (normalized.includes('квартира')) return 'apartment'
+  if (normalized.includes('коммер')) return 'commercial'
+  if (normalized.includes('частный дом') || normalized.includes('дом')) return 'private'
+  return null
+}
+
+function asQuestionnaireProjectType(value: unknown): QuestionnaireProjectType | null {
+  return typeof value === 'string' && questionnaireProjectTypes.includes(value as QuestionnaireProjectType)
+    ? value as QuestionnaireProjectType
+    : null
 }
 
 function questionnaireDefinitionForSession(questionnaire: CalculationQuestionnaireRow) {
@@ -2716,6 +2914,50 @@ function applyQuestionnaireDefinitionTextEdits(
       continue
     }
 
+    if (edit.target === 'section_create') {
+      const sectionId = allocateQuestionnaireSectionId(next)
+      const question: (typeof next.sections)[number]['questions'][number] = {
+        id: allocateQuestionnaireQuestionId(next),
+        prompt: edit.questionPrompt ?? 'Новый вопрос',
+        sourceRow: allocateQuestionnaireSourceRow(next),
+        answerType: edit.answerType ?? 'text',
+      }
+      if (questionnaireAnswerTypeNeedsOptions(question.answerType)) {
+        question.options = [
+          { id: 'OPTION_1', label: 'Вариант 1' },
+          { id: 'OPTION_2', label: 'Вариант 2' },
+        ]
+      }
+      next.sections = [
+        ...next.sections,
+        {
+          id: sectionId,
+          title: edit.title,
+          sourceRows: [question.sourceRow],
+          questions: [question],
+        },
+      ]
+      continue
+    }
+
+    if (edit.target === 'section_delete') {
+      const section = next.sections.find((item) => item.id === edit.sectionId)
+      if (!section) throw new AppError(404, 'NOT_FOUND', 'Questionnaire section not found')
+      if (next.sections.length <= 1) {
+        throw new AppError(400, 'BAD_REQUEST', 'Questionnaire must keep at least one section')
+      }
+      const deletedQuestionIds = new Set(section.questions.map((question) => question.id))
+      next.sections = next.sections.filter((item) => item.id !== edit.sectionId)
+      sanitizeQuestionnaireVisibilityRules(next, (rule) => {
+        let nextRule = rule
+        for (const questionId of deletedQuestionIds) {
+          nextRule = normalizeVisibilityRuleAfterQuestionDelete(nextRule, questionId)
+        }
+        return nextRule
+      })
+      continue
+    }
+
     if (edit.target === 'question_order') {
       const section = next.sections.find((item) => item.id === edit.sectionId)
       if (!section) throw new AppError(404, 'NOT_FOUND', 'Questionnaire section not found')
@@ -2732,7 +2974,7 @@ function applyQuestionnaireDefinitionTextEdits(
         sourceRow: allocateQuestionnaireSourceRow(next),
         answerType: edit.answerType ?? 'text',
       }
-      if (question.answerType === 'single_option') {
+      if (questionnaireAnswerTypeNeedsOptions(question.answerType)) {
         question.options = [
           { id: 'OPTION_1', label: 'Вариант 1' },
           { id: 'OPTION_2', label: 'Вариант 2' },
@@ -2776,7 +3018,9 @@ function applyQuestionnaireDefinitionTextEdits(
       }
       if (edit.hint) option.hint = edit.hint
       question.options = [...(question.options ?? []), option]
-      question.answerType = 'single_option'
+      question.answerType = questionnaireAnswerTypeNeedsOptions(question.answerType)
+        ? question.answerType
+        : 'single_option'
       continue
     }
 
@@ -2836,7 +3080,7 @@ function applyQuestionnaireQuestionAnswerTypeEdit(
   const currentAnswerType = getQuestionnaireQuestionAnswerType(question)
   if (currentAnswerType === answerType) return
 
-  if (answerType === 'single_option') {
+  if (questionnaireAnswerTypeNeedsOptions(answerType)) {
     if (!question.options?.length) {
       const firstOptionId = allocateQuestionnaireOptionId(question)
       question.options = [
@@ -2859,13 +3103,28 @@ function assertQuestionnaireAnswerTypeIsCoherent(question: QuestionnaireQuestion
   const answerType = getQuestionnaireQuestionAnswerType(question)
   const hasOptions = (question.options?.length ?? 0) > 0
 
-  if (answerType === 'single_option' && !hasOptions) {
+  if (questionnaireAnswerTypeNeedsOptions(answerType) && !hasOptions) {
     throw new AppError(
       400,
       'BAD_REQUEST',
       'Questionnaire single option questions must keep at least one option',
     )
   }
+}
+
+function questionnaireAnswerTypeNeedsOptions(answerType: QuestionnaireQuestionAnswerType | undefined) {
+  return answerType === 'single_option'
+}
+
+function allocateQuestionnaireSectionId(definition: QuestionnaireDefinition) {
+  const existingIds = new Set(definition.sections.map((section) => section.id))
+
+  for (let index = existingIds.size + 1; index < existingIds.size + 500; index += 1) {
+    const sectionId = `custom_section_${index}`
+    if (!existingIds.has(sectionId)) return sectionId
+  }
+
+  throw new AppError(500, 'INTERNAL_ERROR', 'Could not allocate questionnaire section id')
 }
 
 function allocateQuestionnaireOptionId(question: Pick<QuestionnaireQuestion, 'options'>, reservedIds: string[] = []) {
@@ -2967,6 +3226,7 @@ function normalizeQuestionnaireVisibilityRule(
 ): QuestionnaireVisibilityRule | undefined {
   if (!rule) return undefined
   if ('never' in rule) return rule
+  if ('projectTypes' in rule) return rule
   if ('all' in rule) {
     return {
       all: rule.all.map((condition) =>
@@ -2987,14 +3247,17 @@ function normalizeQuestionnaireVisibilityRule(
 
 function assertQuestionnaireDefinitionPublishable(definition: QuestionnaireDefinition) {
   const publicDefinition = getQuestionnairePublicDefinition(definition)
-  const startingQuestions = getQuestionnaireActiveQuestions([], publicDefinition)
 
-  if (startingQuestions.length === 0) {
-    throw new AppError(
-      400,
-      'BAD_REQUEST',
-      'Questionnaire must keep at least one enabled starting question',
-    )
+  for (const projectType of questionnaireProjectTypes) {
+    const startingQuestions = getQuestionnaireActiveQuestions([], publicDefinition, { projectType })
+
+    if (startingQuestions.length === 0) {
+      throw new AppError(
+        400,
+        'BAD_REQUEST',
+        `Questionnaire must keep at least one enabled starting question for project type ${projectType}`,
+      )
+    }
   }
 
   for (const section of definition.sections.filter((item) => item.isEnabled !== false)) {
@@ -3498,10 +3761,13 @@ function questionnaireStartFingerprintHash(input: {
   source: string
   referrer: string | null
 }) {
+  const projectType = input.input.projectType ?? questionnaireProjectTypeFromObjectName(input.input.objectName)
+
   return sha256Hex({
     clientName: input.input.clientName,
     clientPhone: input.normalizedPhone,
     objectName: input.input.objectName ?? null,
+    projectType,
     calculation: {
       areaSqm: input.input.calculation.areaSqm,
       selectedServiceIds: [...new Set(input.input.calculation.selectedServiceIds)],
@@ -3511,7 +3777,7 @@ function questionnaireStartFingerprintHash(input: {
     consentVersion: questionnaireConsentVersion,
     source: input.source,
     referrer: input.referrer,
-    utm: input.input.utm ?? null,
+    utm: questionnaireUtmWithProjectType(input.input.utm, projectType) ?? null,
   })
 }
 
@@ -3535,10 +3801,12 @@ function questionnaireDuplicateFingerprintHash(input: {
   normalizedPhone: string
   calculation: CalculationResult
   duplicateWindowStartedAt: Date
+  projectType: QuestionnaireProjectType | null
 }) {
   return sha256Hex({
     leadKind: 'questionnaire',
     clientPhone: input.normalizedPhone,
+    projectType: input.projectType,
     duplicateWindowStartedAt: input.duplicateWindowStartedAt.toISOString(),
     areaSqm: input.calculation.areaSqm,
     selectedServiceIds: input.calculation.selectedServiceIds,

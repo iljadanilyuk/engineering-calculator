@@ -2008,6 +2008,10 @@ Completion notes:
 - 2026-07-22 follow-up: rebuilt `/app/questionnaire` as a three-pane constructor matching the provided prototype: section list, question list, and right-side inspector. Backend-backed safe controls now cover section/question/option enablement and order changes while still blocking ID, option ID, and branching edits without a migration.
 - 2026-07-22 follow-up: public questionnaire definitions and new session snapshots now use a public-effective definition that excludes disabled/legacy sections, questions, and options. Disabled option answers are marked inactive and cannot drive branch visibility/progress.
 - 2026-07-22 follow-up: admin questionnaire PATCH now requires `baseDefinitionHash`; stale direct saves return `409`, and impossible all-disabled definitions are rejected before publication.
+- 2026-07-24 follow-up: top-level admin tabs `Структура`, `Логика (ветвления)`, `Настройки`, and `Публикация` are now live panels. Logic editing shows project-type impact for private house, apartment, and commercial objects, supports safe project-type scopes plus simple answer-based conditions, limits condition sources to earlier active questions, and preserves unsupported complex `all`/`any`/`never` rules as read-only.
+- 2026-07-24 follow-up: questionnaire answer types are expanded to `single_option`, `text`, `textarea`, `number`, `phone`, `email`, and `date`. Backend validation is now definition-aware, so dynamically created admin options and questions can be submitted while typed values are still format-checked against the session snapshot.
+- 2026-07-24 follow-up: public `/questionnaire/` has an explicit `Тип объекта` choice for `Частный дом`, `Квартира`, and `Коммерческий объект`; object text can infer the type before a manual choice. Same-device resume matching includes project type, while legacy sessions without project type use the same no-context visibility mode as backend progress.
+- 2026-07-24 follow-up: publishability is validated separately for private, apartment, and commercial starts, and reserved `pzk_project_type` metadata is stripped from incoming UTM before backend-owned project-type metadata is stored.
 
 Verification target:
 
@@ -2045,6 +2049,16 @@ Verification notes:
 - 2026-07-22 follow-up `bun run build:webapp` - passed; existing Vite large chunk-size warning remained.
 - 2026-07-22 follow-up browser smoke `bun run --cwd webapp e2e -- e2e/specs/admin-v2-visual.spec.ts` - passed. The smoke covers `/app/questionnaire` desktop/tablet/mobile no-overflow and backend-backed section, question, and option enable/reorder controls.
 - 2026-07-22 follow-up `git diff --check` - passed with Windows LF/CRLF warnings only.
+- 2026-07-24 follow-up `bun run typecheck` - passed across backend, contracts, webapp, and website.
+- 2026-07-24 follow-up `bun run test:contracts` - passed, 37 tests / 917 expects.
+- 2026-07-24 follow-up `bun run test:backend:unit` - passed, 41 tests / 178 expects.
+- 2026-07-24 follow-up `bun run test:backend:integration` - passed, 45 tests / 682 expects; includes dynamic admin options, typed answer validation, per-project-type publishability, duplicate privacy, Telegram start/completion-once, missing-env skip, and Telegram failure non-blocking coverage.
+- 2026-07-24 follow-up `bun run test:webapp` - passed, 46 tests / 135 expects. One prior run hit the existing 5s `typography-render` timeout and passed on immediate rerun.
+- 2026-07-24 follow-up `bun run build:website` - passed; existing environment warning about `NODE_TLS_REJECT_UNAUTHORIZED=0` remained outside this task.
+- 2026-07-24 follow-up `bun run build:webapp` - passed; existing Vite large chunk-size warning remained.
+- 2026-07-24 follow-up browser smoke `bun run --cwd webapp e2e -- e2e/specs/admin-v2-visual.spec.ts` - passed. The smoke now screenshots and checks no-overflow for `Структура`, `Логика`, `Настройки`, and `Публикация` at desktop/tablet/mobile widths.
+- 2026-07-24 follow-up public browser smoke - passed for static fallback `/questionnaire/` desktop/mobile, explicit project-type selection, and object-text project-type inference.
+- 2026-07-24 follow-up `git diff --check` - passed with Windows LF/CRLF warnings only.
 
 Review log:
 
@@ -2054,6 +2068,10 @@ Review log:
 - 2026-07-22 follow-up reviewer Poincare, `gpt-5.5 xhigh`: 6/10; required disabled option answers not to drive branches, stale-save protection, and publishability guards. Fixes incorporated.
 - 2026-07-22 follow-up reviewer Kant, `gpt-5.5 xhigh`: 8/10; required public legacy-section filtering, mandatory hash precondition, and more UI e2e coverage for section/option controls. Fixes incorporated.
 - 2026-07-22 final follow-up reviewer Mendel, `gpt-5.5 xhigh`: 9.5/10; no remaining blockers, gate cleared.
+- 2026-07-24 follow-up reviewer Godel, `gpt-5.5 xhigh`: 9.7/10; backend/contracts gate passed. Confirmed dynamic options, definition-aware validation, per-project-type publishability, reserved UTM stripping, recursive visibility sanitization, snapshots, Telegram non-blocking behavior, and token redaction.
+- 2026-07-24 follow-up reviewer Dewey, `gpt-5.5 xhigh`: 8.0/10; required public in-page project-type choice, correct explicit-resume project-type storage, accurate admin project-type labels, and removal of the disabled inspector pseudo-tab. Fixes incorporated.
+- 2026-07-24 follow-up reviewer Ramanujan, `gpt-5.5 xhigh`: 9.2/10; required legacy/null project-type resume parity with backend visibility and active-only admin logic counts. Fixes incorporated.
+- 2026-07-24 final follow-up reviewer Poincare, `gpt-5.5 xhigh`: 9.7/10; no remaining blockers, gate cleared.
 
 ### PZK-024 - Public Documentation Screenshot Lightbox
 

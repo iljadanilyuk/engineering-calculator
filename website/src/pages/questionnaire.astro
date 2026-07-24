@@ -254,6 +254,30 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
                   </small>
                 </label>
               </div>
+              <fieldset class="project-type-choice" aria-label="Тип объекта">
+                <legend>Тип объекта</legend>
+                <label>
+                  <input type="radio" name="questionnaire-project-type" value="private" data-project-type-choice />
+                  <span>
+                    <strong>Частный дом</strong>
+                    <small>Коттедж, дом, таунхаус</small>
+                  </span>
+                </label>
+                <label>
+                  <input type="radio" name="questionnaire-project-type" value="apartment" data-project-type-choice />
+                  <span>
+                    <strong>Квартира</strong>
+                    <small>Жилая квартира или апартаменты</small>
+                  </span>
+                </label>
+                <label>
+                  <input type="radio" name="questionnaire-project-type" value="commercial" data-project-type-choice />
+                  <span>
+                    <strong>Коммерческий объект</strong>
+                    <small>Офис, помещение, кафе, магазин</small>
+                  </span>
+                </label>
+              </fieldset>
               <label for="questionnaire-object">
                 <span>Объект и задача</span>
                 <textarea
@@ -310,16 +334,26 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
                 Этот вопрос пропущен. Можно выбрать ответ сейчас или оставить уточнение для менеджера.
               </p>
               <div class="option-grid" data-option-list></div>
-              <label class="custom-answer" for="custom-answer">
-                <span data-custom-answer-label>Если нужно, уточните</span>
-                <textarea
+              <div class="custom-answer">
+                <label id="custom-answer-label" for="custom-answer" data-custom-answer-label>
+                  Если нужно, уточните
+                </label>
+                <input
                   id="custom-answer"
-                  data-custom-answer
+                  data-custom-answer-input
+                  aria-labelledby="custom-answer-label"
+                  maxlength="2000"
+                  placeholder="Короткий ответ"
+                />
+                <textarea
+                  id="custom-answer-long"
+                  data-custom-answer-textarea
+                  aria-labelledby="custom-answer-label"
                   rows="4"
                   maxlength="2000"
                   placeholder="Например: какие работы уже выполнены, какие решения еще можно изменить"
                 ></textarea>
-              </label>
+              </div>
               <div class="question-footer">
                 <p class="wizard-status autosave-status" data-wizard-status role="status">
                   Ответы сохраняются автоматически
@@ -446,6 +480,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     type PublicQuestionnaireSession,
     type QuestionnaireAnswerInput,
     type QuestionnaireQuestion,
+    type QuestionnaireQuestionAnswerType,
     type ServiceRecord,
   } from '@poznyak-engineering-calculator/contracts'
   import {
@@ -511,6 +546,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const clientNameInput = document.querySelector<HTMLInputElement>('[data-client-name]')
   const clientPhoneInput = document.querySelector<HTMLInputElement>('[data-client-phone]')
   const phoneError = document.querySelector<HTMLElement>('[data-phone-error]')
+  const projectTypeInputs = document.querySelectorAll<HTMLInputElement>('[data-project-type-choice]')
   const objectNameInput = document.querySelector<HTMLTextAreaElement>('[data-object-name]')
   const consentInput = document.querySelector<HTMLInputElement>('[data-consent]')
   const startTrigger = document.querySelector<HTMLButtonElement>('[data-start-trigger]')
@@ -524,8 +560,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const questionState = document.querySelector<HTMLElement>('[data-question-state]')
   const skippedNote = document.querySelector<HTMLElement>('[data-skipped-note]')
   const optionList = document.querySelector<HTMLElement>('[data-option-list]')
-  const customAnswer = document.querySelector<HTMLTextAreaElement>('[data-custom-answer]')
-  const customAnswerLabelText = document.querySelector<HTMLElement>('[data-custom-answer-label]')
+  const customAnswerInput = document.querySelector<HTMLInputElement>('[data-custom-answer-input]')
+  const customAnswerTextarea = document.querySelector<HTMLTextAreaElement>('[data-custom-answer-textarea]')
+  const customAnswerLabelText = document.querySelector<HTMLLabelElement>('[data-custom-answer-label]')
   const answerSkipped = document.querySelector<HTMLButtonElement>('[data-answer-skipped]')
   const prevQuestion = document.querySelector<HTMLButtonElement>('[data-prev-question]')
   const nextQuestion = document.querySelector<HTMLButtonElement>('[data-next-question]')
@@ -547,6 +584,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   const hasExplicitServiceSelection = Array.isArray(initialChoiceState.selectedServiceIds)
   let services = normalizeServices(data.fallbackServices)
   let selectedProjectType: ProjectType = initialChoiceState.projectType ?? data.selectedProjectType ?? 'private'
+  let projectTypeTouched = Boolean(initialChoiceState.projectType)
   let selectedServiceIds = new Set(
     hasExplicitServiceSelection
       ? initialChoiceState.selectedServiceIds
@@ -559,6 +597,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   let isSaving = false
   let startIdempotencyKey = createIdempotencyKey()
   let session: PublicQuestionnaireSession | null = null
+  let sessionProjectType: ProjectType | null = null
   let currentQuestionIndex = 0
   let pendingStoredResume = readStoredQuestionnaireResume()
   const draftOptionByQuestionId = new Map<string, string>()
@@ -593,7 +632,20 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       maskPublicContactPhoneInput(clientPhoneInput)
       resetStartKey()
     })
-    objectNameInput?.addEventListener('input', resetStartKey)
+    projectTypeInputs.forEach((input) => {
+      input.addEventListener('change', () => {
+        if (!input.checked || !isProjectType(input.value)) return
+        selectedProjectType = input.value
+        projectTypeTouched = true
+        resetStartKey()
+        render()
+      })
+    })
+    objectNameInput?.addEventListener('input', () => {
+      applyProjectTypeInferenceFromObject()
+      resetStartKey()
+      render()
+    })
     consentInput?.addEventListener('change', resetStartKey)
 
     answerSkipped?.addEventListener('click', () => {
@@ -612,11 +664,13 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       void saveCurrentQuestionAndAdvance()
     })
 
-    customAnswer?.addEventListener('input', () => {
-      const question = currentQuestion()
-      if (customAnswer.value.trim()) draftOptionByQuestionId.delete(question.id)
-      updateQuestionControls()
-    })
+    for (const answerField of [customAnswerInput, customAnswerTextarea]) {
+      answerField?.addEventListener('input', () => {
+        const question = currentQuestion()
+        if (answerField.value.trim()) draftOptionByQuestionId.delete(question.id)
+        updateQuestionControls()
+      })
+    }
 
     storedResumeContinue?.addEventListener('click', () => {
       if (!pendingStoredResume) return
@@ -700,7 +754,6 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       return
     }
 
-    // TODO(PZK): route private/apartment/commercial to separate questionnaire definitions.
     const matchingResume = matchingStoredQuestionnaireResume(validation.clientName, validation.clientPhone)
     if (matchingResume) {
       setWizardStatus('Нашли сохраненный опросник на этом устройстве. Открываю продолжение...', 'loading')
@@ -723,6 +776,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
           idempotencyKey: startIdempotencyKey,
           clientName: validation.clientName,
           clientPhone: validation.clientPhone,
+          projectType: selectedProjectType,
           objectName: questionnaireObjectName(),
           calculation: {
             areaSqm: currentCalculation.areaSqm,
@@ -740,7 +794,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
       const parsed = publicQuestionnaireStartResponseSchema.parse(payload)
       applyQuestionnaireSession(parsed.questionnaire, 'first-unanswered')
-      storeQuestionnaireResume(parsed.questionnaire.publicToken, validation.clientName, validation.clientPhone)
+      storeQuestionnaireResume(
+        parsed.questionnaire.publicToken,
+        validation.clientName,
+        validation.clientPhone,
+        parsed.questionnaire.projectType ?? selectedProjectType,
+      )
       pendingStoredResume = readStoredQuestionnaireResume()
       setWizardStatus(
         response.status === 200
@@ -776,7 +835,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       }
       const parsed = publicQuestionnaireSessionResponseSchema.parse(await response.json())
       applyQuestionnaireSession(parsed.questionnaire, 'first-unanswered')
-      storeQuestionnaireResume(parsed.questionnaire.publicToken)
+      storeQuestionnaireResume(parsed.questionnaire.publicToken, undefined, undefined, parsed.questionnaire.projectType)
       pendingStoredResume = readStoredQuestionnaireResume()
       setWizardStatus('Открыт сохраненный опросник.', 'ready')
       render()
@@ -833,6 +892,8 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     mode: 'first-unanswered' | 'preserve' = 'preserve',
   ) {
     session = nextSession
+    sessionProjectType = nextSession.projectType ?? null
+    if (nextSession.projectType) selectedProjectType = nextSession.projectType
     applyQuestionnaireDefinition(nextSession.definition)
     if (mode === 'preserve') {
       clampCurrentQuestionIndex()
@@ -886,6 +947,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     renderProgress()
     renderQuestion()
     renderSessionPanels()
+    renderProjectTypeInputs()
     updateStartState()
     updateQuestionControls()
   }
@@ -1071,21 +1133,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       questionState.dataset.state = answer?.kind === 'skipped' ? 'skipped' : answer ? 'answered' : 'empty'
     }
     if (skippedNote) skippedNote.hidden = answer?.kind !== 'skipped'
-    if (customAnswer) {
-      customAnswer.value = answer?.kind === 'custom' ? answer.customText ?? '' : ''
-      customAnswer.inputMode = answerType === 'number' ? 'decimal' : 'text'
-      customAnswer.maxLength = answerType === 'number' ? 40 : 2000
-      customAnswer.placeholder = answerType === 'number'
-        ? 'Например: 180 или 180,5'
-        : 'Например: какие работы уже выполнены, какие решения еще можно изменить'
-      customAnswer.removeAttribute('aria-invalid')
-    }
+    renderCustomAnswerField(answerType, answer?.kind === 'custom' ? answer.customText ?? '' : '', options.length > 0)
     if (customAnswerLabelText) {
-      customAnswerLabelText.textContent = answerType === 'number'
-        ? 'Введите число'
-        : options.length > 0
-          ? 'Если нужно, уточните'
-          : 'Ваш ответ'
+      customAnswerLabelText.textContent = customAnswerLabel(answerType, options.length > 0)
     }
 
     if (optionList) {
@@ -1111,12 +1161,12 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
           .join('')
         : answerType === 'number'
           ? '<p class="empty-options">Для этого вопроса нужно числовое значение.</p>'
-          : '<p class="empty-options">Для этого вопроса нужен короткий текстовый ответ.</p>'
+          : `<p class="empty-options">${escapeHtml(emptyQuestionInputMessage(answerType))}</p>`
 
       optionList.querySelectorAll<HTMLButtonElement>('button[data-option-id]').forEach((button) => {
         button.addEventListener('click', () => {
           draftOptionByQuestionId.set(question.id, button.dataset.optionId ?? '')
-          if (customAnswer) customAnswer.value = ''
+          clearCustomAnswerFields()
           renderQuestion()
         })
       })
@@ -1128,6 +1178,13 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     if (contactForm) contactForm.hidden = hasSession
     if (storedResumePanel) storedResumePanel.hidden = hasSession || !pendingStoredResume || hasOfferChoiceQuery()
     if (resumePanel) resumePanel.hidden = !hasSession
+  }
+
+  function renderProjectTypeInputs() {
+    projectTypeInputs.forEach((input) => {
+      input.checked = input.value === selectedProjectType
+      input.disabled = Boolean(session)
+    })
   }
 
   function updateStartState() {
@@ -1186,9 +1243,11 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
     const question = currentQuestion()
     const draftOptionId = draftOptionByQuestionId.get(question.id)
-    const text = customAnswer?.value.trim() ?? ''
     const existingAnswer = answersByQuestionId().get(question.id)
     const answerType = getQuestionnaireQuestionAnswerType(question)
+    const hasVisibleOptions = visibleQuestionOptions(question).length > 0
+    const customAnswer = customAnswerElement(answerType, hasVisibleOptions)
+    const text = customAnswer?.value.trim() ?? ''
 
     if (draftOptionId) {
       await saveAnswer({
@@ -1200,9 +1259,9 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     if (text) {
-      const customText = answerType === 'number' ? parseQuestionnaireNumber(text) : text
-      if (!customText) {
-        setWizardStatus('Введите число, например 180 или 180,5.', 'error')
+      const customText = normalizeQuestionnaireCustomAnswer(text, answerType)
+      if (!customText.valid) {
+        setWizardStatus(customText.message, 'error')
         customAnswer?.setAttribute('aria-invalid', 'true')
         return
       }
@@ -1211,7 +1270,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       await saveAnswer({
         questionId: question.id,
         kind: 'custom',
-        customText,
+        customText: customText.value,
       }, { advance: true })
       return
     }
@@ -1223,9 +1282,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     }
 
     setWizardStatus(
-      answerType === 'number'
-        ? 'Введите число или нажмите «Пропустить».'
-        : 'Выберите вариант, введите свой ответ или нажмите «Пропустить».',
+      emptyAnswerMessage(answerType),
       'error',
     )
     customAnswer?.setAttribute('aria-invalid', 'true')
@@ -1262,17 +1319,59 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   function activeQuestions() {
-    return getQuestionnaireActiveQuestions(session?.answers ?? [], currentDefinition())
+    return getQuestionnaireActiveQuestions(session?.answers ?? [], currentDefinition(), questionnaireVisibilityContext())
   }
 
   function activeSections() {
-    return getQuestionnaireActiveSections(session?.answers ?? [], currentDefinition())
+    return getQuestionnaireActiveSections(session?.answers ?? [], currentDefinition(), questionnaireVisibilityContext())
   }
 
   function visibleQuestionOptions(question: QuestionnaireQuestion) {
-    return getQuestionnaireActiveOptions(question, session?.answers ?? [], currentDefinition()).filter(
+    return getQuestionnaireActiveOptions(
+      question,
+      session?.answers ?? [],
+      currentDefinition(),
+      questionnaireVisibilityContext(),
+    ).filter(
       (option) => option.id !== 'UNKNOWN' && !/пока не/i.test(option.label),
     )
+  }
+
+  function questionnaireVisibilityContext() {
+    return session
+      ? sessionProjectType
+        ? { projectType: sessionProjectType }
+        : {}
+      : { projectType: selectedProjectType }
+  }
+
+  function applyProjectTypeInferenceFromObject() {
+    if (projectTypeTouched || session) return
+    const inferred = projectTypeFromObjectText(objectNameInput?.value ?? '')
+    if (inferred && inferred !== selectedProjectType) selectedProjectType = inferred
+  }
+
+  function projectTypeFromObjectText(value: string): ProjectType | null {
+    const normalized = value.toLowerCase()
+    if (normalized.includes('квартир') || normalized.includes('апартамент')) return 'apartment'
+    if (
+      normalized.includes('коммер') ||
+      normalized.includes('офис') ||
+      normalized.includes('магазин') ||
+      normalized.includes('кафе') ||
+      normalized.includes('помещен')
+    ) {
+      return 'commercial'
+    }
+    if (
+      normalized.includes('частный дом') ||
+      normalized.includes('коттедж') ||
+      normalized.includes('таунхаус') ||
+      /\bдом\b/u.test(normalized)
+    ) {
+      return 'private'
+    }
+    return null
   }
 
   function currentDefinition() {
@@ -1384,6 +1483,155 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     return canonical
   }
 
+  function renderCustomAnswerField(
+    answerType: QuestionnaireQuestionAnswerType,
+    value: string,
+    hasOptions: boolean,
+  ) {
+    const field = customAnswerElement(answerType, hasOptions)
+    const hiddenField = field === customAnswerTextarea ? customAnswerInput : customAnswerTextarea
+
+    if (hiddenField) {
+      hiddenField.hidden = true
+      hiddenField.value = ''
+      hiddenField.removeAttribute('aria-invalid')
+    }
+
+    if (!field) return
+
+    field.hidden = false
+    field.value = value
+    field.maxLength = customAnswerMaxLength(answerType)
+    field.placeholder = customAnswerPlaceholder(answerType, hasOptions)
+    field.inputMode = customAnswerInputMode(answerType)
+    field.removeAttribute('aria-invalid')
+    if (customAnswerLabelText) customAnswerLabelText.htmlFor = field.id
+
+    if (field instanceof HTMLInputElement) {
+      field.type = answerType === 'email'
+        ? 'email'
+        : answerType === 'phone'
+          ? 'tel'
+          : answerType === 'date'
+            ? 'text'
+            : 'text'
+    }
+  }
+
+  function customAnswerElement(answerType: QuestionnaireQuestionAnswerType, hasOptions: boolean) {
+    return answerType === 'textarea' || hasOptions ? customAnswerTextarea : customAnswerInput
+  }
+
+  function clearCustomAnswerFields() {
+    for (const answerField of [customAnswerInput, customAnswerTextarea]) {
+      if (!answerField) continue
+      answerField.value = ''
+      answerField.removeAttribute('aria-invalid')
+    }
+  }
+
+  function customAnswerInputMode(answerType: QuestionnaireQuestionAnswerType) {
+    if (answerType === 'number') return 'decimal'
+    if (answerType === 'phone') return 'tel'
+    if (answerType === 'email') return 'email'
+    if (answerType === 'date') return 'numeric'
+    return 'text'
+  }
+
+  function customAnswerMaxLength(answerType: QuestionnaireQuestionAnswerType) {
+    if (answerType === 'number') return 40
+    if (answerType === 'phone') return 40
+    if (answerType === 'email') return 160
+    if (answerType === 'date') return 20
+    return 2000
+  }
+
+  function customAnswerPlaceholder(answerType: QuestionnaireQuestionAnswerType, hasOptions: boolean) {
+    if (hasOptions) return 'Например: важное уточнение к выбранному варианту'
+    if (answerType === 'number') return 'Например: 180 или 180,5'
+    if (answerType === 'phone') return '+375 29 111-22-33'
+    if (answerType === 'email') return 'name@example.com'
+    if (answerType === 'date') return 'дд.мм.гггг'
+    if (answerType === 'textarea') return 'Например: какие работы уже выполнены, какие решения еще можно изменить'
+    return 'Короткий ответ'
+  }
+
+  function customAnswerLabel(answerType: QuestionnaireQuestionAnswerType, hasOptions: boolean) {
+    if (hasOptions) return 'Если нужно, уточните'
+    if (answerType === 'number') return 'Введите число'
+    if (answerType === 'phone') return 'Введите телефон'
+    if (answerType === 'email') return 'Введите email'
+    if (answerType === 'date') return 'Введите дату'
+    return 'Ваш ответ'
+  }
+
+  function normalizeQuestionnaireCustomAnswer(
+    value: string,
+    answerType: QuestionnaireQuestionAnswerType,
+  ): { valid: true; value: string } | { valid: false; message: string } {
+    if (answerType === 'number') {
+      const number = parseQuestionnaireNumber(value)
+      return number
+        ? { valid: true, value: number }
+        : { valid: false, message: 'Введите число, например 180 или 180,5.' }
+    }
+
+    if (answerType === 'phone') {
+      const phone = validatePublicContactPhone(value)
+      return phone.valid && phone.normalized
+        ? { valid: true, value: phone.normalized }
+        : { valid: false, message: 'Введите телефон в формате +375 29 111-22-33.' }
+    }
+
+    if (answerType === 'email') {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+        ? { valid: true, value }
+        : { valid: false, message: 'Введите корректный email.' }
+    }
+
+    if (answerType === 'date') {
+      const normalized = normalizeQuestionnaireDate(value)
+      return normalized
+        ? { valid: true, value: normalized }
+        : { valid: false, message: 'Введите дату в формате дд.мм.гггг.' }
+    }
+
+    return { valid: true, value }
+  }
+
+  function normalizeQuestionnaireDate(value: string) {
+    const match = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(value.trim())
+    if (!match) return null
+    const day = Number(match[1])
+    const month = Number(match[2])
+    const year = Number(match[3])
+    const date = new Date(year, month - 1, day)
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null
+    }
+    return `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`
+  }
+
+  function emptyAnswerMessage(answerType: QuestionnaireQuestionAnswerType) {
+    if (answerType === 'number') return 'Введите число или нажмите «Пропустить».'
+    if (answerType === 'phone') return 'Введите телефон или нажмите «Пропустить».'
+    if (answerType === 'email') return 'Введите email или нажмите «Пропустить».'
+    if (answerType === 'date') return 'Введите дату или нажмите «Пропустить».'
+    return 'Выберите вариант, введите свой ответ или нажмите «Пропустить».'
+  }
+
+  function emptyQuestionInputMessage(answerType: QuestionnaireQuestionAnswerType) {
+    if (answerType === 'phone') return 'Для этого вопроса нужен телефон.'
+    if (answerType === 'email') return 'Для этого вопроса нужен email.'
+    if (answerType === 'date') return 'Для этого вопроса нужна дата.'
+    if (answerType === 'textarea') return 'Для этого вопроса нужен развернутый ответ.'
+    return 'Для этого вопроса нужен короткий текстовый ответ.'
+  }
+
   async function loadPublicQuestionnaireDefinition() {
     if (!apiBaseUrl) return
 
@@ -1450,21 +1698,31 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
       }
       if (objectNameInput && !objectNameInput.value.trim() && typeof parsed.objectName === 'string') {
         objectNameInput.value = parsed.objectName.slice(0, 160)
+        applyProjectTypeInferenceFromObject()
       }
     } catch {
       // Prefill is only a convenience after the quick КП flow.
     }
   }
 
-  function storeQuestionnaireResume(token: string, clientName?: string, clientPhone?: string) {
+  function storeQuestionnaireResume(
+    token: string,
+    clientName?: string,
+    clientPhone?: string,
+    projectType?: ProjectType | null,
+  ) {
     try {
       const existing = readStoredQuestionnaireResume()
       const phone = clientPhone ? validatePublicContactPhone(clientPhone).normalized : existing?.clientPhone
       const name = clientName?.trim().toLowerCase() || existing?.clientName
+      const savedProjectType = projectType !== undefined
+        ? projectType
+        : sessionProjectType ?? selectedProjectType ?? existing?.projectType
       localStorage.setItem(questionnaireSessionStorageKey, JSON.stringify({
         token,
         clientName: name,
         clientPhone: phone,
+        ...(savedProjectType ? { projectType: savedProjectType } : {}),
         updatedAt: new Date().toISOString(),
       }))
     } catch {
@@ -1478,6 +1736,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
         token?: unknown
         clientName?: unknown
         clientPhone?: unknown
+        projectType?: unknown
       }
       if (typeof parsed.token !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(parsed.token)) {
         return null
@@ -1486,6 +1745,7 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
         token: parsed.token,
         clientName: typeof parsed.clientName === 'string' ? parsed.clientName : undefined,
         clientPhone: typeof parsed.clientPhone === 'string' ? parsed.clientPhone : undefined,
+        projectType: isProjectType(parsed.projectType) ? parsed.projectType : undefined,
       }
     } catch {
       return null
@@ -1498,8 +1758,10 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
     const phone = validatePublicContactPhone(clientPhone).normalized
     const name = clientName.trim().toLowerCase()
-    if (!stored.clientPhone || !stored.clientName || !phone) return null
-    return stored.clientPhone === phone && stored.clientName === name ? stored : null
+    if (!stored.clientPhone || !stored.clientName || !stored.projectType || !phone) return null
+    return stored.clientPhone === phone && stored.clientName === name && stored.projectType === selectedProjectType
+      ? stored
+      : null
   }
 
   function clearStoredQuestionnaireResume() {
@@ -2175,6 +2437,68 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
     gap: 14px;
   }
 
+  .project-type-choice {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .project-type-choice legend {
+    grid-column: 1 / -1;
+    margin-bottom: 2px;
+    color: var(--body);
+    font-size: 13px;
+    font-weight: 850;
+  }
+
+  .project-type-choice label {
+    position: relative;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    padding: 12px;
+    cursor: pointer;
+  }
+
+  .project-type-choice input {
+    width: 17px;
+    height: 17px;
+    margin: 2px 0 0;
+    accent-color: var(--blue);
+  }
+
+  .project-type-choice label:has(input:checked) {
+    border-color: var(--blue);
+    background: #f3f8fd;
+    box-shadow: inset 0 0 0 1px rgba(11, 102, 191, 0.14);
+  }
+
+  .project-type-choice span {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+  }
+
+  .project-type-choice strong {
+    color: var(--navy);
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
+  .project-type-choice small {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
   label {
     display: grid;
     gap: 8px;
@@ -2434,7 +2758,45 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
   }
 
   .custom-answer {
+    display: grid;
+    gap: 8px;
     margin-top: 2px;
+  }
+
+  .custom-answer label {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .custom-answer input,
+  .custom-answer textarea {
+    width: 100%;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.45;
+    outline: none;
+  }
+
+  .custom-answer input {
+    min-height: 48px;
+    padding: 0 14px;
+  }
+
+  .custom-answer textarea {
+    min-height: 116px;
+    resize: vertical;
+    padding: 13px 14px;
+  }
+
+  .custom-answer input[aria-invalid="true"],
+  .custom-answer textarea[aria-invalid="true"] {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(182, 64, 26, 0.12);
   }
 
   .question-footer {
@@ -2800,6 +3162,10 @@ const initialSummaryRubles = allocateDisplayBynRubles(initialCalculation)
 
     .stored-resume-panel,
     .contact-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .project-type-choice {
       grid-template-columns: 1fr;
     }
 

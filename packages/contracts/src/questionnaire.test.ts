@@ -76,8 +76,8 @@ describe('technical questionnaire contracts', () => {
           questionId: 'client_email',
           prompt: 'Электронная почта для связи',
           isEnabled: true,
-          answerType: 'text',
-          showIf: null,
+          answerType: 'email',
+          showIf: { projectTypes: ['private', 'commercial'] },
         },
         {
           target: 'option',
@@ -91,6 +91,12 @@ describe('technical questionnaire contracts', () => {
         {
           target: 'section_order',
           sectionIds: record.sections.map((section) => section.id),
+        },
+        {
+          target: 'section_create',
+          title: 'Новый раздел',
+          questionPrompt: 'Новый вопрос в разделе',
+          answerType: 'textarea',
         },
         {
           target: 'question_order',
@@ -127,9 +133,9 @@ describe('technical questionnaire contracts', () => {
     })
 
     expect(record.status).toBe('static_fallback')
-    expect(edit.edits).toHaveLength(10)
+    expect(edit.edits).toHaveLength(11)
     expect(getQuestionnaireQuestionAnswerType(questionById.get('OBJ_DOCS')!)).toBe('single_option')
-    expect(getQuestionnaireQuestionAnswerType(questionById.get('client_email')!)).toBe('text')
+    expect(getQuestionnaireQuestionAnswerType(questionById.get('client_email')!)).toBe('email')
     expect(getQuestionnaireQuestionAnswerType(questionById.get('total_area')!)).toBe('number')
     expect(
       questionnaireDefinitionPatchRequestSchema.parse({
@@ -323,6 +329,42 @@ describe('technical questionnaire contracts', () => {
     expect(thicknessOptions).not.toContain('MM_375')
   })
 
+  test('uses project type visibility rules when selecting active questionnaire questions', () => {
+    const updatedAt = '2026-07-21T08:00:00.000Z'
+    const definition: QuestionnaireDefinition = {
+      ...technicalQuestionnaireDefinition,
+      sections: technicalQuestionnaireDefinition.sections.map((section) =>
+        section.id === 'contacts_object'
+          ? {
+              ...section,
+              questions: section.questions.map((question) =>
+                question.id === 'object_address'
+                  ? { ...question, showIf: { projectTypes: ['apartment', 'commercial'] } }
+                  : question,
+              ),
+            }
+          : section,
+      ),
+    }
+    const answers = [
+      {
+        questionId: 'object_address',
+        kind: 'custom' as const,
+        customText: 'Минск',
+        updatedAt,
+        isActive: true,
+      },
+    ]
+
+    expect(getQuestionnaireActiveQuestions([], definition, { projectType: 'private' }).map((question) => question.id))
+      .not.toContain('object_address')
+    expect(getQuestionnaireActiveQuestions([], definition, { projectType: 'apartment' }).map((question) => question.id))
+      .toContain('object_address')
+    expect(markQuestionnaireAnswersActivity(answers, definition, { projectType: 'private' })[0]?.isActive).toBe(false)
+    expect(calculateQuestionnaireProgress(answers, updatedAt, definition, { projectType: 'private' }).answeredCount)
+      .toBe(0)
+  })
+
   test('marks hidden branch answers inactive and restores them when branch returns', () => {
     const updatedAt = '2026-07-21T08:00:00.000Z'
     const hidden = markQuestionnaireAnswersActivity([
@@ -380,29 +422,22 @@ describe('technical questionnaire contracts', () => {
     expect(progress.totalQuestions).toBe(getQuestionnaireActiveQuestions(answers).length)
   })
 
-  test('rejects unknown questions, wrong options, duplicate question ids, and empty custom answers', () => {
-    expect(() =>
-      questionnaireAnswersPatchRequestSchema.parse({
-        answers: [
-          {
-            questionId: 'missing_question',
-            kind: 'unknown',
-          },
-        ],
-      }),
-    ).toThrow()
+  test('keeps answer request schemas shape-only for backend-published dynamic definitions', () => {
+    const dynamicAnswer = questionnaireAnswersPatchRequestSchema.parse({
+      answers: [
+        {
+          questionId: 'CUSTOM_127',
+          kind: 'option',
+          optionId: 'OPTION_9',
+        },
+      ],
+    })
 
-    expect(() =>
-      questionnaireAnswersPatchRequestSchema.parse({
-        answers: [
-          {
-            questionId: 'interior_finished',
-            kind: 'option',
-            optionId: 'maybe',
-          },
-        ],
-      }),
-    ).toThrow()
+    expect(dynamicAnswer.answers[0]).toMatchObject({
+      questionId: 'CUSTOM_127',
+      kind: 'option',
+      optionId: 'OPTION_9',
+    })
 
     expect(() =>
       questionnaireAnswersPatchRequestSchema.parse({
@@ -411,6 +446,17 @@ describe('technical questionnaire contracts', () => {
             questionId: 'wall_materials',
             kind: 'custom',
             customText: ' ',
+          },
+        ],
+      }),
+    ).toThrow()
+
+    expect(() =>
+      questionnaireAnswersPatchRequestSchema.parse({
+        answers: [
+          {
+            questionId: 'OBJ_DOCS',
+            kind: 'option',
           },
         ],
       }),

@@ -42,9 +42,18 @@ export type QuestionnaireDefinition = {
   sections: readonly QuestionnaireSection[]
 }
 
+export type QuestionnaireProjectType = z.infer<typeof questionnaireProjectTypeSchema>
+
+export type QuestionnaireVisibilityContext = {
+  projectType?: QuestionnaireProjectType | null
+}
+
 export type QuestionnaireVisibilityRule =
   | {
       never: true
+    }
+  | {
+      projectTypes: readonly QuestionnaireProjectType[]
     }
   | {
       questionId: string
@@ -76,11 +85,23 @@ const yesNoUnknownOptions = [
 const questionnaireIdSchema = z.string().trim().min(1).max(120)
 const questionnaireTextSchema = (max: number) => z.string().trim().min(1).max(max)
 const optionalQuestionnaireHintSchema = z.union([questionnaireTextSchema(500), z.null()])
-export const questionnaireQuestionAnswerTypeSchema = z.enum(['single_option', 'text', 'number'])
+export const questionnaireProjectTypeSchema = z.enum(['private', 'apartment', 'commercial'])
+export const questionnaireQuestionAnswerTypeSchema = z.enum([
+  'single_option',
+  'text',
+  'textarea',
+  'number',
+  'phone',
+  'email',
+  'date',
+])
 
 export const questionnaireVisibilityRuleSchema: z.ZodType<QuestionnaireVisibilityRule> = z.lazy(() =>
   z.union([
     z.object({ never: z.literal(true) }).strict(),
+    z.object({
+      projectTypes: z.array(questionnaireProjectTypeSchema).min(1).max(3),
+    }).strict(),
     z.object({
       questionId: questionnaireIdSchema,
       equals: z.array(z.string().trim().min(1).max(120)).optional(),
@@ -206,6 +227,18 @@ const questionnaireSectionOrderEditSchema = z.object({
   sectionIds: z.array(questionnaireIdSchema).min(1),
 }).strict()
 
+const questionnaireSectionCreateEditSchema = z.object({
+  target: z.literal('section_create'),
+  title: questionnaireTextSchema(200),
+  questionPrompt: questionnaireTextSchema(700).optional(),
+  answerType: questionnaireQuestionAnswerTypeSchema.optional(),
+}).strict()
+
+const questionnaireSectionDeleteEditSchema = z.object({
+  target: z.literal('section_delete'),
+  sectionId: questionnaireIdSchema,
+}).strict()
+
 const questionnaireQuestionOrderEditSchema = z.object({
   target: z.literal('question_order'),
   sectionId: questionnaireIdSchema,
@@ -248,6 +281,8 @@ export const questionnaireDefinitionTextEditSchema = z.discriminatedUnion('targe
   questionnaireQuestionPromptEditSchema,
   questionnaireOptionTextEditSchema,
   questionnaireSectionOrderEditSchema,
+  questionnaireSectionCreateEditSchema,
+  questionnaireSectionDeleteEditSchema,
   questionnaireQuestionOrderEditSchema,
   questionnaireQuestionCreateEditSchema,
   questionnaireQuestionDeleteEditSchema,
@@ -1278,8 +1313,6 @@ export const technicalQuestionnaireQuestionIds = technicalQuestionnaireQuestions
   (question) => question.id,
 )
 
-const questionById = new Map(technicalQuestionnaireQuestions.map((question) => [question.id, question]))
-
 const optionalTrimmedTextSchema = (max: number) =>
   z.preprocess((value) => {
     if (typeof value !== 'string') return value
@@ -1295,32 +1328,12 @@ export const questionnaireAnswerInputSchema = z.object({
   optionId: optionalTrimmedTextSchema(120),
   customText: optionalTrimmedTextSchema(2_000),
 }).superRefine((value, context) => {
-  const question = questionById.get(value.questionId)
-
-  if (!question) {
-    context.addIssue({
-      code: 'custom',
-      path: ['questionId'],
-      message: 'Unknown questionnaire question id',
-    })
-    return
-  }
-
   if (value.kind === 'option') {
     if (!value.optionId) {
       context.addIssue({
         code: 'custom',
         path: ['optionId'],
         message: 'Option answers require optionId',
-      })
-      return
-    }
-
-    if (!question.options?.some((option) => option.id === value.optionId)) {
-      context.addIssue({
-        code: 'custom',
-        path: ['optionId'],
-        message: 'Unknown option id for this question',
       })
     }
     return
@@ -1373,6 +1386,7 @@ export const questionnaireStartRequestSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   clientName: z.string().trim().min(2).max(120),
   clientPhone: z.string().trim().min(5).max(40),
+  projectType: questionnaireProjectTypeSchema.optional(),
   objectName: z.string().trim().min(1).max(160).optional(),
   calculation: calculationRequestSchema,
   consentAccepted: z.literal(true),
@@ -1402,6 +1416,7 @@ export const publicQuestionnaireSessionSchema = z.object({
   questionnaireVersion: z.string().min(1),
   definitionHash: z.string().regex(/^[a-f0-9]{64}$/),
   definition: questionnaireDefinitionRecordSchema,
+  projectType: questionnaireProjectTypeSchema.nullable(),
   progress: questionnaireProgressSchema,
   calculation: z.object({
     areaSqm: z.string(),
@@ -1502,7 +1517,12 @@ export function getQuestionnaireQuestion(
 export function getQuestionnaireQuestionAnswerType(question: QuestionnaireQuestion): QuestionnaireQuestionAnswerType {
   if ((question.options ?? []).length > 0) return 'single_option'
   if (question.answerType) return question.answerType
-  return question.id.toLowerCase().includes('area') ? 'number' : 'text'
+  const normalizedId = question.id.toLowerCase()
+  if (normalizedId.includes('area')) return 'number'
+  if (normalizedId.includes('phone')) return 'phone'
+  if (normalizedId.includes('email') || normalizedId.includes('mail')) return 'email'
+  if (normalizedId.includes('date')) return 'date'
+  return 'text'
 }
 
 export function getQuestionnairePublicDefinition(
@@ -1528,25 +1548,27 @@ export function getQuestionnairePublicDefinition(
 export function getQuestionnaireActiveQuestions(
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ) {
-  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition)
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition, context)
 
   return questionnaireEnabledSections(definition)
     .flatMap((section) => section.questions)
-    .filter((question) => isQuestionnaireQuestionActive(question, answersByQuestionId))
+    .filter((question) => isQuestionnaireQuestionActive(question, answersByQuestionId, context))
 }
 
 export function getQuestionnaireActiveSections(
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ) {
-  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition)
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition, context)
 
   return questionnaireEnabledSections(definition)
     .map((section) => ({
       ...section,
       questions: section.questions.filter((question) =>
-        isQuestionnaireQuestionActive(question, answersByQuestionId),
+        isQuestionnaireQuestionActive(question, answersByQuestionId, context),
       ),
     }))
     .filter((section) => section.questions.length > 0)
@@ -1556,23 +1578,28 @@ export function getQuestionnaireActiveOptions(
   question: QuestionnaireQuestion,
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ) {
-  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition)
-  const activeQuestion = getQuestionnaireActiveQuestions(answers, definition).find((item) => item.id === question.id)
+  const answersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition, context)
+  const activeQuestion = getQuestionnaireActiveQuestions(answers, definition, context)
+    .find((item) => item.id === question.id)
 
   if (!activeQuestion) return []
 
   return (activeQuestion.options ?? []).filter((option) =>
-    option.isEnabled !== false && isQuestionnaireVisibilityRuleActive(option.showIf, answersByQuestionId),
+    option.isEnabled !== false && isQuestionnaireVisibilityRuleActive(option.showIf, answersByQuestionId, context),
   )
 }
 
 export function markQuestionnaireAnswersActivity<T extends QuestionnaireStoredAnswer>(
   answers: readonly T[],
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ) {
-  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers, definition).map((question) => question.id))
-  const effectiveAnswersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition)
+  const activeQuestionIds = new Set(
+    getQuestionnaireActiveQuestions(answers, definition, context).map((question) => question.id),
+  )
+  const effectiveAnswersByQuestionId = questionnaireEffectiveAnswerMap(answers, definition, context)
 
   return sortQuestionnaireAnswerRecords(
     answers.map((answer) => ({
@@ -1587,9 +1614,12 @@ export function calculateQuestionnaireProgress(
   answers: readonly QuestionnaireStoredAnswer[],
   updatedAtIso: string,
   definition: QuestionnaireDefinition = technicalQuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext = {},
 ): QuestionnaireProgress {
-  const activeQuestionIds = new Set(getQuestionnaireActiveQuestions(answers, definition).map((question) => question.id))
-  const activeAnswers = markQuestionnaireAnswersActivity(answers, definition).filter(
+  const activeQuestionIds = new Set(
+    getQuestionnaireActiveQuestions(answers, definition, context).map((question) => question.id),
+  )
+  const activeAnswers = markQuestionnaireAnswersActivity(answers, definition, context).filter(
     (answer) => answer.isActive && activeQuestionIds.has(answer.questionId),
   )
   const uniqueAnswers = new Map(activeAnswers.map((answer) => [answer.questionId, answer]))
@@ -1619,23 +1649,33 @@ export function calculateQuestionnaireProgress(
 export function isQuestionnaireQuestionActive(
   question: QuestionnaireQuestion,
   answersByQuestionId: ReadonlyMap<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>,
+  context: QuestionnaireVisibilityContext = {},
 ) {
   if (question.isEnabled === false) return false
   if (question.isLegacy) return false
-  return isQuestionnaireVisibilityRuleActive(question.showIf, answersByQuestionId)
+  return isQuestionnaireVisibilityRuleActive(question.showIf, answersByQuestionId, context)
 }
 
 export function isQuestionnaireVisibilityRuleActive(
   rule: QuestionnaireVisibilityRule | undefined,
   answersByQuestionId: ReadonlyMap<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>,
+  context: QuestionnaireVisibilityContext = {},
 ): boolean {
   if (!rule) return true
   if ('never' in rule) return false
+  if ('projectTypes' in rule) {
+    if (!context.projectType) return true
+    return rule.projectTypes.includes(context.projectType)
+  }
   if ('all' in rule) {
-    return rule.all.every((condition) => isQuestionnaireVisibilityRuleActive(condition, answersByQuestionId))
+    return rule.all.every((condition) =>
+      isQuestionnaireVisibilityRuleActive(condition, answersByQuestionId, context)
+    )
   }
   if ('any' in rule) {
-    return rule.any.some((condition) => isQuestionnaireVisibilityRuleActive(condition, answersByQuestionId))
+    return rule.any.some((condition) =>
+      isQuestionnaireVisibilityRuleActive(condition, answersByQuestionId, context)
+    )
   }
 
   const answer = answersByQuestionId.get(rule.questionId)
@@ -1665,6 +1705,7 @@ function questionnaireAnswerMap(
 function questionnaireEffectiveAnswerMap(
   answers: readonly Pick<QuestionnaireAnswerInput, 'questionId' | 'kind' | 'optionId'>[],
   definition: QuestionnaireDefinition,
+  context: QuestionnaireVisibilityContext,
 ) {
   const sourceAnswersByQuestionId = questionnaireAnswerMap(answers)
   let effectiveAnswersByQuestionId = new Map<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>()
@@ -1674,10 +1715,10 @@ function questionnaireEffectiveAnswerMap(
     const nextAnswersByQuestionId = new Map<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>()
 
     for (const question of questions) {
-      if (!isQuestionnaireQuestionActive(question, effectiveAnswersByQuestionId)) continue
+      if (!isQuestionnaireQuestionActive(question, effectiveAnswersByQuestionId, context)) continue
 
       const answer = sourceAnswersByQuestionId.get(question.id)
-      if (answer && isQuestionnaireAnswerEffectiveForQuestion(question, answer, effectiveAnswersByQuestionId)) {
+      if (answer && isQuestionnaireAnswerEffectiveForQuestion(question, answer, effectiveAnswersByQuestionId, context)) {
         nextAnswersByQuestionId.set(question.id, answer)
       }
     }
@@ -1696,6 +1737,7 @@ function isQuestionnaireAnswerEffectiveForQuestion(
   question: QuestionnaireQuestion,
   answer: Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>,
   answersByQuestionId: ReadonlyMap<string, Pick<QuestionnaireAnswerInput, 'kind' | 'optionId'>>,
+  context: QuestionnaireVisibilityContext,
 ) {
   if (answer.kind !== 'option') return true
 
@@ -1704,7 +1746,7 @@ function isQuestionnaireAnswerEffectiveForQuestion(
   return Boolean(
     option &&
     option.isEnabled !== false &&
-    isQuestionnaireVisibilityRuleActive(option.showIf, answersByQuestionId),
+    isQuestionnaireVisibilityRuleActive(option.showIf, answersByQuestionId, context),
   )
 }
 

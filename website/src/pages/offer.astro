@@ -446,7 +446,6 @@ const structuredData = {
 
     questionnaireButton?.addEventListener('click', () => {
       persistOfferChoiceState('questionnaire')
-      // TODO(PZK): route private/apartment/commercial to separate questionnaire definitions.
       const params = new URLSearchParams()
       params.set('area', currentCalculation?.areaSqm ?? areaSqm)
       params.set('services', (currentCalculation?.selectedServiceIds ?? [...selectedServiceIds]).join(','))

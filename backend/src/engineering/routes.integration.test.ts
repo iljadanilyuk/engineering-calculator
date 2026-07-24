@@ -2286,6 +2286,30 @@ maybeDescribe('engineering API integration', () => {
         ],
       }),
     })
+    const projectTypePublishabilityChecks = await Promise.all(
+      (['private', 'apartment', 'commercial'] as const).map((projectType) => {
+        const visibleStartingQuestions = getQuestionnaireActiveQuestions(
+          [],
+          orderAndEnablementBody.questionnaireDefinition,
+          { projectType },
+        )
+        const otherProjectTypes = (['private', 'apartment', 'commercial'] as const)
+          .filter((item) => item !== projectType)
+
+        return app.request('/api/admin/questionnaire-definition', {
+          method: 'PATCH',
+          headers: jsonAuthHeaders(accessToken),
+          body: JSON.stringify({
+            baseDefinitionHash: orderAndEnablementBody.questionnaireDefinition.definitionHash,
+            edits: visibleStartingQuestions.map((question) => ({
+              target: 'question',
+              questionId: question.id,
+              showIf: { projectTypes: otherProjectTypes },
+            })),
+          }),
+        })
+      }),
+    )
     const publicPublished = await app.request('/api/public/questionnaire-definition')
     const publicPublishedBody = await publicPublished.json()
     const start = await app.request('/api/public/questionnaires', {
@@ -2363,6 +2387,7 @@ maybeDescribe('engineering API integration', () => {
     expect(emptyStartPatch.status).toBe(400)
     expect(badOrderPatch.status).toBe(400)
     expect(missingHashPatch.status).toBe(400)
+    expect(projectTypePublishabilityChecks.map((response) => response.status)).toEqual([400, 400, 400])
     expect(publicPublished.status).toBe(200)
     expect(publicPublishedBody.questionnaireDefinition.status).toBe('published')
     expect(definitionQuestionPrompt(publicPublishedBody.questionnaireDefinition, 'OBJ_DOCS')).toBe(editedQuestionPrompt)
@@ -2462,6 +2487,176 @@ maybeDescribe('engineering API integration', () => {
       'OPTION_3',
     ])
     expect(emailQuestion?.options?.at(-1)?.label).toBe('Почту уточнит менеджер')
+  })
+
+  test('validates dynamic questionnaire options and typed answers against the published session definition', async () => {
+    const accessToken = await loginAdmin('questionnaire-dynamic-answers@example.com')
+    await setExchangeRate(accessToken, '3.0000')
+    const service = await createService(accessToken, {
+      title: 'Dynamic questionnaire validation service',
+      pricingType: 'fixed',
+      priceUsdCents: 10_000,
+    })
+    const adminFallback = await app.request('/api/admin/questionnaire-definition', {
+      headers: authHeaders(accessToken),
+    })
+    const adminFallbackBody = await adminFallback.json()
+    const patch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: adminFallbackBody.questionnaireDefinition.definitionHash,
+        edits: [
+          {
+            target: 'option_create',
+            questionId: 'OBJ_DOCS',
+            label: 'Документы загрузим позже',
+          },
+          {
+            target: 'question',
+            questionId: 'client_email',
+            answerType: 'single_option',
+          },
+          {
+            target: 'option_create',
+            questionId: 'client_email',
+            label: 'Связаться без email',
+          },
+          {
+            target: 'question',
+            questionId: 'object_address',
+            answerType: 'email',
+          },
+          {
+            target: 'question',
+            questionId: 'target_budget',
+            answerType: 'number',
+          },
+          {
+            target: 'question',
+            questionId: 'pets',
+            answerType: 'phone',
+          },
+          {
+            target: 'question',
+            questionId: 'house_plans_sections_facades',
+            answerType: 'date',
+          },
+        ],
+      }),
+    })
+    const patchBody = await patch.json()
+    const dynamicDocsOption = definitionQuestion(patchBody.questionnaireDefinition, 'OBJ_DOCS')
+      ?.options?.find((option: { id: string; label: string }) => option.label === 'Документы загрузим позже')
+    const dynamicEmailOption = definitionQuestion(patchBody.questionnaireDefinition, 'client_email')
+      ?.options?.find((option: { id: string; label: string }) => option.label === 'Связаться без email')
+
+    if (!dynamicDocsOption || !dynamicEmailOption) {
+      throw new Error('Expected dynamic questionnaire options to be published')
+    }
+
+    const start = await app.request('/api/public/questionnaires', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'pzk-questionnaire-dynamic-answers',
+        'X-Forwarded-For': '203.0.113.44',
+      },
+      body: JSON.stringify({
+        idempotencyKey: nextIdempotencyKey(),
+        clientName: 'Dynamic Answers Client',
+        clientPhone: '+375291114444',
+        projectType: 'private',
+        objectName: 'Подробный опросник: частный дом',
+        calculation: {
+          areaSqm: '100',
+          selectedServiceIds: [service.id],
+        },
+        consentAccepted: true,
+        utm: {
+          utm_source: 'dynamic-questionnaire-test',
+          pzk_project_type: 'commercial',
+        },
+        initialAnswers: [
+          {
+            questionId: 'OBJ_DOCS',
+            kind: 'option',
+            optionId: dynamicDocsOption.id,
+          },
+          {
+            questionId: 'client_email',
+            kind: 'option',
+            optionId: dynamicEmailOption.id,
+          },
+        ],
+      }),
+    })
+    const startBody = await start.json()
+    const token = startBody.questionnaire.publicToken
+    const invalidOptionForTypedQuestion = await app.request(`/api/public/questionnaires/${token}/answers`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: [
+          {
+            questionId: 'object_address',
+            kind: 'option',
+            optionId: 'OPTION_1',
+          },
+        ],
+      }),
+    })
+    const invalidTypedAnswers: number[] = []
+
+    for (const answer of [
+      { questionId: 'object_address', kind: 'custom' as const, customText: 'not an email' },
+      { questionId: 'target_budget', kind: 'custom' as const, customText: 'сто тысяч' },
+      { questionId: 'pets', kind: 'custom' as const, customText: '12345' },
+      { questionId: 'house_plans_sections_facades', kind: 'custom' as const, customText: '31.02.2026' },
+    ]) {
+      const response = await app.request(`/api/public/questionnaires/${token}/answers`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: [answer] }),
+      })
+      invalidTypedAnswers.push(response.status)
+    }
+
+    const validTypedAnswers = await app.request(`/api/public/questionnaires/${token}/answers`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: [
+          { questionId: 'object_address', kind: 'custom', customText: 'client@example.com' },
+          { questionId: 'target_budget', kind: 'custom', customText: '120,5' },
+          { questionId: 'pets', kind: 'custom', customText: '+375 29 222-33-44' },
+          { questionId: 'house_plans_sections_facades', kind: 'custom', customText: '24.07.2026' },
+        ],
+      }),
+    })
+    const validTypedAnswersBody = await validTypedAnswers.json()
+    const saved = await prisma.calculation.findUniqueOrThrow({
+      where: { publicToken: token },
+      include: { questionnaire: true },
+    })
+    const questionnaireUtm = saved.questionnaire?.utm as Record<string, unknown> | null
+
+    expect(patch.status).toBe(200)
+    expect(start.status).toBe(201)
+    expect(startBody.questionnaire.answers.map((answer: { optionId?: string }) => answer.optionId)).toEqual(
+      expect.arrayContaining([dynamicDocsOption.id, dynamicEmailOption.id]),
+    )
+    expect(invalidOptionForTypedQuestion.status).toBe(400)
+    expect(invalidTypedAnswers).toEqual([400, 400, 400, 400])
+    expect(validTypedAnswers.status).toBe(200)
+    expect(validTypedAnswersBody.questionnaire.answers.map((answer: { questionId: string }) => answer.questionId))
+      .toEqual(expect.arrayContaining([
+        'object_address',
+        'target_budget',
+        'pets',
+        'house_plans_sections_facades',
+      ]))
+    expect(questionnaireUtm?.pzk_project_type).toBe('private')
   })
 
   test('sends questionnaire start and completion Telegram notifications once', async () => {
@@ -2636,11 +2831,30 @@ maybeDescribe('engineering API integration', () => {
       priceUsdCents: 12_000,
       sortOrder: 2,
     })
+    const adminDefinition = await app.request('/api/admin/questionnaire-definition', {
+      headers: authHeaders(accessToken),
+    })
+    const adminDefinitionBody = await adminDefinition.json()
+    const projectTypePatch = await app.request('/api/admin/questionnaire-definition', {
+      method: 'PATCH',
+      headers: jsonAuthHeaders(accessToken),
+      body: JSON.stringify({
+        baseDefinitionHash: adminDefinitionBody.questionnaireDefinition.definitionHash,
+        edits: [
+          {
+            target: 'question',
+            questionId: 'object_address',
+            showIf: { projectTypes: ['apartment'] },
+          },
+        ],
+      }),
+    })
     const idempotencyKey = nextIdempotencyKey()
     const startPayload = {
       idempotencyKey,
       clientName: 'Detailed Client',
       clientPhone: '+375 29 111-22-33',
+      projectType: 'private',
       objectName: 'Подробный опросник: дом 180 м2',
       calculation: {
         areaSqm: '180',
@@ -2672,6 +2886,11 @@ maybeDescribe('engineering API integration', () => {
       body: JSON.stringify(startPayload),
     })
     const startBody = await start.json()
+    const startActiveQuestionIds = getQuestionnaireActiveQuestions(
+      startBody.questionnaire.answers,
+      startBody.questionnaire.definition,
+      { projectType: 'private' },
+    ).map((question) => question.id)
     const replay = await app.request('/api/public/questionnaires', {
       method: 'POST',
       headers: {
@@ -2684,7 +2903,11 @@ maybeDescribe('engineering API integration', () => {
     const replayBody = await replay.json()
     const mismatch = await app.request('/api/public/questionnaires', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'pzk-questionnaire-test-mismatch',
+        'X-Forwarded-For': '203.0.113.22',
+      },
       body: JSON.stringify({
         ...startPayload,
         clientName: 'Different Client',
@@ -2764,12 +2987,15 @@ maybeDescribe('engineering API integration', () => {
     const listBody = await list.json()
 
     expect(start.status).toBe(201)
+    expect(projectTypePatch.status).toBe(200)
     expect(start.headers.get('cache-control')).toBe('private, max-age=0, no-store')
     expect(start.headers.get('x-robots-tag')).toBe('noindex, nofollow')
     expect(startBody.questionnaire.publicToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/)
     expect(startBody.questionnaire.questionnaireVersion).toBe(startBody.questionnaire.definition.version)
     expect(startBody.questionnaire.definitionHash).toBe(startBody.questionnaire.definition.definitionHash)
     expect(startBody.questionnaire.definition.status).toMatch(/^(published|static_fallback)$/)
+    expect(startBody.questionnaire.projectType).toBe('private')
+    expect(startActiveQuestionIds).not.toContain('object_address')
     expect(startBody.questionnaire.clientName).toBeUndefined()
     expect(startBody.questionnaire.clientPhone).toBeUndefined()
     expect(startBody.questionnaire.calculation.serviceTitles).toEqual([

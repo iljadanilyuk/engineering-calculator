@@ -82,6 +82,7 @@ async function smokeQuestionnaireBuilder(page: Page, screenshotName: string) {
   await page.goto('/app/questionnaire')
   await expect(page.getByLabel('Конструктор опросника')).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Структура' })).toHaveAttribute('aria-selected', 'true')
+  await smokeQuestionnaireTabs(page, screenshotName)
   await expect(page.getByRole('switch', { name: /Отключить вопрос|Включить вопрос/ }).first()).toBeVisible()
 
   if (screenshotName === 'desktop-1440-questionnaire') {
@@ -90,6 +91,29 @@ async function smokeQuestionnaireBuilder(page: Page, screenshotName: string) {
 
   await expectNoHorizontalOverflow(page)
   await page.screenshot({ path: `e2e/.artifacts/admin-v2-${screenshotName}.png`, fullPage: true })
+}
+
+async function smokeQuestionnaireTabs(page: Page, screenshotName: string) {
+  await page.getByRole('tab', { name: 'Логика (ветвления)' }).click()
+  await expect(page.getByText('Логика показа')).toBeVisible()
+  await expect(page.getByLabel('Влияние типа объекта')).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: `e2e/.artifacts/admin-v2-${screenshotName}-logic.png`, fullPage: true })
+
+  await page.getByRole('tab', { name: 'Настройки' }).click()
+  await expect(page.getByLabel('Доступные типы вопросов')).toBeVisible()
+  await expect(page.getByLabel('Доступные типы вопросов').getByText('Email')).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: `e2e/.artifacts/admin-v2-${screenshotName}-settings.png`, fullPage: true })
+
+  await page.getByRole('tab', { name: 'Публикация' }).click()
+  await expect(page.getByText('Активная backend-версия для /questionnaire/')).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: `e2e/.artifacts/admin-v2-${screenshotName}-publication.png`, fullPage: true })
+
+  await page.getByRole('tab', { name: 'Структура' }).click()
+  await expect(page.getByRole('tab', { name: 'Структура' })).toHaveAttribute('aria-selected', 'true')
+  await expectNoHorizontalOverflow(page)
 }
 
 async function exerciseQuestionnaireControls(page: Page) {
@@ -107,6 +131,12 @@ async function exerciseQuestionnaireControls(page: Page) {
   await enableQuestion.click()
   await expect(page.getByRole('switch', { name: 'Отключить вопрос client_email' }).first()).toBeVisible()
 
+  await page.getByLabel('Тип вопроса').selectOption('phone')
+  await expect(page.getByLabel('Тип вопроса')).toHaveValue('phone')
+  await page.getByLabel('Тип вопроса').selectOption('email')
+  await expect(page.getByLabel('Тип вопроса')).toHaveValue('email')
+  await page.getByLabel('Тип вопроса').selectOption('date')
+  await expect(page.getByLabel('Тип вопроса')).toHaveValue('date')
   await page.getByLabel('Тип вопроса').selectOption('number')
   await expect(page.getByLabel('Тип вопроса')).toHaveValue('number')
   await page.getByLabel('Тип вопроса').selectOption('single_option')
